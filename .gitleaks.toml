@@ -1,0 +1,24 @@
+title = "AIOJ Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known synthetic token used only to verify redaction in AI context tests"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''^backend/ai-service/src/test/java/com/aioj/next/ai/domain/AiRetrievalServiceTest\.java$''',
+  '''^backend/ai-service/src/test/java/com/aioj/next/ai/domain/context/AiContextReportBuilderTest\.java$''',
+  '''^backend/ai-service/src/test/java/com/aioj/next/ai/domain/context/AiConversationContextV2ServiceTest\.java$''',
+]
+regexes = ['''plain-secret-123''']
+
+[[allowlists]]
+description = "PEM parser strips a header literal; no key material is embedded"
+targetRules = ["private-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^backend/common-lib/src/main/java/com/aioj/next/common/security/JwtTokenService\.java$''']
+regexes = ['''\.replace\("-----BEGIN PRIVATE KEY-----", ""\)''']
