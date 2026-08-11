@@ -13,17 +13,36 @@ key_file=$(readlink -f -- "$2")
 public_key=$(<"$key_file")
 [[ $public_key == ssh-ed25519\ * ]] || { printf 'deployment key must be Ed25519\n' >&2; exit 65; }
 
-if ! id aioj-deploy >/dev/null 2>&1; then
-  useradd --create-home --shell /bin/bash aioj-deploy
-fi
-passwd -l aioj-deploy >/dev/null
-usermod --shell /bin/bash aioj-deploy
+deploy_user=aioj-deploy
+deploy_group=aioj-deploy-runner
+deploy_home=/home/aioj-deploy
 
-deploy_groups=$(id -nG aioj-deploy)
-if grep -Eq '(^|[[:space:]])(docker|sudo)([[:space:]]|$)' <<<"$deploy_groups"; then
-  printf 'refusing unsafe existing aioj-deploy group membership: %s\n' "$deploy_groups" >&2
+if ! getent group "$deploy_group" >/dev/null; then
+  groupadd --system "$deploy_group"
+else
+  deploy_gid=$(getent group "$deploy_group" | cut -d: -f3)
+  foreign_primary_users=$(getent passwd | awk -F: -v gid="$deploy_gid" -v user="$deploy_user" '$4 == gid && $1 != user { print $1 }')
+  supplemental_members=$(getent group "$deploy_group" | cut -d: -f4)
+  if [[ -n $foreign_primary_users || ( -n $supplemental_members && $supplemental_members != "$deploy_user" ) ]]; then
+    printf 'refusing to reuse non-dedicated group %s\n' "$deploy_group" >&2
+    exit 65
+  fi
+fi
+
+if ! id "$deploy_user" >/dev/null 2>&1; then
+  useradd --create-home --home-dir "$deploy_home" --shell /bin/bash --gid "$deploy_group" "$deploy_user"
+fi
+
+account_home=$(getent passwd "$deploy_user" | cut -d: -f6)
+account_primary_group=$(id -gn "$deploy_user")
+account_groups=$(id -nG "$deploy_user")
+if [[ $account_home != "$deploy_home" || $account_primary_group != "$deploy_group" || $account_groups != "$deploy_group" ]]; then
+  printf 'refusing unsafe existing %s account: home=%s primary_group=%s groups=%s\n' \
+    "$deploy_user" "$account_home" "$account_primary_group" "$account_groups" >&2
   exit 65
 fi
+passwd -l "$deploy_user" >/dev/null
+usermod --shell /bin/bash "$deploy_user"
 
 install -d -o root -g root -m 0755 /opt/aioj
 install -d -o root -g root -m 0700 /opt/aioj/env /opt/aioj/deploy-history /opt/aioj/backups
@@ -32,10 +51,10 @@ install -m 0755 "$source_root/scripts/deploy/aioj-deploy" /usr/local/sbin/aioj-d
 install -m 0755 "$source_root/scripts/deploy/aioj-deploy-gate" /usr/local/sbin/aioj-deploy-gate
 install -m 0755 "$source_root/scripts/deploy/aioj-health-check" /usr/local/sbin/aioj-health-check
 
-install -d -o aioj-deploy -g aioj-deploy -m 0700 /home/aioj-deploy/.ssh
-printf 'restrict,command="sudo -n /usr/local/sbin/aioj-deploy-gate" %s\n' "$public_key" > /home/aioj-deploy/.ssh/authorized_keys
-chown aioj-deploy:aioj-deploy /home/aioj-deploy/.ssh/authorized_keys
-chmod 0600 /home/aioj-deploy/.ssh/authorized_keys
+install -d -o "$deploy_user" -g "$deploy_group" -m 0700 "$deploy_home/.ssh"
+printf 'restrict,command="sudo -n /usr/local/sbin/aioj-deploy-gate" %s\n' "$public_key" > "$deploy_home/.ssh/authorized_keys"
+chown "$deploy_user:$deploy_group" "$deploy_home/.ssh/authorized_keys"
+chmod 0600 "$deploy_home/.ssh/authorized_keys"
 
 cat >/etc/sudoers.d/aioj-deploy <<'EOF'
 Defaults:aioj-deploy env_keep += "SSH_ORIGINAL_COMMAND"

@@ -71,10 +71,13 @@ Run bootstrap only from the cloud console as root after reviewing the script:
 bash scripts/deploy/bootstrap-aioj-host.sh /path/to/release-tree /root/aioj-deploy.pub
 ```
 
-It creates locked user `aioj-deploy`, installs a `restrict` forced command,
-keeps the user out of Docker and deployment groups, and grants only one sudo
-entry: the root-owned deployment gate. It does not configure application
-secrets or a GHCR token.
+It creates locked user `aioj-deploy` with the dedicated primary group
+`aioj-deploy-runner` and no supplemental groups, installs a `restrict` forced
+command, and grants only one sudo entry: the root-owned deployment gate. The
+dedicated group name intentionally avoids reusing a legacy deployment ACL
+group that may grant access to an older release tree. The bootstrap refuses an
+existing account or group with broader membership. It does not configure
+application secrets or a GHCR token.
 
 Then, as root:
 
