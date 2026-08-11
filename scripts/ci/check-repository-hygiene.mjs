@@ -16,6 +16,7 @@ const forbiddenFiles = /(?:^|\/)(?:\.env(?:\..+)?|LOCAL_DEBUG_CONTEXT\.md)$|\.(?
 const localWindowsPath = /\b[A-Za-z]:\\(?:Users|Dev)\\/i;
 const privateKeyMaterial = /-----BEGIN (?:OPENSSH |RSA |EC |DSA )?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n]{80,}/;
 const mutableLatestImage = /^\s*image:\s*[^#\s]+:latest\s*$/m;
+const safeRabbitmqHealthcheck = /test:\s*\["CMD",\s*"gosu",\s*"rabbitmq",\s*"rabbitmq-diagnostics",\s*"-q",\s*"check_running"\]/;
 const ipv4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 
 function isPublicIpv4(value) {
@@ -50,6 +51,12 @@ for (const file of candidates) {
   if (privateKeyMaterial.test(content)) contentFailures.push(`${file}: private-key material`);
   if (normalized === "deploy/compose.production.yml" && mutableLatestImage.test(content)) {
     contentFailures.push(`${file}: mutable latest image`);
+  }
+  if (
+    (normalized === "deploy/compose.yml" || normalized === "deploy/compose.production.yml")
+    && !safeRabbitmqHealthcheck.test(content)
+  ) {
+    contentFailures.push(`${file}: RabbitMQ healthcheck must run as rabbitmq and require check_running`);
   }
   const scanPublicIpv4 = !normalized.includes("/src/test/");
   for (const candidate of scanPublicIpv4 ? (content.match(ipv4) ?? []) : []) {
