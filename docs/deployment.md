@@ -28,6 +28,9 @@ secret file.
   GitHub, image layers, release assets, command lines, or chat.
 - Flyway: only auth-service enables Flyway. A successful schema migration is
   forward-only and never automatically rolled back.
+- RabbitMQ health checks run `check_running` as the `rabbitmq` OS user. Do not
+  replace this with a root `ping`: an early root probe can create a root-owned
+  Erlang cookie, and `ping` can succeed before the Rabbit application is ready.
 - Legacy memory migration: `AI_LEGACY_MEMORY_MIGRATION_MODE=off` during normal
   operation. Do not rerun `apply` because a workstation or old note suggests
   it; verify the production server's own mapping state first.
