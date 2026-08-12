@@ -40,9 +40,10 @@ export interface AppShellProps {
   topSlot?: React.ReactNode;
   mobileSlot?: React.ReactNode;
   navLabel?: string;
+  onNavigate?: (href: string) => void;
 }
 
-export function AppShell({ title, subtitle, navItems, children, badge, topSlot, mobileSlot, navLabel }: AppShellProps) {
+export function AppShell({ title, subtitle, navItems, children, badge, topSlot, mobileSlot, navLabel, onNavigate }: AppShellProps) {
   return (
     <div className="min-h-dvh bg-[var(--oj-app-bg)] text-[var(--oj-ink)]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-[var(--oj-border)] bg-white px-4 py-5 lg:block">
@@ -66,6 +67,22 @@ export function AppShell({ title, subtitle, navItems, children, badge, topSlot, 
                   item.active && "bg-blue-50 text-[var(--oj-primary)]"
                 )}
                 href={item.href ?? "#"}
+                onClick={(event) => {
+                  if (
+                    !onNavigate
+                    || !item.href
+                    || event.defaultPrevented
+                    || event.button !== 0
+                    || event.metaKey
+                    || event.ctrlKey
+                    || event.shiftKey
+                    || event.altKey
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  onNavigate(item.href);
+                }}
                 aria-current={item.active ? "page" : undefined}
                 aria-label={item.notificationDot && item.notificationLabel
                   ? `${item.label}，${item.notificationLabel}`
