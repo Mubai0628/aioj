@@ -189,17 +189,34 @@ jobs:
           printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$HOME/.ssh/aioj-deploy"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 0600 "$HOME/.ssh/aioj-deploy" "$HOME/.ssh/known_hosts"
-          ssh -T \
-            -i "$HOME/.ssh/aioj-deploy" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o PasswordAuthentication=no \
-            -o KbdInteractiveAuthentication=no \
-            -o StrictHostKeyChecking=yes \
-            -o UpdateHostKeys=no \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=4 \
-            -o HostKeyAlias=aioj_a \
-            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
-            "aioj-deploy@$DEPLOY_HOST" \
-            "deploy $TAG $MANIFEST_SHA"
+          # The remote gate returns curl's exit 56 only before any Compose state is changed.
+          # Never retry other failures because their server-side mutation point is unknown.
+          for attempt in 1 2 3 4 5; do
+            if ssh -T \
+              -i "$HOME/.ssh/aioj-deploy" \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o PasswordAuthentication=no \
+              -o KbdInteractiveAuthentication=no \
+              -o StrictHostKeyChecking=yes \
+              -o UpdateHostKeys=no \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=4 \
+              -o HostKeyAlias=aioj_a \
+              -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+              "aioj-deploy@$DEPLOY_HOST" \
+              "deploy $TAG $MANIFEST_SHA"; then
+              exit 0
+            else
+              status=$?
+            fi
+
+            if [[ $status -ne 56 || $attempt -eq 5 ]]; then
+              exit "$status"
+            fi
+
+            delay=$((attempt * 15))
+            printf 'Release asset download was interrupted; retrying deployment gate in %ss (attempt %s/5).\n' \
+              "$delay" "$attempt"
+            sleep "$delay"
+          done
