@@ -197,6 +197,8 @@ jobs:
             -o KbdInteractiveAuthentication=no \
             -o StrictHostKeyChecking=yes \
             -o UpdateHostKeys=no \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
             -o HostKeyAlias=aioj_a \
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             "aioj-deploy@$DEPLOY_HOST" \
