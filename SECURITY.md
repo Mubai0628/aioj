@@ -1,68 +1,19 @@
-# Security policy
+# Security policy / 安全策略
 
-## Reporting
+[中文](#中文) · [English](#english) · [中文安全架构](docs/zh/security-architecture.md) · [English security architecture](docs/en/security-architecture.md)
 
-Do not open a public issue containing credentials, personal data, hidden test
-material, participant source, provider prompts, private infrastructure details,
-or exploitation steps. Contact the repository maintainer privately through the
-verified contact channel on the maintainer's GitHub profile. Include only the
-minimum evidence required to reproduce the issue.
+## 中文
 
-## Supported version
+请勿在公开 Issue 中提交凭据、个人数据、隐藏测试、参与者源码、Provider Prompt、私有基础设施细节或可直接利用的攻击步骤。请通过仓库维护者 GitHub 资料中的已验证私密渠道报告，并只提供复现所需的最小证据。
 
-Security fixes target the current `main` branch and the latest formal SemVer
-release. Older releases may be unsupported unless a notice states otherwise.
+安全修复面向当前 `main` 与最新正式 SemVer Release。服务器秘密和生产数据不得进入 GitHub、镜像层、Release 资产、命令参数或日志。
 
-## Privileged Sandbox risk and accepted downgrade
+当前单节点生产拓扑包含 `privileged` go-judge Sandbox。正常提交仍受命名空间、cgroup、时间、进程、内存和输出限制，但这些限制不能证明能够抵御 Sandbox、Docker、容器运行时或 Linux 内核逃逸。成功逃逸可能导致宿主机 root 等价控制、数据与密钥泄露、评测结果篡改、资源耗尽或持久化入侵。维护者已明确接受该风险相对独立判题节点的安全降级。
 
-The single-node production topology intentionally runs go-judge in a
-`privileged` container because that is required by the currently integrated
-Sandbox runtime. Normal submissions are still constrained by go-judge,
-namespaces, cgroups, execution time, output, process, and memory limits. That
-is useful isolation for ordinary untrusted code; it is not a proof against a
-Sandbox, container-runtime, Docker, or kernel vulnerability.
+## English
 
-A successful escape may allow an attacker to:
+Do not open a public issue containing credentials, personal data, hidden tests, participant source, provider prompts, private infrastructure details, or directly usable exploitation steps. Report privately through the verified contact channel on the maintainer's GitHub profile and include only the minimum evidence needed to reproduce the issue.
 
-- obtain host-root-equivalent control;
-- read or modify the database, user data, tokens, environment secrets, and
-  provider/deployment credentials;
-- alter judge results, application images, containers, or internal traffic;
-- access RabbitMQ, MySQL, Redis, and business services;
-- exhaust CPU, memory, processes, disk, or network and make the entire site
-  unavailable;
-- establish host-level persistence.
+Security fixes target current `main` and the latest formal SemVer release. Server secrets and production data must never enter GitHub, image layers, release assets, command arguments, or logs.
 
-Colocating Sandbox, application services, and databases on `aioj_a` increases
-both blast radius and single-point-of-failure impact compared with an isolated
-judge node. The maintainer explicitly selected and accepted this downgrade.
-Documentation and UI claims must never describe the merged topology as
-security-equivalent to a dedicated judge host.
-
-Compensating controls are mandatory but incomplete: no public Sandbox port, no
-host networking, no Docker socket, no business mounts, no database/JWT/AI or
-deployment secrets, read-only testcase data, an isolated temporary volume and
-judge network, bounded resources and logs, one judge worker at first, prompt
-host/runtime updates, and monitoring for OOM, swap, throttling, restarts, and
-disk growth. These reduce probability and ordinary abuse; they cannot remove
-escape risk.
-
-## Secrets and production data
-
-- GitHub stores only the restricted deployment SSH identity, host value, user,
-  and fixed known-host entry.
-- Application and GHCR read credentials remain root-only on the server.
-- Production data is backed up from the server itself. Local databases and
-  local user data are never imported as a production substitute.
-- Never put secrets in image layers, Compose files, release manifests, build
-  logs, commands, issues, or documentation.
-- Rotate a secret immediately if exposure is suspected; do not merely delete
-  it from the newest commit because Git history and caches may retain it.
-
-## Deployment security boundary
-
-Production deploys immutable GHCR digests through a forced-command SSH user and
-a root-owned validation entrypoint. Production does not run `git pull`, does
-not use `latest`, and does not grant the deploy user Docker-group or general
-sudo access. Database schema changes are forward-only and are not automatically
-rolled back with application images.
+The selected single-node production topology includes a `privileged` go-judge Sandbox. Normal submissions remain bounded by namespaces, cgroups, time, process, memory, and output controls, but those controls do not prove resistance to Sandbox, Docker, container-runtime, or Linux-kernel escape. A successful escape could yield host-root-equivalent control, expose data and secrets, alter judge results, exhaust resources, or establish persistence. The maintainer has explicitly accepted this downgrade relative to an isolated judge node.

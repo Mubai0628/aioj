@@ -1,7 +1,7 @@
 # Agent Core V3 评测脚本（scripts/agent-eval）
 
-设计依据：`docs/AIOJ_AGENT_CORE_V3_IMPLEMENTATION_DESIGN.md` §8 出口门禁、§11 评测体系。
-原始输出落 `out/`（已 git-ignore），只把结论写回进度文档。
+公开架构依据：`docs/zh/agent-core-v3-architecture.md`。具体评测门禁与实施记录保存在本机私有工程资料中，不进入公开仓库。
+原始输出落 `out/`（已 git-ignore），不得提交凭据、生产数据或完整模型输出。
 
 ## agent-context-eval.mjs（P1 出口门禁：指代 / 远距召回）
 

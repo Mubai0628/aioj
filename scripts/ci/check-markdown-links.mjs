@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
-const roots = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "AGENTS.md", "docs"];
+const roots = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "docs"];
 const markdownFiles = [];
 
 function walk(relativePath) {

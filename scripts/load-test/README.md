@@ -115,6 +115,6 @@ k6 run --summary-export "$root\results\single-node-50-mixed-r1.json" scripts/loa
 Minimum evidence is 50 completed iterations and unique submissions, at least
 95% success for login/create/poll/terminal/expected-result metrics, HTTP failure
 below 5%, zero SYSTEM_ERROR, eventual queue drain, and no OOM/restart/sustained
-swap. This still does not prove a classroom SLA; the combined browsing,
-contest, notification, AI-adjacent, and failure-boundary matrix in
-`docs/DEPLOYMENT_CAPACITY_PLAN_50_USERS.md` remains required.
+swap. This still does not prove a classroom SLA. Capacity acceptance requires
+separate combined browsing, contest, notification, AI-adjacent, and
+failure-boundary evidence retained outside the public design documentation.
