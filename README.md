@@ -1,87 +1,29 @@
 # AIOJ
 
-AIOJ is a campus-oriented online judge for programming practice, contests,
-audited AI tutoring, AI-assisted problem drafting, plagiarism review, and
-post-contest learning reports. The active UI is React-only and all browser
-traffic goes through the gateway.
+[中文](#中文) · [English](#english) · [中文设计文档](docs/zh/README.md) · [English design docs](docs/en/README.md)
+
+## 中文
+
+AIOJ 是面向校园教学的在线判题平台，提供题库练习、比赛运行、异步判题、受审计的 AI 辅助、AI 题目草稿与赛后复盘。学生端和管理端均使用 React；浏览器请求统一经过网关；判题任务通过 RabbitMQ 交给 judge-worker，再由 go-judge Sandbox 执行。
 
 > [!CAUTION]
-> **Accepted privileged-Sandbox risk.** The production design in this
-> repository colocates the application, database, judge-worker, and a
-> `privileged` go-judge Sandbox on one host. Normal submissions remain subject
-> to go-judge, namespace, cgroup, timeout, and output limits, but a successful
-> Sandbox, container-runtime, Docker, or Linux-kernel escape can yield
-> host-root-equivalent control. That can expose or alter the database, user
-> data, tokens, environment secrets, images, results, RabbitMQ, Redis, internal
-> services, and the host itself; it can also cause resource exhaustion or
-> persistent compromise. Network isolation, resource limits, read-only
-> testcase mounts, and secret separation reduce ordinary abuse but do **not**
-> eliminate escape risk. The maintainer has explicitly accepted this security
-> downgrade from the former split judge node. See [SECURITY.md](SECURITY.md).
+> 当前生产拓扑在同一主机上运行应用、数据库与 `privileged` Sandbox。这是相对独立判题节点的明确安全降级：若容器运行时或内核漏洞导致逃逸，可能获得宿主机 root 等价权限并影响全部服务与数据。隔离网络、资源限制、只读测试数据和秘密分离只能降低风险，不能消除风险。详见[安全架构](docs/zh/security-architecture.md)。
 
-## Architecture
+### 目录
 
 ```text
-Browser -> web-user / web-admin -> gateway
-                                  |-> auth-service -> MySQL
-                                  |-> problem-service -> MySQL / Redis / RabbitMQ
-                                  `-> ai-service -> DeepSeek-compatible provider
-
-RabbitMQ -> judge-worker -> privileged go-judge Sandbox
+backend/                    Spring Boot / Maven 多模块后端
+apps/web-user-react/        学生 React 应用
+apps/web-admin-react/       教师与管理员 React 应用
+packages/                   API 客户端、国际化与共享 UI
+deploy/                     Dockerfile 与镜像式生产 Compose
+scripts/                    CI、评测、压测与发布工具
+docs/zh/                    中文设计文档
+docs/en/                    English design documents
+archive/                    本机私有资料，Git 忽略
 ```
 
-Judging always flows through RabbitMQ and Sandbox; the judge-worker never
-executes user code in-process. AI problem generation remains
-draft -> review/approve -> import.
-
-## Repository layout
-
-```text
-backend/                    Maven multi-module Spring backend
-  common-lib/               responses, errors, tracing, security
-  api-contract/             shared contracts and Flyway migrations
-  gateway-service/          public /api/v1 gateway
-  auth-service/             authentication, users, roles, groups
-  problem-service/          problems, submissions, contests, notifications
-  judge-worker/             RabbitMQ consumer and Sandbox client
-  ai-service/               Agent V3, AI drafts, reports, memory
-apps/web-user-react/        student React application
-apps/web-admin-react/       teacher/admin React application
-packages/                   shared API client, i18n, and React UI
-deploy/                     Dockerfiles and image-only production Compose
-scripts/                    evaluation, load-test, CI, and deployment tooling
-docs/                       current public architecture and runbooks
-archive/                    local-only historical material; Git-ignored
-```
-
-The retired Vue applications are intentionally absent from this repository.
-
-## Requirements
-
-- JDK 17 and Maven 3.9+
-- Node.js 24 and npm 11+
-- Docker Engine 29+ with Docker Compose v2/v5 compatibility
-- MySQL 8.4, Redis 7.4, and RabbitMQ 3.13 for a complete local stack
-
-Local secrets, ports, accounts, and service startup choices belong in a local,
-untracked context file. Never copy a workstation `.env` to a server.
-
-## Local development
-
-```powershell
-npm ci --include=optional
-npm.cmd run dev:user       # defaults to the project-configured user port
-npm.cmd run dev:admin      # defaults to the project-configured admin port
-
-mvn -f backend/pom.xml -pl auth-service -am spring-boot:run
-mvn -f backend/pom.xml -pl problem-service -am spring-boot:run
-```
-
-Ports `5173` and `5174` may be reserved by other local projects. Use the
-documented local overrides rather than changing production CORS or Compose.
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
-
-## Build and test
+### 构建与验证
 
 ```powershell
 npm ci --include=optional
@@ -93,71 +35,58 @@ mvn -f backend/pom.xml test
 git diff --check
 ```
 
-Pull requests and `main` pushes run the same core checks plus Compose
-validation, local Markdown-link checks, repository-hygiene checks, and a
-Gitleaks scan.
+本地秘密、端口、账户和数据库信息只能放在未跟踪的本机配置中，不得复制到服务器或提交到 Git。
 
-## Docker
+### 发布
 
-`deploy/compose.yml` remains the source-build Compose file for deliberate
-local smoke testing. Production uses
-[`deploy/compose.production.yml`](deploy/compose.production.yml), which is
-image-only: application images are supplied as immutable GHCR digests and
-third-party images are pinned to audited Linux/amd64 digests.
+正式 SemVer GitHub Release 会触发 GitHub Actions：测试代码、构建八个私有 GHCR 镜像、生成 SBOM/构建证明与不可变 digest 清单，并在 `production` 环境等待人工批准。生产服务器只按 digest 部署镜像，不执行 `git pull`，也不使用 `latest`。数据库迁移是向前兼容的，不随镜像回滚自动回退。
 
-```powershell
-Copy-Item deploy/env/production.env.example .env
-docker compose --env-file .env --profile core --profile app --profile judge `
-  -f deploy/compose.yml config
+公开文档只包含产品与技术设计；Agent 操作指令、实施计划、进度跟踪、生产运行手册和项目记忆不在公开仓库中。
+
+## English
+
+AIOJ is a campus-oriented online judge for practice, contest operations, asynchronous judging, audited AI assistance, AI problem drafts, and post-contest reviews. Both web applications use React. Browser traffic enters through the gateway, while judge jobs flow through RabbitMQ to judge-worker and then to the go-judge Sandbox.
+
+> [!CAUTION]
+> The selected production topology colocates the application, databases, and a `privileged` Sandbox on one host. This is an explicit security downgrade from an isolated judge node: a successful container-runtime or kernel escape could yield host-root-equivalent control over every service and dataset. Network isolation, resource limits, read-only testcase data, and secret separation reduce risk but cannot remove it. See the [security architecture](docs/en/security-architecture.md).
+
+### Layout
+
+```text
+backend/                    Spring Boot / Maven multi-module backend
+apps/web-user-react/        student React application
+apps/web-admin-react/       teacher and administrator React application
+packages/                   API client, i18n, and shared UI
+deploy/                     Dockerfiles and image-only production Compose
+scripts/                    CI, evaluation, load-test, and release tools
+docs/zh/                    Chinese design documents
+docs/en/                    English design documents
+archive/                    local private material, ignored by Git
 ```
 
-Replace every placeholder before starting a stack. Never commit `.env`.
+### Build and verification
 
-## Release and deployment
+```powershell
+npm ci --include=optional
+npm.cmd run typecheck:react
+npm.cmd run test:auth
+npm.cmd run build:user:react
+npm.cmd run build:admin:react
+mvn -f backend/pom.xml test
+git diff --check
+```
 
-1. Merge reviewed changes to protected `main`.
-2. Create a formal SemVer GitHub Release such as `v1.0.0`.
-3. GitHub Actions builds eight private GHCR images, emits SBOM/provenance
-   attestations, and publishes `image-manifest.json` plus its SHA-256.
-4. The protected `production` environment requires manual approval.
-5. A restricted SSH identity invokes the root-owned deployment gate with only
-   the release tag and manifest SHA.
-6. The server validates namespace and digests, pulls images, preserves the
-   previous digest set, applies the image-only Compose file, and checks health.
+Local secrets, ports, accounts, and database details belong only in untracked workstation configuration. They must never be copied to a server or committed to Git.
 
-The production root is `/opt/aioj`; it is not a Git checkout. Application
-secrets exist only in `/opt/aioj/env/app.env`. Full procedures and first-host
-bootstrap are in [docs/deployment.md](docs/deployment.md) and
-[docs/operations.md](docs/operations.md).
+### Release
 
-## Rollback
+A formal SemVer GitHub Release triggers GitHub Actions to test the code, build eight private GHCR images, produce SBOM/provenance evidence and an immutable digest manifest, and wait for approval in the protected `production` environment. Production deploys digests only: it does not run `git pull` or use `latest`. Database migrations are forward-only and are not automatically reversed by an image rollback.
 
-Normal rollback restores `deploy.previous.env`, which contains the prior image
-digests, and recreates the stack against the **current** data volumes. A
-successful Flyway migration is never automatically rolled back. After writes
-resume on the new stack, starting stale old volumes is forbidden.
+The public documentation contains product and technical design only. Agent operating instructions, implementation plans, progress trackers, production runbooks, and project memory are intentionally excluded from the public repository.
 
-## Capacity status
+## Design documentation
 
-The prior split-node deployment passed limited 50-user tests, including stable
-50/50 login bursts with P95 around 5.80-6.26 seconds under the tested resource
-allocation. Those results do not transfer to the merged single-node topology.
-Single-node 50-user mixed capacity is **IMPLEMENTED_UNVERIFIED** until login,
-API, queue, judge, AI-adjacent, resource, OOM, swap, throttling, and disk-growth
-tests are repeated on the new topology.
+- [中文设计文档](docs/zh/README.md)
+- [English design documentation](docs/en/README.md)
 
-## Documentation
-
-- [Project architecture](docs/architecture.md)
-- [Development runbook](docs/DEVELOPMENT.md)
-- [Deployment](docs/deployment.md)
-- [Operations and recovery](docs/operations.md)
-- [Agent Core V3 blueprint](docs/AIOJ%20Agent%20Core%20V3.md)
-- [Project history and roadmap](docs/PROJECT_HISTORY_AND_FUTURE.md)
-
-## License and reporting
-
-Licensed under [Apache License 2.0](LICENSE). See
-[CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes. Report security
-issues privately as described in [SECURITY.md](SECURITY.md); do not publish
-credentials, hidden tests, private source, or exploit details in an issue.
+Licensed under the [Apache License 2.0](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
