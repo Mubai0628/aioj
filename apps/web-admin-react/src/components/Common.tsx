@@ -103,8 +103,8 @@ export function ErrorPanel({
 
 export function TableShell({ children }: { children: ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-[var(--oj-border)] bg-white">
-      <div className="overflow-x-auto [&_table]:w-full">{children}</div>
+    <section className="min-w-0 max-w-full overflow-hidden rounded-xl border border-[var(--oj-border)] bg-white">
+      <div className="max-w-full overflow-x-auto overscroll-x-contain [&_table]:w-full">{children}</div>
     </section>
   );
 }

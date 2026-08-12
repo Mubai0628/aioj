@@ -118,7 +118,7 @@ export function ClassesView() {
   });
 
   return (
-    <div className="mx-auto flex max-w-[1500px] flex-col gap-6 px-4 py-5 md:px-8">
+    <div className="mx-auto flex w-full min-w-0 max-w-[1500px] flex-col gap-6 px-4 py-5 md:px-8">
       <PageHeader
         eyebrow={t("common.adminConsole")}
         title={t("classes.title")}
@@ -156,8 +156,8 @@ export function ClassesView() {
       ) : classesQuery.isError ? (
         <ErrorPanel title={t("classes.loadFailed")} action={<Button variant="outline" onClick={() => void classesQuery.refetch()}>{t("common.refresh")}</Button>} />
       ) : classes.length ? (
-        <section className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <Card className="rounded-xl shadow-none">
+        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <Card className="min-w-0 rounded-xl shadow-none">
             <CardBody className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -198,7 +198,7 @@ export function ClassesView() {
           </Card>
 
           {selectedClass ? (
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
               <ClassOverview
                 item={selectedClass}
                 onEdit={() => setGroupEditor({ item: selectedClass })}
@@ -285,8 +285,8 @@ function ClassOverview({
   const { t } = useI18n();
   const archived = item.status === "ARCHIVED";
   return (
-    <Card className="rounded-xl shadow-none">
-      <CardBody>
+    <Card className="min-w-0 rounded-xl shadow-none">
+      <CardBody className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -412,8 +412,8 @@ function MembersSection({
   );
 
   return (
-    <Card className="rounded-xl shadow-none">
-      <CardBody className="space-y-4">
+    <Card className="min-w-0 rounded-xl shadow-none">
+      <CardBody className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-[var(--oj-ink)]">{title}</h2>

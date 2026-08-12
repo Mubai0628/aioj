@@ -11,7 +11,9 @@ import com.aioj.next.contract.notification.UserNotificationUnreadCountResponse;
 import com.aioj.next.problem.domain.notification.UserNotificationService;
 import com.aioj.next.problem.domain.notification.UserNotificationStreamService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -65,8 +67,12 @@ public class UserNotificationController {
     }
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream() {
-        return streamService.connect(SecuritySupport.currentUserId());
+    public ResponseEntity<SseEmitter> stream() {
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .header(HttpHeaders.CACHE_CONTROL, "no-cache")
+                .header("X-Accel-Buffering", "no")
+                .body(streamService.connect(SecuritySupport.currentUserId()));
     }
 
     @ExceptionHandler(IOException.class)

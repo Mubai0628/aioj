@@ -204,7 +204,7 @@ export function AiDraftDetailPanel({
             {currentDraft.refinedFromDraftId ? <Badge tone="neutral">{t("drafts.chainParentLabel", { id: shortId(currentDraft.refinedFromDraftId) })}</Badge> : null}
             <span className="tabular-nums">{currentDraft.promptTokens}/{currentDraft.completionTokens} tokens</span>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
             {archived ? (
               <>
                 <Button variant="outline" disabled={actionPending} onClick={() => onRestore(currentDraft)}>
@@ -235,7 +235,7 @@ export function AiDraftDetailPanel({
       ) : null}
     >
       {!currentDraft ? null : (
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <header className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div className="min-w-0">
@@ -328,7 +328,7 @@ export function AiDraftDetailPanel({
                 <Field label={t("common.tags")}>
                   <input className={inputClass} value={tagText} onChange={(event) => setTagText(event.target.value)} placeholder={t("problems.tagsPlaceholder")} />
                 </Field>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label={`${t("problems.timeLimit")} (ms)`}>
                     <input className={inputClass} type="number" min={100} step={100} value={timeLimitMillis} onChange={(event) => setTimeLimitMillis(Number(event.target.value))} />
                   </Field>
@@ -707,7 +707,7 @@ function ComplexityReportPanel({ block }: { block: ComplexityBlock }) {
         </div>
       </div>
       {runs.length ? (
-        <div className="mb-4 overflow-hidden rounded-lg border border-[var(--oj-border-soft)]">
+        <div className="mb-4 max-w-full overflow-x-auto overscroll-x-contain rounded-lg border border-[var(--oj-border-soft)]">
           <table className="w-full min-w-[560px] text-sm">
             <thead className="border-b border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] text-xs font-semibold text-[var(--oj-ink-muted)]">
               <tr>
@@ -894,25 +894,27 @@ function CasesPreview({ cases }: { cases: TestCaseDto[] }) {
     return <div className="rounded-xl border border-dashed border-[var(--oj-border)] bg-white p-4 text-sm text-[var(--oj-ink-muted)]">{t("problems.noSamples")}</div>;
   }
   return (
-    <section className="overflow-hidden rounded-xl border border-[var(--oj-border)] bg-white">
-      <table className="w-full min-w-[760px] text-sm">
-        <thead className="border-b border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] text-xs font-semibold text-[var(--oj-ink-muted)]">
-          <tr>
-            <th className="w-[44%] px-4 py-3 text-left">{t("problems.input")}</th>
-            <th className="w-[44%] px-4 py-3 text-left">{t("problems.output")}</th>
-            <th className="w-[12%] px-4 py-3 text-center">{t("problems.sample")}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[var(--oj-border-soft)]">
-          {cases.map((item, index) => (
-            <tr key={index}>
-              <td className="px-4 py-3 align-top"><pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-xs leading-5 text-white">{item.input || "--"}</pre></td>
-              <td className="px-4 py-3 align-top"><pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-xs leading-5 text-white">{item.expectedOutput || "--"}</pre></td>
-              <td className="px-4 py-3 text-center"><Badge tone={item.sample ? "green" : "neutral"}>{item.sample ? t("common.yes") : t("common.no")}</Badge></td>
+    <section className="min-w-0 max-w-full overflow-hidden rounded-xl border border-[var(--oj-border)] bg-white">
+      <div className="max-w-full overflow-x-auto overscroll-x-contain">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead className="border-b border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] text-xs font-semibold text-[var(--oj-ink-muted)]">
+            <tr>
+              <th className="w-[44%] px-4 py-3 text-left">{t("problems.input")}</th>
+              <th className="w-[44%] px-4 py-3 text-left">{t("problems.output")}</th>
+              <th className="w-[12%] px-4 py-3 text-center">{t("problems.sample")}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-[var(--oj-border-soft)]">
+            {cases.map((item, index) => (
+              <tr key={index}>
+                <td className="px-4 py-3 align-top"><pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-xs leading-5 text-white">{item.input || "--"}</pre></td>
+                <td className="px-4 py-3 align-top"><pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-xs leading-5 text-white">{item.expectedOutput || "--"}</pre></td>
+                <td className="px-4 py-3 text-center"><Badge tone={item.sample ? "green" : "neutral"}>{item.sample ? t("common.yes") : t("common.no")}</Badge></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

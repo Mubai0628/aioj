@@ -917,7 +917,7 @@ export function AiTutorWorkspace({
     )}>
       <aside className={cn(
         "flex min-h-0 flex-col border-b border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] lg:border-b-0 lg:border-r",
-        !compact && "max-h-[390px] lg:max-h-none"
+        !compact && "max-h-[975px] lg:max-h-none"
       )}>
         <div className="space-y-3 border-b border-[var(--oj-border-soft)] p-4">
           <div className="flex items-center justify-between gap-2">

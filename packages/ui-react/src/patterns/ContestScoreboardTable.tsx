@@ -66,9 +66,11 @@ export function ContestScoreboardTable({
     );
   }
 
+  const minimumTableWidth = Math.max(980, 464 + problems.length * 112);
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--oj-border)] bg-white">
-      <table className="w-full min-w-[980px] table-fixed text-sm">
+    <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-[var(--oj-border)] bg-white">
+      <table className="w-full table-fixed text-sm" style={{ minWidth: minimumTableWidth }}>
         <colgroup>
           <col className="w-16" />
           <col className="w-56" />
@@ -78,8 +80,8 @@ export function ContestScoreboardTable({
         </colgroup>
         <thead className="border-b border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] text-xs font-semibold text-[var(--oj-ink-muted)]">
           <tr>
-            <th className="sticky left-0 z-10 bg-[var(--oj-surface-muted)] px-3 py-3 text-center">{labels.rank}</th>
-            <th className="sticky left-16 z-10 bg-[var(--oj-surface-muted)] px-3 py-3 text-left">{labels.participant}</th>
+            <th className="bg-[var(--oj-surface-muted)] px-3 py-3 text-center md:sticky md:left-0 md:z-10">{labels.rank}</th>
+            <th className="bg-[var(--oj-surface-muted)] px-3 py-3 text-left md:sticky md:left-16 md:z-10">{labels.participant}</th>
             <th className="px-3 py-3 text-center">{mode === "IOI" ? labels.solved : labels.solved}</th>
             <th className="px-3 py-3 text-center">{mode === "IOI" ? (labels.totalScore ?? labels.score ?? labels.penalty) : labels.penalty}</th>
             {problems.map((problem) => (
@@ -97,10 +99,10 @@ export function ContestScoreboardTable({
             const cellsByProblem = new Map(row.cells.map((cell) => [cell.contestProblemId, cell]));
             return (
               <tr key={row.participantId} className="align-middle">
-                <td className="sticky left-0 z-10 bg-white px-3 py-3 text-center font-semibold tabular-nums text-[var(--oj-ink)]">
+                <td className="bg-white px-3 py-3 text-center font-semibold tabular-nums text-[var(--oj-ink)] md:sticky md:left-0 md:z-10">
                   {row.rank}
                 </td>
-                <td className="sticky left-16 z-10 bg-white px-3 py-3">
+                <td className="bg-white px-3 py-3 md:sticky md:left-16 md:z-10">
                   <div className="min-w-0">
                     <div className="truncate font-semibold text-[var(--oj-ink)]">{row.displayNameSnapshot}</div>
                     <div className="mt-1 truncate text-xs tabular-nums text-[var(--oj-ink-muted)]">{row.accountSnapshot}</div>

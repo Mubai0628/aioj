@@ -77,7 +77,7 @@ export function ContestAiUsagePanel({
           </div>
         )}
       >
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <div className="grid gap-3 md:grid-cols-2">
             <select className={selectClass} value={runFilter} onChange={(event) => setRunFilter(event.target.value)}>
               <option value="">{t("contests.allRuns")}</option>
@@ -101,7 +101,7 @@ export function ContestAiUsagePanel({
             <EmptyState title={t("contests.aiUsage.emptyTitle")} description={t("contests.aiUsage.emptyDescription")} />
           ) : (
             <TableShell>
-              <table className="w-full table-fixed text-sm">
+              <table className="w-full min-w-[920px] table-fixed text-sm">
                 <colgroup>
                   <col className="w-[18%]" />
                   <col className="w-[8%]" />
@@ -253,7 +253,7 @@ function AiUsageDetailDialog({
         )
       ) : (
         <div className="flex h-full min-h-0 flex-col gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center">
             <Button variant="outline" size="sm" onClick={() => setSelectedConversationId("")}>
               <ArrowLeft className="size-4" aria-hidden="true" />
               {t("contests.aiUsage.backToConversations")}
@@ -262,7 +262,7 @@ function AiUsageDetailDialog({
               {selectedConversation?.title || `#${shortId(selectedConversationId)}`}
             </span>
             {selectedConversation?.problemId ? (
-              <Badge tone="neutral">
+              <Badge tone="neutral" className="max-w-full truncate">
                 {t("contests.aiUsage.problem")}: {selectedConversation.problemTitle || `#${shortId(selectedConversation.problemId)}`}
                 {selectedConversation.problemTitle ? ` · #${shortId(selectedConversation.problemId)}` : ""}
               </Badge>
@@ -338,7 +338,7 @@ function ConversationRow({
       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs tabular-nums text-[var(--oj-ink-muted)]">
         <span>{conversation.lastMessageAt ? formatDateTime(conversation.lastMessageAt) : "--"}</span>
         {conversation.problemId ? (
-          <Badge tone="neutral">
+          <Badge tone="neutral" className="max-w-full truncate">
             {t("contests.aiUsage.problem")}: {conversation.problemTitle || `#${shortId(conversation.problemId)}`}
             {conversation.problemTitle ? ` · #${shortId(conversation.problemId)}` : ""}
           </Badge>

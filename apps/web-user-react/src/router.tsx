@@ -341,6 +341,9 @@ function StudentLayout() {
       subtitle={t("common.userProduct")}
       navLabel={t("shell.userNavLabel")}
       navItems={navItems}
+      onNavigate={(href) => {
+        void navigate({ to: href as "/" | "/problems" | "/contests" | "/submissions" | "/ai-chat" | "/profile" });
+      }}
       topSlot={(
         <>
           <select
@@ -374,7 +377,9 @@ function StudentLayout() {
         <select
           value={navItems.find((item) => item.active)?.href ?? "/"}
           onChange={(event) => {
-            window.location.href = event.target.value;
+            void navigate({
+              to: event.target.value as "/" | "/problems" | "/contests" | "/submissions" | "/ai-chat" | "/profile"
+            });
           }}
           className="h-9 max-w-[42vw] rounded-xl border border-[var(--oj-border)] bg-white px-2 text-sm lg:hidden"
           aria-label={t("shell.userNavLabel")}
