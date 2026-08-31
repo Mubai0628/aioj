@@ -22,6 +22,7 @@ import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolRegistry;
 import com.aioj.next.ai.agent.tool.ToolResult;
+import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.persistence.entity.AiAgentRunEntity;
@@ -45,6 +46,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -89,7 +91,7 @@ public class AgentRuntime {
     public AgentRuntime(ModelGateway modelGateway, ToolRegistry toolRegistry, ToolBroker toolBroker,
                         ContextSectionRenderer renderer, ContextManifestService manifestService,
                         AgentRunStateMachine stateMachine, ObjectMapper objectMapper,
-                        ContextFingerprintGuard contextGuard) {
+                        ContextFingerprintGuard contextGuard, AiProperties aiProperties) {
         this.modelGateway = modelGateway;
         this.toolRegistry = toolRegistry;
         this.toolBroker = toolBroker;
@@ -98,7 +100,7 @@ public class AgentRuntime {
         this.stateMachine = stateMachine;
         this.objectMapper = objectMapper;
         this.contextGuard = contextGuard;
-        this.boundedModelExecutor = createModelExecutor();
+        this.boundedModelExecutor = createModelExecutor(aiProperties.getCapacity());
     }
 
     public record AgentRunRequest(
@@ -599,8 +601,8 @@ public class AgentRuntime {
         try {
             future = boundedModelExecutor.submit(() ->
                     callModelUnbounded(config, request, standardFallback, fallbackAllowed));
-        } catch (RuntimeException ex) {
-            throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "AI model executor is unavailable");
+        } catch (RejectedExecutionException ex) {
+            throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "AI model capacity saturated; retry later");
         }
         try {
             return future.get(remainingRunTime.toNanos(), TimeUnit.NANOSECONDS);
@@ -676,15 +678,17 @@ public class AgentRuntime {
         boundedModelExecutor.shutdownNow();
     }
 
-    private static ExecutorService createModelExecutor() {
+    private static ExecutorService createModelExecutor(AiProperties.Capacity capacity) {
         AtomicInteger sequence = new AtomicInteger();
         ThreadFactory threadFactory = runnable -> {
             Thread thread = new Thread(runnable, "ai-model-bounded-" + sequence.incrementAndGet());
             thread.setDaemon(true);
             return thread;
         };
-        return new ThreadPoolExecutor(2, 8, 60L, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(32), threadFactory, new ThreadPoolExecutor.AbortPolicy());
+        return new ThreadPoolExecutor(capacity.getModelCorePoolSize(), capacity.getModelMaxPoolSize(),
+                60L, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(capacity.getModelQueueCapacity()), threadFactory,
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
     private void recordManifest(AgentRunRequest spec, long runId, int callSeq, AiModelEffectiveConfig config,

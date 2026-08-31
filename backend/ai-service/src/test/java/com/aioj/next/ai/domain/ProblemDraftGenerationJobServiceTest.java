@@ -1,6 +1,7 @@
 package com.aioj.next.ai.domain;
 
 import com.aioj.next.ai.domain.draftagent.ProblemDraftAgentCoordinator;
+import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftReviewRiskService;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkingState;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
@@ -33,18 +34,23 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
 import org.springframework.transaction.support.DefaultTransactionStatus;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,11 +66,15 @@ class ProblemDraftGenerationJobServiceTest {
 
     @BeforeEach
     void setUp() {
+        service = serviceWith(new AiProperties());
+    }
+
+    private ProblemDraftGenerationJobService serviceWith(AiProperties properties) {
         Executor directExecutor = Runnable::run;
-        service = new ProblemDraftGenerationJobService(jobMapper, problemDraftStore, coordinator,
+        return new ProblemDraftGenerationJobService(jobMapper, problemDraftStore, coordinator,
                 workspaceService, new ProblemDraftReviewRiskService(),
                 new ObjectMapper().findAndRegisterModules(), auditWriter, directExecutor,
-                transactionManager());
+                transactionManager(), properties);
     }
 
     @AfterEach
@@ -216,6 +226,113 @@ class ProblemDraftGenerationJobServiceTest {
 
         authenticate(99L, Role.ADMIN);
         assertThat(service.get(100L).creatorUserId()).isEqualTo(8L);
+    }
+
+    @Test
+    void claimDerivesLeaseFromRunBudgetPlusGraceMargin() {
+        ProblemDraftGenerationJobEntity job = job(100L, 7L, "QUEUED");
+        when(jobMapper.update(any(ProblemDraftGenerationJobEntity.class), any(UpdateWrapper.class))).thenReturn(1);
+        when(jobMapper.selectById(100L)).thenReturn(job);
+        when(coordinator.execute(job)).thenReturn(outcome(true));
+
+        service.process(100L);
+
+        ProblemDraftGenerationJobEntity claimed = claimUpdate();
+        // Default maxRunMinutes=15 plus a 5-minute grace margin.
+        assertThat(Duration.between(claimed.getStartedAt(), claimed.getLeaseExpiresAt()).toMinutes())
+                .isEqualTo(20);
+    }
+
+    @Test
+    void claimUsesExplicitJobLeaseOverride() {
+        AiProperties properties = new AiProperties();
+        properties.getProblemDraft().setMaxRunMinutes(15);
+        properties.getProblemDraft().setJobLeaseMinutes(45);
+        ProblemDraftGenerationJobService custom = serviceWith(properties);
+        ProblemDraftGenerationJobEntity job = job(100L, 7L, "QUEUED");
+        when(jobMapper.update(any(ProblemDraftGenerationJobEntity.class), any(UpdateWrapper.class))).thenReturn(1);
+        when(jobMapper.selectById(100L)).thenReturn(job);
+        when(coordinator.execute(job)).thenReturn(outcome(true));
+
+        custom.process(100L);
+
+        ProblemDraftGenerationJobEntity claimed = claimUpdate();
+        assertThat(Duration.between(claimed.getStartedAt(), claimed.getLeaseExpiresAt()).toMinutes())
+                .isEqualTo(45);
+    }
+
+    @Test
+    void inFlightJobIsNotRecoveredEvenIfLeaseAppearsExpired() throws Exception {
+        ProblemDraftGenerationJobEntity job = job(100L, 7L, "RUNNING");
+        job.setLeaseExpiresAt(LocalDateTime.now().minusMinutes(1));
+        when(jobMapper.update(any(ProblemDraftGenerationJobEntity.class), any(UpdateWrapper.class))).thenReturn(1);
+        when(jobMapper.selectById(100L)).thenReturn(job);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(coordinator.execute(job)).thenAnswer(invocation -> {
+            entered.countDown();
+            release.await(5, TimeUnit.SECONDS);
+            return outcome(true);
+        });
+        // Recovery sees the lease-expired row; the queued poll sees nothing.
+        when(jobMapper.selectList(any())).thenReturn(List.of(job), List.of());
+        Thread worker = new Thread(() -> service.process(100L));
+        worker.start();
+        try {
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+
+            service.pollQueuedJobs();
+
+            // Only the claim update ran; no terminal NEEDS_ATTENTION write while in flight.
+            ArgumentCaptor<ProblemDraftGenerationJobEntity> captor =
+                    ArgumentCaptor.forClass(ProblemDraftGenerationJobEntity.class);
+            verify(jobMapper, times(1)).update(captor.capture(), any(UpdateWrapper.class));
+            assertThat(captor.getValue().getStatus()).isEqualTo("RUNNING");
+        } finally {
+            release.countDown();
+            worker.join(5000);
+        }
+    }
+
+    @Test
+    void expiredRunningJobWithoutLocalExecutionMovesToNeedsAttention() {
+        ProblemDraftGenerationJobEntity job = job(100L, 7L, "RUNNING");
+        job.setLeaseExpiresAt(LocalDateTime.now().minusMinutes(1));
+        when(jobMapper.selectList(any())).thenReturn(List.of(job), List.of());
+        when(jobMapper.selectById(100L)).thenReturn(job);
+        when(jobMapper.update(any(ProblemDraftGenerationJobEntity.class), any(UpdateWrapper.class))).thenReturn(1);
+
+        service.pollQueuedJobs();
+
+        ArgumentCaptor<ProblemDraftGenerationJobEntity> captor =
+                ArgumentCaptor.forClass(ProblemDraftGenerationJobEntity.class);
+        verify(jobMapper).update(captor.capture(), any(UpdateWrapper.class));
+        assertThat(captor.getValue().getStatus()).isEqualTo("NEEDS_ATTENTION");
+        assertThat(captor.getValue().getErrorKey()).isEqualTo("agent.workerInterrupted");
+    }
+
+    @Test
+    void terminalUpdateMatchingNoRowsIsToleratedAndNotAudited() {
+        ProblemDraftGenerationJobEntity job = job(100L, 7L, "QUEUED");
+        when(jobMapper.selectById(100L)).thenReturn(job);
+        // The claim succeeds; the terminal completion silently matches no row.
+        when(jobMapper.update(any(ProblemDraftGenerationJobEntity.class), any(UpdateWrapper.class)))
+                .thenReturn(1, 0);
+        when(coordinator.execute(job)).thenReturn(outcome(true));
+
+        assertThatCode(() -> service.process(100L)).doesNotThrowAnyException();
+
+        // Only the claim lifecycle audit was written; the lost terminal write is logged, not audited.
+        verify(auditWriter, times(1)).replaceProblemDraftGenerationJobLifecycle(any(), any(), any(), any());
+    }
+
+    private ProblemDraftGenerationJobEntity claimUpdate() {
+        ArgumentCaptor<ProblemDraftGenerationJobEntity> captor =
+                ArgumentCaptor.forClass(ProblemDraftGenerationJobEntity.class);
+        verify(jobMapper, atLeast(1)).update(captor.capture(), any(UpdateWrapper.class));
+        return captor.getAllValues().stream()
+                .filter(value -> "RUNNING".equals(value.getStatus()) && value.getLeaseExpiresAt() != null)
+                .findFirst().orElseThrow();
     }
 
     private void assignId(long id) {

@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain;
 
+import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftAgentCoordinator;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftReviewRiskService;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
@@ -37,7 +38,9 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -73,7 +76,10 @@ public class ProblemDraftGenerationJobService {
     private final OperationAuditWriter auditWriter;
     private final Executor problemDraftExecutor;
     private final TransactionTemplate requiresNew;
+    private final AiProperties aiProperties;
     private final String workerId = "ai-draft-agent-job-" + UUID.randomUUID();
+    /** Jobs currently executing on this instance; lease recovery must not touch them. */
+    private final Set<Long> inFlightJobs = ConcurrentHashMap.newKeySet();
 
     public ProblemDraftGenerationJobService(
             ProblemDraftGenerationJobMapper jobMapper,
@@ -84,7 +90,8 @@ public class ProblemDraftGenerationJobService {
             ObjectMapper objectMapper,
             OperationAuditWriter auditWriter,
             @Qualifier("aiProblemDraftExecutor") Executor problemDraftExecutor,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            AiProperties aiProperties
     ) {
         this.jobMapper = jobMapper;
         this.problemDraftStore = problemDraftStore;
@@ -96,6 +103,7 @@ public class ProblemDraftGenerationJobService {
         this.problemDraftExecutor = problemDraftExecutor;
         this.requiresNew = new TransactionTemplate(transactionManager);
         this.requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.aiProperties = aiProperties;
     }
 
     @Transactional
@@ -245,28 +253,33 @@ public class ProblemDraftGenerationJobService {
     }
 
     private void processClaimed(Long jobId) {
-        ProblemDraftGenerationJobEntity job = jobMapper.selectById(jobId);
-        if (job == null) {
-            return;
-        }
+        inFlightJobs.add(jobId);
         try {
-            workspaceService.bindRun(job.getWorkspaceId(), job.getCreatorUserId(), job.getTurnId(), null,
-                    valueOr(job.getAgentMode(), "THINKING_TOOL_LOOP"),
-                    ProblemDraftWorkspaceService.STATUS_RUNNING, "AGENT_RUNNING",
-                    "Problem draft Agent is using controlled tools");
-            ProblemDraftAgentCoordinator.AgentOutcome outcome = coordinator.execute(job);
-            if (outcome.succeeded()) {
-                complete(jobId, outcome);
-            } else {
-                needsAttention(jobId, outcome, null, null,
-                        "Agent stopped before every finalization gate passed");
+            ProblemDraftGenerationJobEntity job = jobMapper.selectById(jobId);
+            if (job == null) {
+                return;
             }
-        } catch (DomainException ex) {
-            needsAttention(jobId, null, ex.errorCode().code(), errorKey(ex.errorCode()), safeMessage(ex));
-        } catch (RuntimeException ex) {
-            log.warn("Problem draft Agent job {} failed: {}", jobId, ex.toString(), ex);
-            needsAttention(jobId, null, ErrorCode.INTERNAL_ERROR.code(), errorKey(ErrorCode.INTERNAL_ERROR),
-                    safeMessage(ex));
+            try {
+                workspaceService.bindRun(job.getWorkspaceId(), job.getCreatorUserId(), job.getTurnId(), null,
+                        valueOr(job.getAgentMode(), "THINKING_TOOL_LOOP"),
+                        ProblemDraftWorkspaceService.STATUS_RUNNING, "AGENT_RUNNING",
+                        "Problem draft Agent is using controlled tools");
+                ProblemDraftAgentCoordinator.AgentOutcome outcome = coordinator.execute(job);
+                if (outcome.succeeded()) {
+                    complete(jobId, outcome);
+                } else {
+                    needsAttention(jobId, outcome, null, null,
+                            "Agent stopped before every finalization gate passed");
+                }
+            } catch (DomainException ex) {
+                needsAttention(jobId, null, ex.errorCode().code(), errorKey(ex.errorCode()), safeMessage(ex));
+            } catch (RuntimeException ex) {
+                log.warn("Problem draft Agent job {} failed: {}", jobId, ex.toString(), ex);
+                needsAttention(jobId, null, ErrorCode.INTERNAL_ERROR.code(), errorKey(ErrorCode.INTERNAL_ERROR),
+                        safeMessage(ex));
+            }
+        } finally {
+            inFlightJobs.remove(jobId);
         }
     }
 
@@ -316,7 +329,7 @@ public class ProblemDraftGenerationJobService {
             update.setProgressTotal(PROGRESS_TOTAL);
             update.setProgressMessage("Starting model-led problem draft Agent");
             update.setLeaseOwner(workerId);
-            update.setLeaseExpiresAt(now.plusMinutes(16));
+            update.setLeaseExpiresAt(now.plusMinutes(leaseMinutes()));
             update.setStartedAt(now);
             update.setUpdatedAt(now);
             if (jobMapper.update(update, new UpdateWrapper<ProblemDraftGenerationJobEntity>()
@@ -366,7 +379,11 @@ public class ProblemDraftGenerationJobService {
             update.setCompletedAt(now);
             update.setUpdatedAt(now);
             UpdateWrapper<ProblemDraftGenerationJobEntity> wrapper = terminalWrapper(jobId);
-            if (jobMapper.update(update, wrapper) == 1 && current != null) {
+            int updated = jobMapper.update(update, wrapper);
+            if (updated != 1) {
+                log.warn("Problem draft Agent job {} terminal completion matched {} rows; current status={}",
+                        jobId, updated, current == null ? null : current.getStatus());
+            } else if (current != null) {
                 replaceAudit(current, "COMPLETED", "COMPLETED",
                         auditSummary(current, "completedAt", now, outcome.draftId(), null, null));
             }
@@ -393,7 +410,11 @@ public class ProblemDraftGenerationJobService {
                     "Continue optimization from the preserved workspace state"), ERROR_MESSAGE_MAX));
             update.setCompletedAt(now);
             update.setUpdatedAt(now);
-            if (jobMapper.update(update, terminalWrapper(jobId)) == 1 && current != null) {
+            int updated = jobMapper.update(update, terminalWrapper(jobId));
+            if (updated != 1) {
+                log.warn("Problem draft Agent job {} terminal needs-attention matched {} rows; current status={}",
+                        jobId, updated, current == null ? null : current.getStatus());
+            } else if (current != null) {
                 replaceAudit(current, "NEEDS_ATTENTION", STATUS_NEEDS_ATTENTION,
                         auditSummary(current, "completedAt", now,
                                 outcome == null ? null : outcome.draftId(), errorCode, errorKey));
@@ -427,9 +448,18 @@ public class ProblemDraftGenerationJobService {
                         .eq("status", STATUS_RUNNING).le("lease_expires_at", now)
                         .orderByAsc("lease_expires_at").last("LIMIT " + WORKER_BATCH_SIZE));
         for (ProblemDraftGenerationJobEntity job : expired) {
+            if (inFlightJobs.contains(job.getId())) {
+                continue;
+            }
             needsAttention(job.getId(), null, ErrorCode.INTERNAL_ERROR.code(), "agent.workerInterrupted",
                     "The Agent worker stopped before completion; the workspace state was preserved");
         }
+    }
+
+    /** The lease must outlive the run budget; an explicit override wins when configured. */
+    private long leaseMinutes() {
+        int configured = aiProperties.getProblemDraft().getJobLeaseMinutes();
+        return configured > 0 ? configured : aiProperties.getProblemDraft().getMaxRunMinutes() + 5L;
     }
 
     private void applyListFilters(QueryWrapper<ProblemDraftGenerationJobEntity> query, boolean admin,

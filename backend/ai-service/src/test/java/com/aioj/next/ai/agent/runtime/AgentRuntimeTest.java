@@ -42,6 +42,7 @@ import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.mapper.AiAgentRunMapper;
+import com.aioj.next.ai.persistence.mapper.ProblemDraftWorkspaceMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
@@ -53,12 +54,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -116,10 +121,12 @@ class AgentRuntimeTest {
         when(configService.effectiveConfig(AiModelScope.TEXT_GENERATION)).thenReturn(config());
         ModelGateway gateway = new ModelGateway(configService, List.of(adapter));
         ToolRegistry registry = new ToolRegistry(List.of(searchTool()));
-        ToolBroker broker = new ToolBroker(registry, new ToolAuthorizationService(),
-                new ToolResultSanitizer(objectMapper), auditService, objectMapper);
+        ToolBroker broker = new ToolBroker(registry,
+                new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
+                new ToolResultSanitizer(objectMapper), auditService, objectMapper, new AiProperties());
         runtime = new AgentRuntime(gateway, registry, broker, new ContextSectionRenderer(),
-                manifestService, new AgentRunStateMachine(runMapper, objectMapper), objectMapper, contextGuard);
+                manifestService, new AgentRunStateMachine(runMapper, objectMapper), objectMapper, contextGuard,
+                new AiProperties());
     }
 
     @Test
@@ -578,6 +585,67 @@ class AgentRuntimeTest {
         return new GatewayResponse("", List.of(), finishReason, 10, 5, 0, "deepseek", "deepseek-v4-pro");
     }
 
+    @Test
+    void saturatedModelExecutorFailsOneRunWithStructuredServiceUnavailable() throws Exception {
+        AiProperties properties = new AiProperties();
+        properties.getCapacity().setModelCorePoolSize(1);
+        properties.getCapacity().setModelMaxPoolSize(1);
+        properties.getCapacity().setModelQueueCapacity(1);
+        AgentRuntime saturated = runtimeWith(List.of(), contextGuard, properties);
+        CountDownLatch gate = new CountDownLatch(1);
+        adapter.gate = gate;
+        adapter.script.add(finalResponse("结论一"));
+        adapter.script.add(finalResponse("结论二"));
+        LoopBudget deadlineBudget = new LoopBudget(4, 2, 1, 1, Integer.MAX_VALUE, Integer.MAX_VALUE,
+                Integer.MAX_VALUE, Duration.ofMinutes(5));
+        ExecutorService runners = Executors.newFixedThreadPool(3);
+        try {
+            // Pool 1/1 with queue 1: of three concurrent runs exactly one is rejected at
+            // submission time. The model calls stay gated until the rejection is
+            // observed, so no run can finish early and reopen capacity.
+            List<Future<AgentRuntime.AgentRunResult>> futures = new ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                futures.add(runners.submit(() -> saturated.run(spec(false, deadlineBudget))));
+            }
+            DomainException rejection = null;
+            long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (rejection == null && System.nanoTime() < deadlineNanos) {
+                for (Future<AgentRuntime.AgentRunResult> future : futures) {
+                    if (future.isDone()) {
+                        try {
+                            future.get();
+                        } catch (java.util.concurrent.ExecutionException ex) {
+                            assertThat(ex.getCause()).isInstanceOf(DomainException.class);
+                            rejection = (DomainException) ex.getCause();
+                        }
+                        break;
+                    }
+                }
+                if (rejection == null) {
+                    Thread.sleep(10);
+                }
+            }
+            assertThat(rejection).isNotNull();
+            assertThat(rejection.errorCode()).isEqualTo(ErrorCode.SERVICE_UNAVAILABLE);
+            assertThat(rejection.getMessage()).isEqualTo("AI model capacity saturated; retry later");
+
+            gate.countDown();
+            int succeeded = 0;
+            for (Future<AgentRuntime.AgentRunResult> future : futures) {
+                try {
+                    future.get(10, TimeUnit.SECONDS);
+                    succeeded++;
+                } catch (java.util.concurrent.ExecutionException ex) {
+                    assertThat(ex.getCause()).isSameAs(rejection);
+                }
+            }
+            assertThat(succeeded).isEqualTo(2);
+        } finally {
+            gate.countDown();
+            runners.shutdownNow();
+        }
+    }
+
     private AgentRuntime.AgentRunRequest spec(boolean requireToolCall, LoopBudget budget) {
         return new AgentRuntime.AgentRunRequest("turn-1", 7L, "c1", "ps-1", Set.of("AI_CHAT"),
                 sections(), requireToolCall, "STREAM", CallProfile.CHAT_STREAM, budget);
@@ -594,12 +662,19 @@ class AgentRuntimeTest {
     }
 
     private AgentRuntime runtimeWith(List<AgentTool> tools, ContextFingerprintGuard guard) {
+        return runtimeWith(tools, guard, new AiProperties());
+    }
+
+    private AgentRuntime runtimeWith(List<AgentTool> tools, ContextFingerprintGuard guard,
+                                     AiProperties properties) {
         ModelGateway gateway = new ModelGateway(configService, List.of(adapter));
         ToolRegistry registry = new ToolRegistry(tools);
-        ToolBroker broker = new ToolBroker(registry, new ToolAuthorizationService(),
-                new ToolResultSanitizer(objectMapper), auditService, objectMapper);
+        ToolBroker broker = new ToolBroker(registry,
+                new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
+                new ToolResultSanitizer(objectMapper), auditService, objectMapper, properties);
         return new AgentRuntime(gateway, registry, broker, new ContextSectionRenderer(),
-                manifestService, new AgentRunStateMachine(runMapper, objectMapper), objectMapper, guard);
+                manifestService, new AgentRunStateMachine(runMapper, objectMapper), objectMapper, guard,
+                properties);
     }
 
     /** Real L3 context layer on top of a mock audit recorder, for the P3-4 tests. */
@@ -707,11 +782,14 @@ class AgentRuntimeTest {
     }
 
     private static final class FakeAdapter implements ToolCallAdapter {
-        private final Queue<GatewayResponse> script = new ArrayDeque<>();
-        private final List<GatewayRequest> requests = new ArrayList<>();
-        private final List<CallSettings> settings = new ArrayList<>();
+        private final Queue<GatewayResponse> script = new java.util.concurrent.ConcurrentLinkedQueue<>();
+        private final List<GatewayRequest> requests =
+                java.util.Collections.synchronizedList(new ArrayList<>());
+        private final List<CallSettings> settings =
+                java.util.Collections.synchronizedList(new ArrayList<>());
         private boolean rejectNextThinkingCall;
         private long delayMillis;
+        private volatile CountDownLatch gate;
 
         @Override
         public String provider() {
@@ -730,6 +808,15 @@ class AgentRuntimeTest {
             if (delayMillis > 0) {
                 try {
                     Thread.sleep(delayMillis);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "model call interrupted");
+                }
+            }
+            CountDownLatch currentGate = gate;
+            if (currentGate != null) {
+                try {
+                    currentGate.await(10, TimeUnit.SECONDS);
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
                     throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "model call interrupted");

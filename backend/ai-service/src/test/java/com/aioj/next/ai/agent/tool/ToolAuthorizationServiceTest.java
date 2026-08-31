@@ -19,9 +19,8 @@ class ToolAuthorizationServiceTest {
 
     @Test
     void problemDraftScopeRequiresServerBindingAndWorkspaceOwnershipBeforeExecution() throws Exception {
-        ToolAuthorizationService service = new ToolAuthorizationService();
         ProblemDraftWorkspaceMapper mapper = mock(ProblemDraftWorkspaceMapper.class);
-        service.setWorkspaceMapper(mapper);
+        ToolAuthorizationService service = new ToolAuthorizationService(mapper);
         ToolDescriptor descriptor = descriptor();
 
         var missing = service.authorize(descriptor, context(Map.of()));
@@ -34,6 +33,18 @@ class ToolAuthorizationServiceTest {
         assertThat(denied.allowed()).isFalse();
         assertThat(denied.reasonCode()).isEqualTo("RESOURCE_SCOPE_DENIED");
         assertThat(allowed.allowed()).isTrue();
+    }
+
+    @Test
+    void workspaceLookupFailureFailsClosedWithAuthUnavailable() throws Exception {
+        ProblemDraftWorkspaceMapper mapper = mock(ProblemDraftWorkspaceMapper.class);
+        ToolAuthorizationService service = new ToolAuthorizationService(mapper);
+        when(mapper.selectCount(any())).thenThrow(new RuntimeException("db down"));
+
+        var decision = service.authorize(descriptor(), context(Map.of("workspaceId", "ws-1")));
+
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.reasonCode()).isEqualTo("RESOURCE_AUTH_UNAVAILABLE");
     }
 
     private ToolExecutionContext context(Map<String, String> bindings) {

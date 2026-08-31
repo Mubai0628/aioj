@@ -7,5 +7,6 @@ public enum ToolStatus {
     POLICY_DENIED,
     TIMEOUT,
     CANCELLED,
-    EXECUTION_ERROR
+    EXECUTION_ERROR,
+    SERVICE_UNAVAILABLE
 }

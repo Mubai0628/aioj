@@ -1,5 +1,6 @@
 package com.aioj.next.ai.agent.tool;
 
+import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.common.error.DomainException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,6 +15,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -40,13 +42,14 @@ public class ToolBroker {
     private final Map<InFlightKey, Future<?>> inFlight = new ConcurrentHashMap<>();
 
     public ToolBroker(ToolRegistry registry, ToolAuthorizationService authorizationService,
-                      ToolResultSanitizer sanitizer, ToolAuditService auditService, ObjectMapper objectMapper) {
+                      ToolResultSanitizer sanitizer, ToolAuditService auditService, ObjectMapper objectMapper,
+                      AiProperties aiProperties) {
         this.registry = registry;
         this.authorizationService = authorizationService;
         this.sanitizer = sanitizer;
         this.auditService = auditService;
         this.objectMapper = objectMapper;
-        this.executor = createExecutor();
+        this.executor = createExecutor(aiProperties.getCapacity());
     }
 
     /**
@@ -139,6 +142,11 @@ public class ToolBroker {
                 result = ToolResult.failure(callId, ToolStatus.EXECUTION_ERROR, "TOOL_EXECUTION_ERROR",
                         "Tool execution failed");
             }
+        } catch (RejectedExecutionException ex) {
+            // Saturated bounded executor: surface a tool-level error on the normal
+            // audit path instead of failing the whole Agent turn with a raw exception.
+            result = ToolResult.failure(callId, ToolStatus.SERVICE_UNAVAILABLE, "TOOL_CAPACITY_SATURATED",
+                    "Tool execution capacity is saturated; retry later");
         } catch (RuntimeException ex) {
             result = ToolResult.failure(callId, ToolStatus.EXECUTION_ERROR, "TOOL_EXECUTION_ERROR",
                     "Tool execution failed");
@@ -204,15 +212,17 @@ public class ToolBroker {
         return timeout;
     }
 
-    private static ExecutorService createExecutor() {
+    private static ExecutorService createExecutor(AiProperties.Capacity capacity) {
         AtomicInteger sequence = new AtomicInteger();
         ThreadFactory threadFactory = runnable -> {
             Thread thread = new Thread(runnable, "ai-tool-" + sequence.incrementAndGet());
             thread.setDaemon(true);
             return thread;
         };
-        return new ThreadPoolExecutor(4, 16, 60L, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(64), threadFactory, new ThreadPoolExecutor.AbortPolicy());
+        return new ThreadPoolExecutor(capacity.getToolCorePoolSize(), capacity.getToolMaxPoolSize(),
+                60L, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(capacity.getToolQueueCapacity()), threadFactory,
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
     private record InFlightKey(long agentRunId, String callId) {
