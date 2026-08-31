@@ -2436,8 +2436,6 @@ export interface ProblemDraftTestcaseArtifactResponse {
   importedProblemId?: EntityId | null;
   problemTestcasePackageId?: EntityId | null;
   /* Optional compatibility aliases while older draft responses are phased out. */
-  workspaceId?: EntityId | null;
-  draftId?: EntityId | null;
   status?: TestcasePackageStatus | string;
   validationStatus?: ProblemDraftTestcaseArtifactValidationStatus | null;
   fileName?: string | null;
@@ -2459,11 +2457,6 @@ export interface ProblemDraftImportReadinessResponse {
   verificationMode?: string | null;
   blockerCodes: string[];
   recommendedActions: string[];
-  /* Optional compatibility aliases while older clients are phased out. */
-  mode?: 'VERIFIED_ARTIFACT' | 'MANUAL_UNVERIFIED' | string | null;
-  code?: string | null;
-  safeMessage?: string | null;
-  artifactId?: EntityId | null;
 }
 
 export interface ProblemDraftWorkspaceResponse {
@@ -3961,12 +3954,6 @@ export const api = {
     }),
   deleteAiLearningProfile: (id: EntityId) =>
     request<void>(`/api/v1/ai/learning-profile/${id}`, { method: 'DELETE' }),
-  generateDraft: (payload: ProblemDraftGeneratePayload, opts?: { signal?: AbortSignal }) =>
-    request<ProblemDraftResponse>('/api/v1/ai/problem-drafts/generate', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      signal: opts?.signal
-    }),
   generateDraftStream: (payload: ProblemDraftGeneratePayload, opts?: ProblemDraftGenerateStreamOptions) =>
     streamProblemDraftGenerateRequest(payload, opts, true),
   createProblemDraftGenerationJob: (payload: ProblemDraftGeneratePayload, opts?: { signal?: AbortSignal }) =>
@@ -4063,11 +4050,6 @@ export const api = {
     }),
   createProblemDraftRegenerationJob: (id: EntityId, feedback: string) =>
     request<ProblemDraftGenerationJobResponse>(`/api/v1/admin/problem-drafts/${id}/regeneration-job`, {
-      method: 'POST',
-      body: JSON.stringify({ feedback })
-    }),
-  regenerateDraft: (id: EntityId, feedback: string) =>
-    request<ProblemDraftResponse>(`/api/v1/admin/problem-drafts/${id}/regenerate`, {
       method: 'POST',
       body: JSON.stringify({ feedback })
     }),

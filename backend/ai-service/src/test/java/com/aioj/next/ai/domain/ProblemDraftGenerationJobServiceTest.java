@@ -176,8 +176,6 @@ class ProblemDraftGenerationJobServiceTest {
                 .filter(value -> "SUCCEEDED".equals(value.getStatus())).findFirst().orElseThrow();
         assertThat(completed.getDraftId()).isEqualTo(900L);
         assertThat(completed.getAgentRunId()).isEqualTo(300L);
-        verify(problemDraftStore, never()).generate(any(), any(), any(), any());
-        verify(problemDraftStore, never()).regenerate(any(), any(), any(), any(), any());
     }
 
     @Test
