@@ -12,6 +12,7 @@ This directory contains current product and technical design only. Agent operati
 | [System architecture](system-architecture.md) | services, data flow, persistence, and production topology | [中文](../zh/system-architecture.md) |
 | [Contest and user-group architecture](contest-and-user-group-architecture.md) | blueprints, runs, snapshots, scoring, and audit | [中文](../zh/contest-and-user-group-architecture.md) |
 | [Agent Core V3 architecture](agent-core-v3-architecture.md) | trusted control plane, tools, recall, memory, and contest safety | [中文](../zh/agent-core-v3-architecture.md) |
+| [AI problem-draft Agent architecture](problem-draft-agent-architecture.md) | isolated workspaces, nine tools, testcase artifacts, and idempotent import | [中文](../zh/problem-draft-agent-architecture.md) |
 | [Security architecture](security-architecture.md) | trust boundaries, data protection, and privileged-Sandbox risk | [中文](../zh/security-architecture.md) |
 | [Delivery architecture](delivery-architecture.md) | CI, GHCR, immutable images, deployment, and rollback boundaries | [中文](../zh/delivery-architecture.md) |
 

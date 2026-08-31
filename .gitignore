@@ -56,3 +56,6 @@ logs/
 
 # Agent eval generated reports/filler SQL
 scripts/agent-eval/out/
+
+# Local runtime scratch/logs
+.tmp/

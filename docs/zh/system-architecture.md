@@ -42,6 +42,8 @@ problem-service 持久化提交并向 RabbitMQ 发布判题任务。judge-worker
 
 ai-service 在服务器端计算权限与策略，构建最小上下文，调用 Provider 和受权工具，并持久化用量与审计证据。AI 访问 problem-service 使用最小跨服务契约，不直接读取其他服务的数据库表。
 
+AI 题目草稿使用 `ProblemDraftAgentCoordinator → AgentRuntime → ToolBroker`。代码、样例和测试包执行由 ai-service 通过受保护契约交给 judge-worker，再由 judge-worker 调用 Sandbox；ai-service 不直接访问 Docker。通过人工审核的草稿使用可恢复导入 saga 将题目信息和 `READY` 测试包提交给 problem-service。详见 [AI 题目草稿 Agent 架构](problem-draft-agent-architecture.md)。
+
 ### 通知
 
 持久化通知记录是事实来源；SSE 只负责实时唤醒。断线或刷新后，客户端通过 REST 补偿并恢复未读状态。
@@ -60,9 +62,12 @@ ai-service 在服务器端计算权限与策略，构建最小上下文，调用
 - Redis 保存可重建的缓存与短期状态。
 - RabbitMQ 保存异步判题队列与受控重试状态。
 - 测试包、运维产物、AI 草稿产物和判题缓存使用文件/卷存储；大体积隐藏测试不进入 MySQL。
+- V66 新增 AI 草稿工作区、受限执行元数据、分块上传会话和可恢复导入 saga，并为既有草稿/工件/Agent 审计/题目增加来源与指纹。V49–V51 未接线的旧草稿 job/attempt/artifact 表仅保留为历史结构，不进入当前路径。
 
 ## 生产拓扑
 
 当前生产把应用、数据服务、judge-worker 与 Sandbox 合并在单节点。应用网络承载业务服务，内部 judge 网络只连接 judge-worker 与 Sandbox。Sandbox 不公开端口、不使用 host network、不挂载 Docker socket 或业务目录，也不接收数据库、JWT、AI 与部署秘密。
 
 Sandbox 仍是 `privileged` 容器，成功逃逸可能危及整台主机与全部数据。这一风险不能被网络和资源控制完全消除，详见[安全架构](security-architecture.md)。
+
+AI 题目草稿 Agent 重构当前仅存在于本地工作树，状态为 `IMPLEMENTED_UNVERIFIED`；未连接或更新生产节点 `aioj_a`。
