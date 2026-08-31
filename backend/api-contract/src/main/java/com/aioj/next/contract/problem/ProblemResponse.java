@@ -15,6 +15,8 @@ public record ProblemResponse(
         ProblemLanguageTimeLimitMultipliers languageTimeLimitMultipliers,
         int memoryLimitKb,
         boolean aiGenerated,
+        String aiReviewRisk,
+        String aiTestcaseVerificationMode,
         ProblemVisibility visibility,
         Instant createdAt,
         Instant archivedAt,
