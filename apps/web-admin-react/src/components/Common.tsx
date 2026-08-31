@@ -249,7 +249,8 @@ export function ConfirmDialog({
   description,
   cancelLabel,
   confirmLabel,
-  onConfirm
+  onConfirm,
+  tone = "danger"
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -258,6 +259,7 @@ export function ConfirmDialog({
   cancelLabel: string;
   confirmLabel: string;
   onConfirm: () => void | Promise<void>;
+  tone?: "danger" | "neutral";
 }) {
   return (
     <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -274,7 +276,7 @@ export function ConfirmDialog({
             </AlertDialog.Cancel>
             <AlertDialog.Action asChild>
               <Button
-                className="bg-red-700 hover:bg-red-800"
+                className={tone === "danger" ? "bg-red-700 hover:bg-red-800" : undefined}
                 onClick={(event) => {
                   event.preventDefault();
                   void Promise.resolve(onConfirm()).then(() => onOpenChange(false));

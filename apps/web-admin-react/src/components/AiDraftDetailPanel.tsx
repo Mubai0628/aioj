@@ -1,7 +1,7 @@
 import * as React from "react";
 import { api, type Difficulty, type ProblemDraftGenerationJobResponse, type ProblemDraftResponse, type TestCaseDto } from "@aioj/api-client";
 import { Badge, Button, cn } from "@aioj/ui-react";
-import { ErrorPanel, Field, SidePanel, inputClass, selectClass, textareaClass } from "./Common";
+import { ConfirmDialog, ErrorPanel, Field, LoadingPanel, SidePanel, inputClass, selectClass, textareaClass } from "./Common";
 import { AiDraftTestcasePanel } from "./AiDraftTestcasePanel";
 import { AiDraftWorkspaceContent, RiskNotices } from "./AiDraftAgentWorkspace";
 import { MarkdownView } from "./MarkdownView";
@@ -69,6 +69,7 @@ export function AiDraftDetailPanel({
   const [feedback, setFeedback] = React.useState("");
   const [refining, setRefining] = React.useState(false);
   const [regenerating, setRegenerating] = React.useState(false);
+  const [pendingDiscard, setPendingDiscard] = React.useState<DraftTab | "close" | null>(null);
 
   const currentDraft = localDraft ?? draft;
   const imported = Boolean(currentDraft?.importedProblemId);
@@ -178,6 +179,32 @@ export function AiDraftDetailPanel({
     }
   }
 
+  function requestTabChange(next: DraftTab) {
+    if (next !== tab && tab === "edit" && editDirty) {
+      setPendingDiscard(next);
+      return;
+    }
+    setTab(next);
+  }
+
+  function handleGuardedOpenChange(nextOpen: boolean) {
+    if (!nextOpen && editDirty) {
+      setPendingDiscard("close");
+      return;
+    }
+    onOpenChange(nextOpen);
+  }
+
+  function confirmDiscardChanges() {
+    const target = pendingDiscard;
+    if (currentDraft) resetForm(currentDraft);
+    if (target === "close") {
+      onOpenChange(false);
+    } else if (target) {
+      setTab(target);
+    }
+  }
+
   async function regenerateDraft() {
     if (!currentDraft) return;
     setRegenerating(true);
@@ -195,7 +222,7 @@ export function AiDraftDetailPanel({
   return (
     <SidePanel
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleGuardedOpenChange}
       wide
       presentation="workspace"
       title={t("drafts.detailTitle")}
@@ -236,7 +263,7 @@ export function AiDraftDetailPanel({
         </div>
       ) : null}
     >
-      {!currentDraft ? null : (
+      {!currentDraft ? <LoadingPanel label={t("drafts.detailLoading")} /> : (
         <div className="min-w-0 space-y-5">
           <header className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -257,11 +284,11 @@ export function AiDraftDetailPanel({
           <RiskNotices reviewRisk={currentDraft.reviewRisk} />
 
           <div className="flex gap-2 overflow-x-auto border-b border-[var(--oj-border-soft)] pb-3">
-            <TabButton active={tab === "preview"} onClick={() => setTab("preview")}>{t("drafts.detailTabsPreview")}</TabButton>
-            <TabButton active={tab === "verification"} onClick={() => setTab("verification")}>{t("drafts.detailTabsVerification")}</TabButton>
-            <TabButton active={tab === "testcase"} onClick={() => setTab("testcase")}>{t("drafts.detailTabsTestcase")}</TabButton>
-            <TabButton active={tab === "agent"} onClick={() => setTab("agent")}>{t("drafts.detailTabsAgent")}</TabButton>
-            <TabButton active={tab === "edit"} onClick={() => setTab("edit")}>{t("drafts.detailTabsEdit")}</TabButton>
+            <TabButton active={tab === "preview"} onClick={() => requestTabChange("preview")}>{t("drafts.detailTabsPreview")}</TabButton>
+            <TabButton active={tab === "verification"} onClick={() => requestTabChange("verification")}>{t("drafts.detailTabsVerification")}</TabButton>
+            <TabButton active={tab === "testcase"} onClick={() => requestTabChange("testcase")}>{t("drafts.detailTabsTestcase")}</TabButton>
+            <TabButton active={tab === "agent"} onClick={() => requestTabChange("agent")}>{t("drafts.detailTabsAgent")}</TabButton>
+            <TabButton active={tab === "edit"} onClick={() => requestTabChange("edit")}>{t("drafts.detailTabsEdit")}</TabButton>
           </div>
 
           {tab === "preview" ? (
@@ -471,6 +498,18 @@ export function AiDraftDetailPanel({
 
         </div>
       )}
+      <ConfirmDialog
+        open={pendingDiscard !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPendingDiscard(null);
+        }}
+        tone="neutral"
+        title={t("drafts.discardChangesTitle")}
+        description={t("drafts.discardChangesDescription")}
+        cancelLabel={t("common.cancel")}
+        confirmLabel={t("drafts.discardChangesConfirm")}
+        onConfirm={confirmDiscardChanges}
+      />
     </SidePanel>
   );
 }

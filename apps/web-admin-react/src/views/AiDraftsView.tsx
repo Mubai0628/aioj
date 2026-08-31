@@ -12,7 +12,7 @@ import { useAuth } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
 import { difficultyTone, formatDateTime, shortId } from "../lib/format";
-import { readableCaughtError } from "../lib/readableError";
+import { readableCaughtError, readableStoredError } from "../lib/readableError";
 
 const SOLUTION_LANGUAGES = ["cpp", "python", "java"];
 const PAGE_SIZE = 30;
@@ -133,8 +133,26 @@ export function AiDraftsView() {
       }
       return api.approveDraft(draft.id, true, visibility);
     },
-    onSuccess: async (_result, variables) => {
-      toast.success(variables.draft.workspaceId ? t("drafts.workspaceImportSubmitted") : t("drafts.importedMessage"));
+    onSuccess: async (result, variables) => {
+      const importResult = "state" in result ? result : null;
+      if (importResult && importResult.state !== "COMPLETED") {
+        const detail = importResult.errorMessage?.trim()
+          ? readableStoredError(importResult.errorMessage, locale, t("drafts.importFailed"), "ai")
+          : t("drafts.importFailed");
+        toast.error(`${importResult.errorCode
+          ? t("drafts.importFailedWithCode", { code: importResult.errorCode, message: detail })
+          : detail}\n${t("drafts.importRetryHint")}`);
+        try {
+          setSelectedDraft(await api.problemDraft(variables.draft.id));
+        } catch {
+          setSelectedDraft(variables.draft);
+        }
+        await refreshDrafts();
+        return;
+      }
+      toast.success(importResult?.problemId
+        ? t("drafts.importedAs", { id: shortId(importResult.problemId) })
+        : t("drafts.importedMessage"));
       try {
         setSelectedDraft(await api.problemDraft(variables.draft.id));
       } catch {
@@ -144,7 +162,7 @@ export function AiDraftsView() {
       await refreshDrafts();
     },
     onError: (caught) => {
-      toast.error(readableCaughtError(caught, locale, t("drafts.importFailed")));
+      toast.error(`${readableCaughtError(caught, locale, t("drafts.importFailed"))}\n${t("drafts.importRetryHint")}`);
     }
   });
 
@@ -872,6 +890,7 @@ export function AiDraftsView() {
         cancelLabel={t("common.cancel")}
         confirmLabel={draftConfirmLabel(confirmAction, t)}
         onConfirm={handleConfirmAction}
+        tone={confirmAction?.action === "delete" ? "danger" : "neutral"}
       />
     </div>
   );

@@ -8,7 +8,6 @@ import { useI18n } from "../lib/i18n";
 import { formatDateTime, shortId } from "../lib/format";
 
 const PAGE_SIZE = 20;
-const REFERENCE_CHECK_DISABLED_FOR_HIGH_RATING = "REFERENCE_CHECK_DISABLED_FOR_HIGH_RATING";
 type StatusFilter = "" | ProblemDraftGenerationJobStatus;
 type TFunction = ReturnType<typeof useI18n>["t"];
 
@@ -148,7 +147,7 @@ export function AiDraftJobsPanel({
                           <Badge tone={statusTone(job.status)}>{jobStatusLabel(job.status, t)}</Badge>
                           <Badge tone="neutral">{jobStageLabel(job.stage, t)}</Badge>
                           <Badge tone="neutral">{jobTypeLabel(job, t)}</Badge>
-                          {job.reviewRisk && job.reviewRisk.code !== "NORMAL" ? <Badge tone="amber">{reviewRiskLabel(job.reviewRisk.code, t)}</Badge> : null}
+                          {job.reviewRisk && job.reviewRisk.code !== "NORMAL" && job.reviewRisk.code !== "STANDARD" ? <Badge tone="amber">{reviewRiskLabel(job.reviewRisk.code, t)}</Badge> : null}
                         </div>
                       </td>
                       <td className="px-4 py-4">
@@ -240,7 +239,7 @@ function JobMobileCard({
       <div className="mt-3 flex flex-wrap gap-1.5">
         <Badge tone="neutral">{jobStageLabel(job.stage, t)}</Badge>
         <Badge tone="neutral">{jobTypeLabel(job, t)}</Badge>
-        {job.reviewRisk && job.reviewRisk.code !== "NORMAL" ? <Badge tone="amber">{reviewRiskLabel(job.reviewRisk.code, t)}</Badge> : null}
+        {job.reviewRisk && job.reviewRisk.code !== "NORMAL" && job.reviewRisk.code !== "STANDARD" ? <Badge tone="amber">{reviewRiskLabel(job.reviewRisk.code, t)}</Badge> : null}
       </div>
       <div className="mt-4 space-y-2">
         <div className="flex items-center justify-between gap-3 text-xs tabular-nums text-[var(--oj-ink-muted)]">
@@ -282,9 +281,6 @@ function statusTone(status: string): "blue" | "green" | "amber" | "red" | "neutr
 }
 
 function jobStatusLabel(status: string, t: TFunction) {
-  if (status === "NEEDS_ATTENTION" || status === "PENDING_REVIEW") {
-    return t(`draftWorkspace.status.${status}`, undefined, t("draftJobs.status.UNKNOWN"));
-  }
   return t(`draftJobs.status.${status}`, undefined, t("draftJobs.status.UNKNOWN"));
 }
 
@@ -308,7 +304,7 @@ function jobNote(job: ProblemDraftGenerationJobResponse, t: TFunction) {
     if (isRegenerationJob(job)) {
       return t("draftJobs.rewriteCreated", { id: shortId(job.draftId) });
     }
-    if (job.progressMessage === REFERENCE_CHECK_DISABLED_FOR_HIGH_RATING) {
+    if (job.reviewRisk?.code === "HIGH_DIFFICULTY_AI") {
       return t("draftJobs.draftCreatedReferenceRisk", { id: shortId(job.draftId) });
     }
     return t("draftJobs.draftCreated", { id: shortId(job.draftId) });

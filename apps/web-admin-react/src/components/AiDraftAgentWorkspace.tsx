@@ -25,6 +25,7 @@ type TimelineItem =
   | { kind: "tool"; id: string; createdAt: string; value: ProblemDraftToolCallResponse };
 
 const TURN_INTENTS: ProblemDraftWorkspaceTurnIntent[] = ["REFINE", "REPAIR", "REVALIDATE", "GENERATE_TESTS"];
+const MESSAGES_PAGE_SIZE = 50;
 
 export function AiDraftWorkspacePanel({
   open,
@@ -102,7 +103,7 @@ export function AiDraftWorkspaceContent({
 
   const messagesQuery = useQuery({
     queryKey: ["admin-problem-draft-workspace-messages", workspaceId],
-    queryFn: () => api.problemDraftWorkspaceMessages(String(workspaceId), { page: 1, pageSize: 50 }),
+    queryFn: () => api.problemDraftWorkspaceMessages(String(workspaceId), { page: 1, pageSize: MESSAGES_PAGE_SIZE }),
     enabled: Boolean(workspaceId),
     refetchInterval: (query) => activeQueryRefetchInterval(query, () => workspaceActive, {
       fastMs: 2200,
@@ -258,6 +259,9 @@ export function AiDraftWorkspaceContent({
           ))}
           {!visibleMessages.length && !messagesQuery.isLoading ? (
             <p className="rounded-lg border border-dashed border-[var(--oj-border)] p-4 text-sm text-[var(--oj-ink-muted)]">{t("draftWorkspace.messagesEmpty")}</p>
+          ) : null}
+          {(messagesQuery.data?.total ?? 0) > MESSAGES_PAGE_SIZE ? (
+            <p className="pt-1 text-xs leading-5 text-[var(--oj-ink-muted)]">{t("draftWorkspace.messagesTruncated", { count: MESSAGES_PAGE_SIZE })}</p>
           ) : null}
         </div>
       </section>

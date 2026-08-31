@@ -16,8 +16,6 @@ import { useToast } from "../lib/toast";
 import { formatBytes, formatDateTime, shortId } from "../lib/format";
 import { readableCaughtError } from "../lib/readableError";
 
-const CHUNK_SIZE_BYTES = 1024 * 1024;
-
 type UploadPhase = "idle" | "hashing" | "uploading" | "completing" | "processing" | "done";
 
 export function AiDraftTestcasePanel({
@@ -36,6 +34,7 @@ export function AiDraftTestcasePanel({
   const [localArtifact, setLocalArtifact] = React.useState<ProblemDraftTestcaseArtifactResponse | null>(null);
   const [sha256Value, setSha256Value] = React.useState("");
   const [validationRequested, setValidationRequested] = React.useState(false);
+  const [chunkSizeBytes, setChunkSizeBytes] = React.useState<number | null>(null);
   const workspaceId = draft.workspaceId;
   const currentArtifact = localArtifact ?? draft.testcaseArtifact ?? null;
   const generatedArtifact = draft.testcaseArtifact?.source === "AGENT_GENERATED" ? draft.testcaseArtifact : null;
@@ -49,6 +48,7 @@ export function AiDraftTestcasePanel({
     setLocalArtifact(null);
     setSha256Value("");
     setValidationRequested(false);
+    setChunkSizeBytes(null);
   }, [draft.id, workspaceId]);
 
   const uploadStatusQuery = useQuery({
@@ -130,6 +130,7 @@ export function AiDraftTestcasePanel({
         fileSizeBytes: file.size,
         sha256: totalSha
       });
+      setChunkSizeBytes(init.chunkSizeBytes);
       let status: ProblemDraftTestcaseUploadStatusResponse = {
         uploadId: init.uploadId,
         workspaceId: init.workspaceId,
@@ -212,6 +213,7 @@ export function AiDraftTestcasePanel({
                   setUploadStatus(null);
                   setLocalArtifact(null);
                   setSha256Value("");
+                  setChunkSizeBytes(null);
                   setPhase("idle");
                 }}
               />
@@ -220,7 +222,7 @@ export function AiDraftTestcasePanel({
               <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Fact label={t("draftTestcase.fileName")} value={file.name} />
                 <Fact label={t("draftTestcase.fileSize")} value={formatBytes(file.size)} />
-                <Fact label={t("draftTestcase.chunkSize")} value={formatBytes(CHUNK_SIZE_BYTES)} />
+                <Fact label={t("draftTestcase.chunkSize")} value={chunkSizeBytes != null ? formatBytes(chunkSizeBytes) : "--"} />
                 <Fact label="SHA-256" value={sha256Value || t(`draftTestcase.phase.${phase}`)} title={sha256Value || undefined} />
               </dl>
             ) : null}

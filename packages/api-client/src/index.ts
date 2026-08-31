@@ -2953,7 +2953,7 @@ function queryString(params: Record<string, unknown> = {}) {
 }
 
 function preserveLargeIntegerIds(text: string) {
-  return text.replace(/("(?:(?:[A-Za-z0-9_]*Id)|id)"\s*:\s*)(-?\d{16,})/g, '$1"$2"');
+  return text.replace(/("(?:(?:[A-Za-z0-9_]*Id)|id|deletedBy)"\s*:\s*)(-?\d{16,})/g, '$1"$2"');
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
