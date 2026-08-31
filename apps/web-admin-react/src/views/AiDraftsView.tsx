@@ -2,9 +2,10 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { RotateCw, Sparkles } from "lucide-react";
-import { ApiError, api, type AiUsageResponse, type PageResponse, type ProblemDraftGenerationJobResponse, type ProblemDraftResponse, type ProblemVisibility } from "@aioj/api-client";
+import { ApiError, api, type AiUsageResponse, type PageResponse, type ProblemDraftGenerationJobResponse, type ProblemDraftResponse, type ProblemDraftWorkspaceImportResponse, type ProblemVisibility } from "@aioj/api-client";
 import { Badge, Button, cn } from "@aioj/ui-react";
 import { AiDraftDetailPanel, type AiDraftAction } from "../components/AiDraftDetailPanel";
+import { AiDraftWorkspacePanel } from "../components/AiDraftAgentWorkspace";
 import { ConfirmDialog, EmptyState, ErrorPanel, Field, LoadingPanel, PageHeader, PaginationRow, SidePanel, TableShell, inputClass, selectClass, textareaClass } from "../components/Common";
 import { AiDraftJobsPanel } from "./AiDraftJobsView";
 import { useAuth } from "../lib/auth";
@@ -58,6 +59,9 @@ export function AiDraftsView() {
   const [page, setPage] = React.useState(1);
   const [selectedDraft, setSelectedDraft] = React.useState<ProblemDraftResponse | null>(null);
   const [detailOpen, setDetailOpen] = React.useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = React.useState(false);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = React.useState<string | null>(null);
+  const [selectedWorkspaceJob, setSelectedWorkspaceJob] = React.useState<ProblemDraftGenerationJobResponse | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   const [generateError, setGenerateError] = React.useState<string | null>(null);
   const [listError, setListError] = React.useState<string | null>(null);
@@ -66,11 +70,13 @@ export function AiDraftsView() {
   const [confirmAction, setConfirmAction] = React.useState<ConfirmAction | null>(null);
   const [importTarget, setImportTarget] = React.useState<ProblemDraftResponse | null>(null);
   const [importVisibility, setImportVisibility] = React.useState<ProblemVisibility>("PUBLIC");
+  const [acknowledgeUnverified, setAcknowledgeUnverified] = React.useState(false);
   const [rejectTarget, setRejectTarget] = React.useState<ProblemDraftResponse | null>(null);
   const [rejectReason, setRejectReason] = React.useState("");
   const [rejecting, setRejecting] = React.useState(false);
   const filtersReadyRef = React.useRef(false);
   const openedSearchDraftRef = React.useRef<string | null>(null);
+  const openedSearchWorkspaceRef = React.useRef<string | null>(null);
 
   const usageQuery = useQuery({
     queryKey: ["admin-ai-usage"],
@@ -110,12 +116,30 @@ export function AiDraftsView() {
     }
   });
 
-  const importMutation = useMutation({
-    mutationFn: ({ draft, visibility }: { draft: ProblemDraftResponse; visibility: ProblemVisibility }) =>
-      api.approveDraft(draft.id, true, visibility),
-    onSuccess: async (draft) => {
-      toast.success(t("drafts.importedMessage"));
-      setSelectedDraft(draft);
+  const importMutation = useMutation<ProblemDraftResponse | ProblemDraftWorkspaceImportResponse, Error, {
+    draft: ProblemDraftResponse;
+    visibility: ProblemVisibility;
+    acknowledge: boolean;
+  }>({
+    mutationFn: ({ draft, visibility, acknowledge }: { draft: ProblemDraftResponse; visibility: ProblemVisibility; acknowledge: boolean }) => {
+      if (draft.workspaceId && draft.testcaseArtifact && draft.importReadiness) {
+        return api.importProblemDraftWorkspace(draft.workspaceId, {
+          artifactId: draft.testcaseArtifact.id,
+          visibility,
+          mode: draft.importReadiness.verificationMode || (draft.importReadiness.requiresUnverifiedAcknowledgement ? "MANUAL_UNVERIFIED" : "AGENT_VERIFIED"),
+          acknowledgeUnverified: acknowledge,
+          idempotencyKey: `draft-import-${draft.workspaceId}-${draft.id}-${draft.testcaseArtifact.id}`
+        });
+      }
+      return api.approveDraft(draft.id, true, visibility);
+    },
+    onSuccess: async (_result, variables) => {
+      toast.success(variables.draft.workspaceId ? t("drafts.workspaceImportSubmitted") : t("drafts.importedMessage"));
+      try {
+        setSelectedDraft(await api.problemDraft(variables.draft.id));
+      } catch {
+        setSelectedDraft(variables.draft);
+      }
       setImportTarget(null);
       await refreshDrafts();
     },
@@ -176,6 +200,7 @@ export function AiDraftsView() {
     setListError(null);
     setSelectedDraft(null);
     setDetailOpen(true);
+    setWorkspaceOpen(false);
     if (options.syncUrl !== false) {
       void navigate({ to: "/ai-drafts", search: { draftId: normalizedDraftId }, replace: true });
     }
@@ -189,6 +214,18 @@ export function AiDraftsView() {
     }
   }, [locale, navigate, refreshDrafts, t]);
 
+  const openWorkspace = React.useCallback((job: ProblemDraftGenerationJobResponse) => {
+    const workspaceId = job.workspaceId ? String(job.workspaceId) : null;
+    openedSearchWorkspaceRef.current = workspaceId;
+    setMainTab("jobs");
+    setSelectedWorkspaceJob(job);
+    setSelectedWorkspaceId(workspaceId);
+    setWorkspaceOpen(true);
+    if (workspaceId) {
+      void navigate({ to: "/ai-drafts", search: { tab: "jobs", workspaceId }, replace: true });
+    }
+  }, [navigate]);
+
   React.useEffect(() => {
     const draftId = search.draftId;
     if (!draftId || openedSearchDraftRef.current === draftId) return;
@@ -196,14 +233,24 @@ export function AiDraftsView() {
   }, [openDraftById, search.draftId]);
 
   React.useEffect(() => {
-    if (search.draftId) return;
+    const workspaceId = search.workspaceId;
+    if (!workspaceId || openedSearchWorkspaceRef.current === workspaceId) return;
+    openedSearchWorkspaceRef.current = workspaceId;
+    setMainTab("jobs");
+    setSelectedWorkspaceJob(null);
+    setSelectedWorkspaceId(workspaceId);
+    setWorkspaceOpen(true);
+  }, [search.workspaceId]);
+
+  React.useEffect(() => {
+    if (search.draftId || search.workspaceId) return;
     if (search.tab === "generate" || search.tab === "jobs" || search.tab === "box") {
       setMainTab(search.tab);
       if (search.tab === "generate") {
         setCreatedJob(null);
       }
     }
-  }, [search.draftId, search.tab]);
+  }, [search.draftId, search.tab, search.workspaceId]);
 
   React.useEffect(() => {
     if (referenceCheckTouched) return;
@@ -382,6 +429,7 @@ export function AiDraftsView() {
 
   function openImportPanel(draft: ProblemDraftResponse) {
     setImportVisibility("PUBLIC");
+    setAcknowledgeUnverified(false);
     setImportTarget(draft);
   }
 
@@ -391,7 +439,11 @@ export function AiDraftsView() {
       toast.error(t("drafts.importRequiresVerification"));
       return;
     }
-    await importMutation.mutateAsync({ draft: importTarget, visibility: importVisibility });
+    if (importTarget.importReadiness?.requiresUnverifiedAcknowledgement && !acknowledgeUnverified) {
+      toast.error(t("drafts.unverifiedAcknowledgementRequired"));
+      return;
+    }
+    await importMutation.mutateAsync({ draft: importTarget, visibility: importVisibility, acknowledge: acknowledgeUnverified });
   }
 
   async function handleUpdated(draft: ProblemDraftResponse) {
@@ -543,9 +595,14 @@ export function AiDraftsView() {
               title={createdJobTitle(createdJob, t)}
               description={createdJobDescription(createdJob, t)}
               action={(
-                <Button size="sm" onClick={() => selectMainTab("jobs")}>
-                  {t("drafts.viewGenerationJobs")}
-                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button size="sm" variant="outline" onClick={() => selectMainTab("jobs")}>
+                    {t("drafts.viewGenerationJobs")}
+                  </Button>
+                  <Button size="sm" onClick={() => openWorkspace(createdJob)}>
+                    {t("draftJobs.openWorkspace")}
+                  </Button>
+                </div>
               )}
             />
           ) : null}
@@ -576,7 +633,10 @@ export function AiDraftsView() {
               description={createdJobDescription(createdJob, t)}
             />
           ) : null}
-          <AiDraftJobsPanel onOpenDraft={(draftId) => void openDraftById(draftId)} />
+          <AiDraftJobsPanel
+            onOpenDraft={(draftId) => void openDraftById(draftId)}
+            onOpenWorkspace={openWorkspace}
+          />
         </section>
       ) : null}
 
@@ -728,6 +788,22 @@ export function AiDraftsView() {
         onDelete={(draft) => setConfirmAction({ action: "delete", draft })}
       />
 
+      <AiDraftWorkspacePanel
+        open={workspaceOpen}
+        onOpenChange={(open) => {
+          setWorkspaceOpen(open);
+          if (!open) {
+            setSelectedWorkspaceId(null);
+            setSelectedWorkspaceJob(null);
+            openedSearchWorkspaceRef.current = null;
+            if (search.workspaceId) void navigate({ to: "/ai-drafts", search: { tab: "jobs" }, replace: true });
+          }
+        }}
+        workspaceId={selectedWorkspaceId}
+        fallbackJob={selectedWorkspaceJob}
+        onOpenDraft={(draftId) => void openDraftById(draftId)}
+      />
+
       <SidePanel
         open={Boolean(rejectTarget)}
         onOpenChange={(open) => {
@@ -755,7 +831,10 @@ export function AiDraftsView() {
         footer={(
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setImportTarget(null)}>{t("common.cancel")}</Button>
-            <Button disabled={importMutation.isPending} onClick={() => void confirmImport()}>{importMutation.isPending ? t("common.loading") : t("drafts.import")}</Button>
+            <Button
+              disabled={importMutation.isPending || Boolean(importTarget?.importReadiness?.requiresUnverifiedAcknowledgement && !acknowledgeUnverified)}
+              onClick={() => void confirmImport()}
+            >{importMutation.isPending ? t("common.loading") : t("drafts.import")}</Button>
           </div>
         )}
       >
@@ -765,6 +844,24 @@ export function AiDraftsView() {
             <option value="PRIVATE">{t("problems.visibilityPrivate")}</option>
           </select>
         </Field>
+        {importTarget?.testcaseArtifact ? (
+          <div className="mt-4 rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4 text-sm">
+            <strong className="text-[var(--oj-ink)]">{t("drafts.importArtifactTitle")}</strong>
+            <p className="mt-1 break-all text-xs tabular-nums leading-5 text-[var(--oj-ink-muted)]">
+              #{shortId(importTarget.testcaseArtifact.id)} · SHA-256 {importTarget.testcaseArtifact.sha256}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge tone={importTarget.testcaseArtifact.executionStatus === "PASSED" ? "green" : "amber"}>{importTarget.testcaseArtifact.executionStatus}</Badge>
+              {importTarget.testcaseArtifact.stale ? <Badge tone="amber">{t("drafts.importArtifactStale")}</Badge> : null}
+            </div>
+          </div>
+        ) : null}
+        {importTarget?.importReadiness?.requiresUnverifiedAcknowledgement ? (
+          <label className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+            <input className="mt-1" type="checkbox" checked={acknowledgeUnverified} onChange={(event) => setAcknowledgeUnverified(event.target.checked)} />
+            <span>{t("drafts.unverifiedAcknowledgement")}</span>
+          </label>
+        ) : null}
       </SidePanel>
 
       <ConfirmDialog
@@ -884,6 +981,7 @@ function StatusTab({ active, children, onClick }: { active: boolean; children: R
 }
 
 function isImportReady(draft: ProblemDraftResponse) {
+  if (draft.importReadiness) return draft.importReadiness.ready;
   return draft.validationStatus === "VALID"
     && (draft.verificationStatus === "EXECUTION_VERIFIED" || draft.verificationStatus === "MANUAL_VERIFIED");
 }

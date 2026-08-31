@@ -355,12 +355,13 @@ export function AiTutorWorkspace({
   }, [draft, initialPrompt, submissionContext?.intent, submissionContext?.submissionId, t]);
 
   const conversationsQuery = useQuery({
-    queryKey: ["ai", "conversations", keyword, conversationProblemId, sourceRefKey, conversationPage],
+    queryKey: ["ai", "conversations", source, keyword, conversationProblemId, sourceRefKey, conversationPage],
     queryFn: () => api.aiConversations({
       page: conversationPage,
       pageSize: CONVERSATION_PAGE_SIZE,
       keyword: keyword.trim() || undefined,
-      problemId: conversationProblemId
+      problemId: conversationProblemId,
+      source
     })
   });
 

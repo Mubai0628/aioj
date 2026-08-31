@@ -12,7 +12,13 @@ const REFERENCE_CHECK_DISABLED_FOR_HIGH_RATING = "REFERENCE_CHECK_DISABLED_FOR_H
 type StatusFilter = "" | ProblemDraftGenerationJobStatus;
 type TFunction = ReturnType<typeof useI18n>["t"];
 
-export function AiDraftJobsPanel({ onOpenDraft }: { onOpenDraft?: (draftId: NonNullable<ProblemDraftGenerationJobResponse["draftId"]>) => void }) {
+export function AiDraftJobsPanel({
+  onOpenDraft,
+  onOpenWorkspace
+}: {
+  onOpenDraft?: (draftId: NonNullable<ProblemDraftGenerationJobResponse["draftId"]>) => void;
+  onOpenWorkspace?: (job: ProblemDraftGenerationJobResponse) => void;
+}) {
   const { t } = useI18n();
   const [page, setPage] = React.useState(1);
   const [status, setStatus] = React.useState<StatusFilter>("");
@@ -69,6 +75,8 @@ export function AiDraftJobsPanel({ onOpenDraft }: { onOpenDraft?: (draftId: NonN
             <option value="">{t("draftJobs.statusAll")}</option>
             <option value="QUEUED">{t("draftJobs.status.QUEUED")}</option>
             <option value="RUNNING">{t("draftJobs.status.RUNNING")}</option>
+            <option value="NEEDS_ATTENTION">{t("draftJobs.status.NEEDS_ATTENTION")}</option>
+            <option value="PENDING_REVIEW">{t("draftJobs.status.PENDING_REVIEW")}</option>
             <option value="SUCCEEDED">{t("draftJobs.status.SUCCEEDED")}</option>
             <option value="FAILED">{t("draftJobs.status.FAILED")}</option>
             <option value="CANCELLED">{t("draftJobs.status.CANCELLED")}</option>
@@ -86,14 +94,27 @@ export function AiDraftJobsPanel({ onOpenDraft }: { onOpenDraft?: (draftId: NonN
         <ErrorPanel title={t("draftJobs.loadFailed")} action={<Button variant="outline" onClick={() => void jobsQuery.refetch()}>{t("common.refresh")}</Button>} />
       ) : records.length ? (
         <div className="space-y-3">
-          <TableShell>
-            <table className="w-full min-w-[980px] text-sm">
+          <div className="space-y-3 md:hidden">
+            {records.map((job) => (
+              <JobMobileCard
+                key={job.id}
+                job={job}
+                now={now}
+                onOpenWorkspace={onOpenWorkspace}
+                onOpenDraft={onOpenDraft}
+              />
+            ))}
+          </div>
+          <div className="hidden md:block">
+            <TableShell>
+            <table className="w-full min-w-[1080px] text-sm">
               <colgroup>
-                <col className="w-[28%]" />
+                <col className="w-[24%]" />
                 <col className="w-[14%]" />
-                <col className="w-[22%]" />
-                <col className="w-[18%]" />
-                <col className="w-[18%]" />
+                <col className="w-[20%]" />
+                <col className="w-[16%]" />
+                <col className="w-[16%]" />
+                <col className="w-[10%]" />
               </colgroup>
               <thead className="border-b border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] text-xs font-semibold text-[var(--oj-ink-muted)]">
                 <tr>
@@ -102,31 +123,16 @@ export function AiDraftJobsPanel({ onOpenDraft }: { onOpenDraft?: (draftId: NonN
                   <th className="px-4 py-3 text-left">{t("draftJobs.progress")}</th>
                   <th className="px-4 py-3 text-left">{t("draftJobs.updatedAt")}</th>
                   <th className="px-4 py-3 text-left">{t("draftJobs.note")}</th>
+                  <th className="px-4 py-3 text-right">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--oj-border-soft)]">
                 {records.map((job) => {
-                  const canOpen = Boolean(job.draftId && job.status === "SUCCEEDED");
                   const note = jobNote(job, t);
                   return (
                     <tr
                       key={job.id}
-                      className={cn(
-                        "align-top transition-colors hover:bg-[var(--oj-surface-muted)]",
-                        canOpen && "cursor-pointer focus-within:bg-[var(--oj-surface-muted)]"
-                      )}
-                      role={canOpen ? "button" : undefined}
-                      tabIndex={canOpen ? 0 : undefined}
-                      onClick={() => {
-                        if (canOpen && job.draftId) onOpenDraft?.(job.draftId);
-                      }}
-                      onKeyDown={(event) => {
-                        if (!canOpen || !job.draftId) return;
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          onOpenDraft?.(job.draftId);
-                        }
-                      }}
+                      className="align-top transition-colors hover:bg-[var(--oj-surface-muted)] focus-within:bg-[var(--oj-surface-muted)]"
                     >
                       <td className="px-4 py-4">
                         <strong className="block truncate text-[var(--oj-ink)]">{job.topicSnapshot || t("draftJobs.topicEmpty")}</strong>
@@ -142,6 +148,7 @@ export function AiDraftJobsPanel({ onOpenDraft }: { onOpenDraft?: (draftId: NonN
                           <Badge tone={statusTone(job.status)}>{jobStatusLabel(job.status, t)}</Badge>
                           <Badge tone="neutral">{jobStageLabel(job.stage, t)}</Badge>
                           <Badge tone="neutral">{jobTypeLabel(job, t)}</Badge>
+                          {job.reviewRisk && job.reviewRisk.code !== "NORMAL" ? <Badge tone="amber">{reviewRiskLabel(job.reviewRisk.code, t)}</Badge> : null}
                         </div>
                       </td>
                       <td className="px-4 py-4">
@@ -170,12 +177,27 @@ export function AiDraftJobsPanel({ onOpenDraft }: { onOpenDraft?: (draftId: NonN
                           {note}
                         </p>
                       </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-col items-stretch gap-2">
+                          <Button size="sm" variant="outline" onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenWorkspace?.(job);
+                          }}>{t("draftJobs.openWorkspace")}</Button>
+                          {job.draftId ? (
+                            <Button size="sm" variant="ghost" onClick={(event) => {
+                              event.stopPropagation();
+                              onOpenDraft?.(job.draftId!);
+                            }}>{t("draftJobs.viewDraft")}</Button>
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </TableShell>
+          </div>
           <PaginationRow
             page={page}
             total={total}
@@ -190,6 +212,52 @@ export function AiDraftJobsPanel({ onOpenDraft }: { onOpenDraft?: (draftId: NonN
         <EmptyState title={t("draftJobs.emptyTitle")} description={t("draftJobs.emptyDescription")} />
       )}
     </div>
+  );
+}
+
+function JobMobileCard({
+  job,
+  now,
+  onOpenWorkspace,
+  onOpenDraft
+}: {
+  job: ProblemDraftGenerationJobResponse;
+  now: number;
+  onOpenWorkspace?: (job: ProblemDraftGenerationJobResponse) => void;
+  onOpenDraft?: (draftId: NonNullable<ProblemDraftGenerationJobResponse["draftId"]>) => void;
+}) {
+  const { t } = useI18n();
+  const note = jobNote(job, t);
+  return (
+    <article className="min-w-0 rounded-xl border border-[var(--oj-border)] bg-white p-4">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <strong className="block break-words text-sm text-[var(--oj-ink)]">{job.topicSnapshot || t("draftJobs.topicEmpty")}</strong>
+          <span className="mt-1 block text-xs tabular-nums text-[var(--oj-ink-muted)]">#{shortId(job.id)}</span>
+        </div>
+        <Badge tone={statusTone(job.status)}>{jobStatusLabel(job.status, t)}</Badge>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <Badge tone="neutral">{jobStageLabel(job.stage, t)}</Badge>
+        <Badge tone="neutral">{jobTypeLabel(job, t)}</Badge>
+        {job.reviewRisk && job.reviewRisk.code !== "NORMAL" ? <Badge tone="amber">{reviewRiskLabel(job.reviewRisk.code, t)}</Badge> : null}
+      </div>
+      <div className="mt-4 space-y-2">
+        <div className="flex items-center justify-between gap-3 text-xs tabular-nums text-[var(--oj-ink-muted)]">
+          <span>{progressLabel(job, t)}</span>
+          <span>{durationLabel(job, t, now)}</span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--oj-surface-muted)]">
+          <div className={cn("h-full rounded-full", isActiveJob(job) ? "bg-[var(--oj-primary)]" : "bg-slate-400")} style={{ width: `${progressPercent(job)}%` }} />
+        </div>
+      </div>
+      <p className={cn("mt-3 break-words text-sm leading-6", job.status === "FAILED" ? "text-red-700" : "text-[var(--oj-ink-muted)]")}>{note}</p>
+      <p className="mt-2 text-xs tabular-nums text-[var(--oj-ink-muted)]">{formatDateTime(job.updatedAt)}</p>
+      <div className="mt-4 grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
+        <Button variant="outline" onClick={() => onOpenWorkspace?.(job)}>{t("draftJobs.openWorkspace")}</Button>
+        {job.draftId ? <Button variant="ghost" onClick={() => onOpenDraft?.(job.draftId!)}>{t("draftJobs.viewDraft")}</Button> : null}
+      </div>
+    </article>
   );
 }
 
@@ -209,10 +277,14 @@ function statusTone(status: string): "blue" | "green" | "amber" | "red" | "neutr
   if (status === "FAILED") return "red";
   if (status === "RUNNING") return "blue";
   if (status === "QUEUED") return "amber";
+  if (status === "NEEDS_ATTENTION" || status === "PENDING_REVIEW") return "amber";
   return "neutral";
 }
 
 function jobStatusLabel(status: string, t: TFunction) {
+  if (status === "NEEDS_ATTENTION" || status === "PENDING_REVIEW") {
+    return t(`draftWorkspace.status.${status}`, undefined, t("draftJobs.status.UNKNOWN"));
+  }
   return t(`draftJobs.status.${status}`, undefined, t("draftJobs.status.UNKNOWN"));
 }
 
@@ -242,6 +314,10 @@ function jobNote(job: ProblemDraftGenerationJobResponse, t: TFunction) {
     return t("draftJobs.draftCreated", { id: shortId(job.draftId) });
   }
   return jobStageNote(job.stage, t);
+}
+
+function reviewRiskLabel(risk: string, t: TFunction) {
+  return t(`draftWorkspace.reviewRisk.${risk}`, undefined, risk);
 }
 
 function progressLabel(job: ProblemDraftGenerationJobResponse, t: TFunction) {

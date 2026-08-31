@@ -81,19 +81,26 @@ export function ErrorPanel({
   title: string;
   description?: string;
   action?: ReactNode;
-  tone?: "danger" | "success";
+  tone?: "danger" | "success" | "warning";
 }) {
   const Icon = tone === "success" ? CheckCircle2 : AlertTriangle;
   return (
     <div className={cn(
       "rounded-xl border p-4",
-      tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-red-200 bg-red-50 text-red-950"
+      tone === "success"
+        ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+        : tone === "warning"
+          ? "border-amber-200 bg-amber-50 text-amber-950"
+          : "border-red-200 bg-red-50 text-red-950"
     )}>
       <div className="flex items-start gap-3">
         <Icon className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">{title}</h2>
-          {description ? <p className={cn("mt-1 text-sm leading-6", tone === "success" ? "text-emerald-900" : "text-red-900")}>{description}</p> : null}
+          {description ? <p className={cn(
+            "mt-1 text-sm leading-6",
+            tone === "success" ? "text-emerald-900" : tone === "warning" ? "text-amber-900" : "text-red-900"
+          )}>{description}</p> : null}
           {action ? <div className="mt-4">{action}</div> : null}
         </div>
       </div>

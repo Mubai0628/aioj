@@ -2,6 +2,8 @@ import * as React from "react";
 import { api, type Difficulty, type ProblemDraftGenerationJobResponse, type ProblemDraftResponse, type TestCaseDto } from "@aioj/api-client";
 import { Badge, Button, cn } from "@aioj/ui-react";
 import { ErrorPanel, Field, SidePanel, inputClass, selectClass, textareaClass } from "./Common";
+import { AiDraftTestcasePanel } from "./AiDraftTestcasePanel";
+import { AiDraftWorkspaceContent, RiskNotices } from "./AiDraftAgentWorkspace";
 import { MarkdownView } from "./MarkdownView";
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
@@ -10,7 +12,7 @@ import { readableCaughtError } from "../lib/readableError";
 
 const DIFFICULTIES: Difficulty[] = ["EASY", "MEDIUM", "HARD", "CHALLENGE"];
 
-type DraftTab = "preview" | "verification" | "edit" | "regenerate";
+type DraftTab = "preview" | "verification" | "testcase" | "agent" | "edit";
 export type AiDraftAction = "approve" | "import" | "archive" | "restore" | "reject" | "delete" | "manualReview";
 
 export function AiDraftDetailPanel({
@@ -252,11 +254,14 @@ export function AiDraftDetailPanel({
             </div>
           </header>
 
-          <div className="flex flex-wrap gap-2 border-b border-[var(--oj-border-soft)] pb-3">
+          <RiskNotices reviewRisk={currentDraft.reviewRisk} />
+
+          <div className="flex gap-2 overflow-x-auto border-b border-[var(--oj-border-soft)] pb-3">
             <TabButton active={tab === "preview"} onClick={() => setTab("preview")}>{t("drafts.detailTabsPreview")}</TabButton>
             <TabButton active={tab === "verification"} onClick={() => setTab("verification")}>{t("drafts.detailTabsVerification")}</TabButton>
+            <TabButton active={tab === "testcase"} onClick={() => setTab("testcase")}>{t("drafts.detailTabsTestcase")}</TabButton>
+            <TabButton active={tab === "agent"} onClick={() => setTab("agent")}>{t("drafts.detailTabsAgent")}</TabButton>
             <TabButton active={tab === "edit"} onClick={() => setTab("edit")}>{t("drafts.detailTabsEdit")}</TabButton>
-            <TabButton active={tab === "regenerate"} onClick={() => setTab("regenerate")}>{t("drafts.detailTabsRegenerate")}</TabButton>
           </div>
 
           {tab === "preview" ? (
@@ -312,6 +317,28 @@ export function AiDraftDetailPanel({
 
           {tab === "verification" ? (
             <VerificationReportPanel draft={currentDraft} />
+          ) : null}
+
+          {tab === "testcase" ? (
+            <AiDraftTestcasePanel draft={currentDraft} onUpdated={async (nextDraft) => {
+              setLocalDraft(nextDraft);
+              resetForm(nextDraft);
+              await onUpdated(nextDraft);
+            }} />
+          ) : null}
+
+          {tab === "agent" ? (
+            currentDraft.workspaceId ? (
+              <AiDraftWorkspaceContent workspaceId={currentDraft.workspaceId} currentDraftId={currentDraft.id} />
+            ) : (
+              <div className="space-y-4">
+                <ErrorPanel tone="warning" title={t("draftWorkspace.legacyTitle")} description={t("draftWorkspace.legacyDraftDescription")} />
+                <Field label={t("drafts.regenerateFeedbackLabel")}>
+                  <textarea className={`${textareaClass} min-h-[260px]`} value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder={t("drafts.regenerateFeedbackPlaceholder")} />
+                </Field>
+                <Button className="w-full sm:w-auto" disabled={regenerating || !feedback.trim()} onClick={() => void regenerateDraft()}>{regenerating ? t("common.loading") : t("drafts.regenerateSubmit")}</Button>
+              </div>
+            )
           ) : null}
 
           {tab === "edit" ? (
@@ -442,14 +469,6 @@ export function AiDraftDetailPanel({
             </div>
           ) : null}
 
-          {tab === "regenerate" ? (
-            <div className="space-y-4">
-              <Field label={t("drafts.regenerateFeedbackLabel")}>
-                <textarea className={`${textareaClass} min-h-[260px]`} value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder={t("drafts.regenerateFeedbackPlaceholder")} />
-              </Field>
-              <Button disabled={regenerating || !feedback.trim()} onClick={() => void regenerateDraft()}>{regenerating ? t("common.loading") : t("drafts.regenerateSubmit")}</Button>
-            </div>
-          ) : null}
         </div>
       )}
     </SidePanel>
@@ -924,7 +943,7 @@ function TabButton({ active, children, onClick }: { active: boolean; children: R
     <button
       type="button"
       className={cn(
-        "h-9 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oj-focus)]",
+        "h-9 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oj-focus)]",
         active ? "bg-[var(--oj-primary)] text-white" : "text-[var(--oj-ink-muted)] hover:bg-[var(--oj-surface-muted)] hover:text-[var(--oj-ink)]"
       )}
       onClick={onClick}
