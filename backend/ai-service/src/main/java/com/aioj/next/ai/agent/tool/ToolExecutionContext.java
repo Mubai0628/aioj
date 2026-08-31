@@ -3,6 +3,7 @@ package com.aioj.next.ai.agent.tool;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -24,10 +25,21 @@ public record ToolExecutionContext(
         Set<String> grantedScopes,
         Instant serverTime,
         String traceId,
-        ContestPolicyView contestPolicy
+        ContestPolicyView contestPolicy,
+        /** Trusted resource bindings (for example workspaceId), never model input. */
+        Map<String, String> serverBindings
 ) {
     public ToolExecutionContext {
         grantedScopes = grantedScopes == null ? Set.of() : Set.copyOf(grantedScopes);
+        serverBindings = serverBindings == null ? Map.of() : Map.copyOf(serverBindings);
+    }
+
+    /** Pre-resource-binding signature. */
+    public ToolExecutionContext(long userId, String conversationId, String turnId, long turnSeq,
+                                String policySnapshotId, Set<String> grantedScopes,
+                                Instant serverTime, String traceId, ContestPolicyView contestPolicy) {
+        this(userId, conversationId, turnId, turnSeq, policySnapshotId, grantedScopes,
+                serverTime, traceId, contestPolicy, Map.of());
     }
 
     /** Pre-P3-3 signature, kept so existing callers/tests compile unchanged. */
@@ -35,6 +47,10 @@ public record ToolExecutionContext(
                                 String policySnapshotId, Set<String> grantedScopes,
                                 Instant serverTime, String traceId) {
         this(userId, conversationId, turnId, turnSeq, policySnapshotId, grantedScopes,
-                serverTime, traceId, null);
+                serverTime, traceId, null, Map.of());
+    }
+
+    public String serverBinding(String name) {
+        return name == null ? null : serverBindings.get(name);
     }
 }

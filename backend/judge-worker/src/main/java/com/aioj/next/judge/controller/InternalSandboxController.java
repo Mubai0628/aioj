@@ -59,21 +59,28 @@ public class InternalSandboxController {
     ) {
         requireInternalToken(token);
         String language = normalizeLanguage(request.language());
+        requireLanguageEnabled(language);
+        requireBoundedText(request.sourceCode(), properties.getMaxSourceBytes(), "sourceCode");
+        long runTimeLimitMillis = runTimeLimitMillis(request.timeLimitMillis(), 1000L);
+        long compileTimeLimitMillis = Math.min(positive(properties.getMaxScriptTimeLimitMillis(), 180_000),
+                safeMultiply(runTimeLimitMillis, 10L));
         SandboxExecutionClient.CompileOutcome outcome = sandboxExecutionClient.compileSource(
                 language,
                 request.sourceCode(),
-                SandboxExecutionClient.millisToNanos(limitOrDefault(request.timeLimitMillis(), 1000L) * 10),
-                SandboxExecutionClient.kbToBytes(limitOrDefault(request.memoryLimitKb(), 262144L) * 2)
+                SandboxExecutionClient.millisToNanos(compileTimeLimitMillis),
+                SandboxExecutionClient.kbToBytes(Math.min(memoryLimitKb(request.memoryLimitKb(), 262_144L) * 2,
+                        positive(properties.getMaxMemoryLimitKb(), 1_048_576)))
         );
         return ApiResponse.ok(new CompileResponse(
-                outcome.failed() ? "FAILED" : "ACCEPTED",
+                outcome.failed() ? "COMPILE_ERROR" : "ACCEPTED",
                 outcome.message(),
                 outcome.fileId(),
                 outcome.stderr(),
                 outcome.timeMillis(),
                 outcome.memoryKb(),
                 outcome.exitStatus(),
-                outcome.runTimeMillis()
+                outcome.runTimeMillis(),
+                outcome.procPeak()
         ));
     }
 
@@ -92,8 +99,23 @@ public class InternalSandboxController {
             @RequestBody RunBatchRequest request
     ) {
         requireInternalToken(token);
+        List<String> inputs = request.inputs() == null ? List.of() : request.inputs();
+        if (inputs.size() > positive(properties.getMaxBatchSize(), 200)) {
+            throw badRequest("Sandbox batch contains too many inputs");
+        }
+        long totalInputBytes = 0L;
+        for (String stdin : inputs) {
+            long bytes = utf8Length(stdin);
+            if (bytes > positive(properties.getMaxInputBytes(), 8 * 1024 * 1024)) {
+                throw badRequest("Sandbox stdin exceeds the configured limit");
+            }
+            totalInputBytes = safeAdd(totalInputBytes, bytes);
+            if (totalInputBytes > positive(properties.getMaxBatchInputBytes(), 32L * 1024L * 1024L)) {
+                throw badRequest("Sandbox batch input exceeds the configured limit");
+            }
+        }
         List<RunResponse> results = new ArrayList<>();
-        for (String stdin : request.inputs() == null ? List.<String>of() : request.inputs()) {
+        for (String stdin : inputs) {
             results.add(run(new RunRequest(
                     normalizeLanguage(request.language()),
                     request.sourceCode(),
@@ -113,33 +135,38 @@ public class InternalSandboxController {
             @RequestBody PythonScriptRequest request
     ) {
         requireInternalToken(token);
+        requireBoundedText(request.script(), properties.getMaxSourceBytes(), "script");
         int targetCaseCount = targetCaseCount(request.targetCaseCount());
         SandboxExecutionClient.RunOutcome outcome = COLLECT_MODE_OFFICIAL_PACKAGE.equals(request.collectMode())
                 ? sandboxExecutionClient.runOfficialPackageScript(
                 request.script(),
-                normalizeLanguage(request.standardSolutionLanguage()),
-                request.standardSolutionCode(),
-                SandboxExecutionClient.millisToNanos(limitOrDefault(request.timeLimitMillis(), 30_000L)),
-                SandboxExecutionClient.kbToBytes(limitOrDefault(request.memoryLimitKb(), 524_288L)),
-                SCRIPT_STDOUT_LIMIT_BYTES,
+                enabledLanguage(request.standardSolutionLanguage()),
+                boundedText(request.standardSolutionCode(), properties.getMaxSourceBytes(), "standardSolutionCode"),
+                SandboxExecutionClient.millisToNanos(scriptTimeLimitMillis(request.timeLimitMillis(), 30_000L)),
+                SandboxExecutionClient.kbToBytes(memoryLimitKb(request.memoryLimitKb(), 524_288L)),
+                Math.min(SCRIPT_STDOUT_LIMIT_BYTES,
+                        positive(properties.getStdoutMaxCollectLimitBytes(), 4 * 1024 * 1024)),
                 targetCaseCount,
-                SandboxExecutionClient.millisToNanos(limitOrDefault(request.standardTimeLimitMillis(), 1000L)),
-                SandboxExecutionClient.kbToBytes(limitOrDefault(request.standardMemoryLimitKb(), 262_144L)),
-                limitOrDefault(request.maxCaseBytes(), DEFAULT_MAX_OFFICIAL_CASE_BYTES),
-                limitOrDefault(request.maxPackageBytes(), DEFAULT_MAX_OFFICIAL_PACKAGE_BYTES)
+                SandboxExecutionClient.millisToNanos(runTimeLimitMillis(request.standardTimeLimitMillis(), 1000L)),
+                SandboxExecutionClient.kbToBytes(memoryLimitKb(request.standardMemoryLimitKb(), 262_144L)),
+                Math.min(limitOrDefault(request.maxCaseBytes(), DEFAULT_MAX_OFFICIAL_CASE_BYTES),
+                        positive(properties.getMaxDraftPackageEntryBytes(), DEFAULT_MAX_OFFICIAL_CASE_BYTES)),
+                Math.min(limitOrDefault(request.maxPackageBytes(), DEFAULT_MAX_OFFICIAL_PACKAGE_BYTES),
+                        positive(properties.getMaxDraftPackageBytes(), DEFAULT_MAX_OFFICIAL_PACKAGE_BYTES))
         )
                 : sandboxExecutionClient.runPythonScript(
                 request.script(),
-                SandboxExecutionClient.millisToNanos(limitOrDefault(request.timeLimitMillis(), 30_000L)),
-                SandboxExecutionClient.kbToBytes(limitOrDefault(request.memoryLimitKb(), 524_288L)),
-                SCRIPT_STDOUT_LIMIT_BYTES,
+                SandboxExecutionClient.millisToNanos(scriptTimeLimitMillis(request.timeLimitMillis(), 30_000L)),
+                SandboxExecutionClient.kbToBytes(memoryLimitKb(request.memoryLimitKb(), 524_288L)),
+                Math.min(SCRIPT_STDOUT_LIMIT_BYTES,
+                        positive(properties.getStdoutMaxCollectLimitBytes(), 4 * 1024 * 1024)),
                 targetCaseCount,
                 request.collectMode()
         );
         GeneratedFilesPayload generatedFiles = parseGeneratedFiles(outcome.generatedFilesJson(), outcome.stdout());
         OfficialPackagePayload officialPackage = parseOfficialPackage(outcome.officialPackageJson(), outcome.fileIds());
         return ApiResponse.ok(new PythonScriptResponse(
-                outcome.accepted() ? "ACCEPTED" : "FAILED",
+                outcome.resultCode(),
                 outcome.message(),
                 outcome.stdout(),
                 outcome.stderr(),
@@ -147,6 +174,7 @@ public class InternalSandboxController {
                 outcome.memoryKb(),
                 outcome.exitStatus(),
                 outcome.runTimeMillis(),
+                outcome.procPeak(),
                 generatedFiles.files(),
                 generatedFiles.generatedPairCount(),
                 generatedFiles.generatedFileCount(),
@@ -165,6 +193,7 @@ public class InternalSandboxController {
             @PathVariable String fileId
     ) {
         requireInternalToken(token);
+        requireSafeFileId(fileId);
         StreamingResponseBody body = outputStream -> sandboxExecutionClient.downloadCachedFile(fileId, outputStream);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
@@ -177,31 +206,113 @@ public class InternalSandboxController {
             @RequestBody DeleteFileRequest request
     ) {
         requireInternalToken(token);
+        requireSafeFileId(request.fileId());
         sandboxExecutionClient.deleteCachedFile(request.fileId());
         return ApiResponse.ok(Boolean.TRUE);
     }
 
     private RunResponse run(RunRequest request) {
         String language = normalizeLanguage(request.language());
+        requireLanguageEnabled(language);
+        if (request.compiledFileId() == null || request.compiledFileId().isBlank() || "python".equals(language)) {
+            requireBoundedText(request.sourceCode(), properties.getMaxSourceBytes(), "sourceCode");
+        }
+        requireSafeFileId(request.compiledFileId());
+        requireBoundedText(request.stdin(), properties.getMaxInputBytes(), "stdin");
         SandboxExecutionClient.RunOutcome outcome = sandboxExecutionClient.runSource(
                 language,
                 request.sourceCode(),
                 request.compiledFileId(),
                 request.stdin(),
-                SandboxExecutionClient.millisToNanos(limitOrDefault(request.timeLimitMillis(), 1000L)),
-                SandboxExecutionClient.kbToBytes(limitOrDefault(request.memoryLimitKb(), 262144L)),
-                limitOrDefault(request.stdoutLimitBytes(), 65536L).intValue()
+                SandboxExecutionClient.millisToNanos(runTimeLimitMillis(request.timeLimitMillis(), 1000L)),
+                SandboxExecutionClient.kbToBytes(memoryLimitKb(request.memoryLimitKb(), 262_144L)),
+                Math.min(limitOrDefault(request.stdoutLimitBytes(), 65_536L).intValue(),
+                        positive(properties.getStdoutMaxCollectLimitBytes(), 4 * 1024 * 1024))
         );
         return new RunResponse(
-                outcome.accepted() ? "ACCEPTED" : "FAILED",
+                outcome.resultCode(),
                 outcome.message(),
                 outcome.stdout(),
                 outcome.stderr(),
                 outcome.timeMillis(),
                 outcome.memoryKb(),
                 outcome.exitStatus(),
-                outcome.runTimeMillis()
+                outcome.runTimeMillis(),
+                outcome.procPeak()
         );
+    }
+
+    private String enabledLanguage(String language) {
+        String normalized = normalizeLanguage(language);
+        requireLanguageEnabled(normalized);
+        return normalized;
+    }
+
+    private void requireLanguageEnabled(String language) {
+        boolean enabled = properties.getLanguageWhitelist() != null && properties.getLanguageWhitelist().stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(InternalSandboxController::normalizeLanguage)
+                .anyMatch(language::equals);
+        if (!enabled) {
+            throw badRequest("Sandbox language is not enabled: " + language);
+        }
+    }
+
+    private long runTimeLimitMillis(Integer value, long fallback) {
+        return Math.min(limitOrDefault(value, fallback), positive(properties.getMaxRunTimeLimitMillis(), 30_000));
+    }
+
+    private long scriptTimeLimitMillis(Integer value, long fallback) {
+        return Math.min(limitOrDefault(value, fallback), positive(properties.getMaxScriptTimeLimitMillis(), 180_000));
+    }
+
+    private long memoryLimitKb(Integer value, long fallback) {
+        return Math.min(limitOrDefault(value, fallback), positive(properties.getMaxMemoryLimitKb(), 1_048_576));
+    }
+
+    private String boundedText(String value, long maxBytes, String field) {
+        requireBoundedText(value, maxBytes, field);
+        return value;
+    }
+
+    private void requireBoundedText(String value, long maxBytes, String field) {
+        if (utf8Length(value) > positive(maxBytes, 1L)) {
+            throw badRequest(field + " exceeds the configured limit");
+        }
+    }
+
+    private void requireSafeFileId(String fileId) {
+        if (fileId == null || fileId.isBlank()) {
+            return;
+        }
+        if (fileId.length() > 256 || fileId.indexOf('/') >= 0 || fileId.indexOf('\\') >= 0
+                || fileId.chars().anyMatch(Character::isISOControl)) {
+            throw badRequest("Invalid sandbox file id");
+        }
+    }
+
+    private long utf8Length(String value) {
+        return value == null ? 0L : value.getBytes(StandardCharsets.UTF_8).length;
+    }
+
+    private DomainException badRequest(String message) {
+        return new DomainException(ErrorCode.BAD_REQUEST, message);
+    }
+
+    private long safeAdd(long value, long addend) {
+        return value > Long.MAX_VALUE - addend ? Long.MAX_VALUE : value + addend;
+    }
+
+    private long safeMultiply(long value, long factor) {
+        return value > Long.MAX_VALUE / factor ? Long.MAX_VALUE : value * factor;
+    }
+
+    private int positive(int value, int fallback) {
+        return value > 0 ? value : fallback;
+    }
+
+    private long positive(long value, long fallback) {
+        return value > 0 ? value : fallback;
     }
 
     private void requireInternalToken(String token) {
@@ -292,6 +403,15 @@ public class InternalSandboxController {
         try {
             JsonNode rootNode = objectMapper.readTree(value);
             String packageFileId = fileIds == null ? null : fileIds.get(".aioj_official_hidden.zip");
+            String status = textOrNull(rootNode.path("status"));
+            String errorCode = textOrNull(rootNode.path("errorCode"));
+            String errorMessage = textOrNull(rootNode.path("errorMessage"));
+            if ("PASSED".equals(status) && (packageFileId == null || packageFileId.isBlank())) {
+                status = "FAILED";
+                errorCode = "PACKAGE_CACHE_FILE_MISSING";
+                errorMessage = "Generated testcase package could not be retained by the Sandbox cached-file channel; "
+                        + "verify the configured copy-out capacity and package size";
+            }
             List<OfficialCasePayload> cases = new ArrayList<>();
             JsonNode casesNode = rootNode.path("cases");
             if (casesNode.isArray()) {
@@ -313,9 +433,9 @@ public class InternalSandboxController {
                 }
             }
             return new OfficialPackagePayload(
-                    textOrNull(rootNode.path("status")),
-                    textOrNull(rootNode.path("errorCode")),
-                    textOrNull(rootNode.path("errorMessage")),
+                    status,
+                    errorCode,
+                    errorMessage,
                     packageFileId,
                     textOrNull(rootNode.path("packageFileName")),
                     longOrNull(rootNode.path("packageFileSizeBytes")),
@@ -382,7 +502,7 @@ public class InternalSandboxController {
     }
 
     public record CompileResponse(String status, String message, String fileId, String stderr, Long timeMillis,
-                                  Long memoryKb, Integer exitStatus, Long runTimeMillis) {
+                                  Long memoryKb, Integer exitStatus, Long runTimeMillis, Integer procPeak) {
     }
 
     public record DeleteFileRequest(String fileId) {
@@ -397,7 +517,7 @@ public class InternalSandboxController {
     }
 
     public record RunResponse(String status, String message, String stdout, String stderr, Long timeMillis,
-                              Long memoryKb, Integer exitStatus, Long runTimeMillis) {
+                              Long memoryKb, Integer exitStatus, Long runTimeMillis, Integer procPeak) {
     }
 
     public record RunBatchResponse(List<RunResponse> results) {
@@ -422,7 +542,7 @@ public class InternalSandboxController {
     }
 
     public record PythonScriptResponse(String status, String message, String stdout, String stderr, Long timeMillis,
-                                       Long memoryKb, Integer exitStatus, Long runTimeMillis,
+                                       Long memoryKb, Integer exitStatus, Long runTimeMillis, Integer procPeak,
                                        Map<String, String> generatedFiles, Integer generatedPairCount,
                                        Integer generatedFileCount, Integer generatedInputCount,
                                        Integer generatedOutputCount,

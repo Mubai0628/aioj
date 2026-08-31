@@ -58,6 +58,12 @@ aioj:
     judge-worker-uri: ${JUDGE_WORKER_URI:http://localhost:8203}
     problem-draft:
       max-repair-attempts: ${AI_PROBLEM_DRAFT_MAX_REPAIR_ATTEMPTS:5}
+      max-agent-steps: ${AI_PROBLEM_DRAFT_MAX_AGENT_STEPS:20}
+      max-tool-calls: ${AI_PROBLEM_DRAFT_MAX_TOOL_CALLS:16}
+      max-sandbox-calls: ${AI_PROBLEM_DRAFT_MAX_SANDBOX_CALLS:8}
+      max-testcase-generations: ${AI_PROBLEM_DRAFT_MAX_TESTCASE_GENERATIONS:2}
+      max-testcase-package-runs: ${AI_PROBLEM_DRAFT_MAX_TESTCASE_PACKAGE_RUNS:2}
+      max-run-minutes: ${AI_PROBLEM_DRAFT_MAX_RUN_MINUTES:15}
       testcase-artifact-storage-root: ${AI_PROBLEM_DRAFT_TESTCASE_ARTIFACT_ROOT:${user.home}/.ai-oj-next/ai-draft-testcase-artifacts}
       max-official-case-bytes: ${AI_PROBLEM_DRAFT_MAX_OFFICIAL_CASE_BYTES:8388608}
       max-official-package-bytes: ${AI_PROBLEM_DRAFT_MAX_OFFICIAL_PACKAGE_BYTES:52428800}

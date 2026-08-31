@@ -5,5 +5,7 @@ public enum ToolStatus {
     NOT_FOUND,
     SCHEMA_ERROR,
     POLICY_DENIED,
+    TIMEOUT,
+    CANCELLED,
     EXECUTION_ERROR
 }

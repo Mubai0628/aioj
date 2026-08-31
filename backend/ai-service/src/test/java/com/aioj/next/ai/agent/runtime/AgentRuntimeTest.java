@@ -20,6 +20,7 @@ import com.aioj.next.ai.agent.model.ModelUsage;
 import com.aioj.next.ai.agent.model.ProviderCapabilities;
 import com.aioj.next.ai.agent.model.ToolCallAdapter;
 import com.aioj.next.ai.agent.model.ToolChoiceMode;
+import com.aioj.next.ai.agent.model.ThinkingModeUnavailableException;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.policy.GuardDecision;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
@@ -143,6 +144,135 @@ class AgentRuntimeTest {
         // Every model call is manifest-audited.
         verify(manifestService, times(2)).record(anyString(), anyLong(), anyInt(), anyString(), anyString(),
                 anyString(), anyList(), anyString(), anyString(), isNull(), isNull(), anyList());
+    }
+
+    @Test
+    void reasoningContentStaysInMemoryAndIsReplayedToNextToolLoopRequest() {
+        adapter.script.add(new GatewayResponse("", "private reasoning", List.of(
+                new GatewayToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"x\"]}")),
+                "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro"));
+        adapter.script.add(finalResponse("done"));
+
+        AgentRuntime.AgentRunResult result = runtime.run(spec(false, budget(8, 6, 3, 3)));
+
+        assertThat(result.content()).isEqualTo("done");
+        assertThat(adapter.requests.get(1).messages())
+                .filteredOn(message -> "assistant".equals(message.role()))
+                .singleElement()
+                .satisfies(message -> assertThat(message.reasoningContent()).isEqualTo("private reasoning"));
+        assertThat(result.warnings()).doesNotContain("private reasoning");
+    }
+
+    @Test
+    void problemDraftScopeFallsBackOnceWhenThinkingCapabilityIsRejected() {
+        when(configService.effectiveConfig(AiModelScope.PROBLEM_DRAFT)).thenReturn(problemDraftConfig(true));
+        adapter.rejectNextThinkingCall = true;
+        adapter.script.add(finalResponse("standard answer"));
+        AgentRuntime.AgentRunRequest request = new AgentRuntime.AgentRunRequest(
+                "draft-turn", 7L, "draft-conversation", null, Set.of("AI_CHAT"), sections(), false,
+                "DRAFT", CallProfile.PROBLEM_DRAFT,
+                new LoopBudget(20, 16, 0, 0, 8, 2, 2, Duration.ofMinutes(15)),
+                AiModelScope.PROBLEM_DRAFT, Map.of("workspaceId", "workspace-1"), true);
+
+        AgentRuntime.AgentRunResult result = runtime.run(request);
+
+        assertThat(result.executionMode()).isEqualTo(AgentExecutionMode.STANDARD_TOOL_FALLBACK);
+        assertThat(result.warnings()).contains(AgentExecutionMode.STANDARD_TOOL_FALLBACK.name());
+        assertThat(adapter.settings).extracting(CallSettings::thinkingEnabled).containsExactly(true, false);
+    }
+
+    @Test
+    void problemDraftCannotEndBeforeFinalizeAndRecoversEmptyThinkingWithTools() throws Exception {
+        when(configService.effectiveConfig(AiModelScope.PROBLEM_DRAFT)).thenReturn(problemDraftConfig(true));
+        AtomicInteger draftExecutions = new AtomicInteger();
+        AgentRuntime draftRuntime = runtimeWith(List.of(
+                draftTool("draft.state.get", draftExecutions),
+                draftTool("draft.state.patch", draftExecutions),
+                draftTool("draft.finalize", draftExecutions)
+        ));
+        adapter.script.add(finalResponse("I will design the problem now."));
+        adapter.script.add(toolResponse("state", "draft.state.get"));
+        adapter.script.add(emptyResponse("length"));
+        adapter.script.add(toolResponse("patch", "draft.state.patch"));
+        adapter.script.add(toolResponse("finalize", "draft.finalize"));
+        adapter.script.add(finalResponse("Draft finalized for review."));
+
+        AgentRuntime.AgentRunResult result = draftRuntime.run(new AgentRuntime.AgentRunRequest(
+                "draft-turn", 7L, "draft-conversation", null, Set.of("AI_DRAFT"), sections(), true,
+                "DRAFT", CallProfile.PROBLEM_DRAFT,
+                new LoopBudget(10, 8, 0, 0, 4, 1, 1, Duration.ofMinutes(1)),
+                AiModelScope.PROBLEM_DRAFT, Map.of("workspaceId", "workspace-1"), true,
+                AgentRuntime.AgentCompletionPolicy.requireSuccessfulTool("draft.finalize")));
+
+        assertThat(result.content()).isEqualTo("Draft finalized for review.");
+        assertThat(result.steps()).isEqualTo(6);
+        assertThat(result.toolCallCount()).isEqualTo(3);
+        assertThat(draftExecutions).hasValue(3);
+        assertThat(result.executionMode()).isEqualTo(AgentExecutionMode.STANDARD_TOOL_FALLBACK);
+        assertThat(result.warnings()).contains("premature_completion_recovered", "empty_completion_recovery",
+                AgentExecutionMode.STANDARD_TOOL_FALLBACK.name());
+        assertThat(result.warnings()).doesNotContain("required_completion_tool_missing");
+        assertThat(adapter.requests.get(1).messages()).anySatisfy(message ->
+                assertThat(message.content()).contains("does not allow this workflow to end"));
+        assertThat(adapter.requests.get(1).messages()).noneSatisfy(message ->
+                assertThat(message.content()).contains("I will design the problem now."));
+        assertThat(adapter.requests.get(3).messages()).anySatisfy(message ->
+                assertThat(message.content()).contains("exhausted its answer without a tool call"));
+        assertThat(adapter.settings).extracting(CallSettings::thinkingEnabled)
+                .containsExactly(true, false, false, false, false, false);
+    }
+
+    @Test
+    void trustedServerBindingsReachDraftToolWithoutEnteringModelArguments() throws Exception {
+        when(configService.effectiveConfig(AiModelScope.PROBLEM_DRAFT)).thenReturn(problemDraftConfig(false));
+        AtomicReference<ToolExecutionContext> seenContext = new AtomicReference<>();
+        JsonNode schema = objectMapper.readTree("{\"type\":\"object\",\"additionalProperties\":false}");
+        ToolDescriptor descriptor = new ToolDescriptor("draft.state.get", "1.0.0", "state",
+                schema, ToolRiskLevel.LOW, true, true, Set.of("AI_DRAFT"),
+                Set.of(DataClassification.USER_PRIVATE), 1000, Duration.ofSeconds(1), ToolAuditLevel.NO_ARGUMENTS);
+        AgentTool tool = new AgentTool() {
+            @Override
+            public ToolDescriptor descriptor() {
+                return descriptor;
+            }
+
+            @Override
+            public ToolResult<Object> execute(ToolExecutionContext context, JsonNode input) {
+                seenContext.set(context);
+                return ToolResult.success(null, Map.of("version", 1), List.of(),
+                        DataClassification.USER_PRIVATE, TrustLevel.SERVER_AUTHORITATIVE);
+            }
+        };
+        AgentRuntime draftRuntime = runtimeWith(List.of(tool));
+        adapter.script.add(new GatewayResponse("", List.of(
+                new GatewayToolCall("draft-call", "draft.state.get", "{}")),
+                "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro"));
+        adapter.script.add(finalResponse("done"));
+
+        draftRuntime.run(new AgentRuntime.AgentRunRequest(
+                "draft-turn", 7L, "draft-conversation", null, Set.of("AI_DRAFT"), sections(), false,
+                "DRAFT", CallProfile.PROBLEM_DRAFT, new LoopBudget(4, 2, 0, 0, 1, 0, 0, Duration.ofMinutes(1)),
+                AiModelScope.PROBLEM_DRAFT, Map.of("workspaceId", "workspace-1"), true));
+
+        assertThat(seenContext.get().serverBinding("workspaceId")).isEqualTo("workspace-1");
+        assertThat(adapter.requests.get(0).messages())
+                .allSatisfy(message -> assertThat(message.content()).doesNotContain("workspace-1"));
+    }
+
+    @Test
+    void finiteRunDeadlineAlsoCapsBlockingModelCall() {
+        when(configService.effectiveConfig(AiModelScope.PROBLEM_DRAFT)).thenReturn(problemDraftConfig(false));
+        adapter.delayMillis = 5_000;
+        adapter.script.add(finalResponse("too late"));
+        AgentRuntime.AgentRunRequest request = new AgentRuntime.AgentRunRequest(
+                "deadline-turn", 7L, "draft-conversation", null, Set.of("AI_DRAFT"), sections(), false,
+                "DRAFT", CallProfile.PROBLEM_DRAFT,
+                new LoopBudget(2, 0, 0, 0, 0, 0, 0, Duration.ofMillis(40)),
+                AiModelScope.PROBLEM_DRAFT, Map.of("workspaceId", "workspace-1"), true);
+
+        assertThatThrownBy(() -> runtime.run(request))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("deadline exceeded");
     }
 
     @Test
@@ -511,6 +641,11 @@ class AgentRuntimeTest {
                 "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro");
     }
 
+    private GatewayResponse toolResponse(String callId, String toolName) {
+        return new GatewayResponse("", List.of(new GatewayToolCall(callId, toolName, "{}")),
+                "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro");
+    }
+
     private GatewayResponse finalResponse(String content) {
         return new GatewayResponse(content, List.of(), "stop", 10, 5, 0, "deepseek", "deepseek-v4-pro");
     }
@@ -519,6 +654,13 @@ class AgentRuntimeTest {
         return new AiModelEffectiveConfig(AiModelScope.TEXT_GENERATION, true, false, "DATABASE",
                 "deepseek", "https://api.deepseek.com/chat/completions", "sk-test", "sk-***", "environment",
                 "DEEPSEEK_API_KEY", "deepseek-v4-pro", false, false, "high", 0.3, 4096, null, null, null);
+    }
+
+    private AiModelEffectiveConfig problemDraftConfig(boolean thinkingEnabled) {
+        return new AiModelEffectiveConfig(AiModelScope.PROBLEM_DRAFT, true, false, "DATABASE",
+                "deepseek", "https://api.deepseek.com/chat/completions", "sk-test", "sk-***", "environment",
+                "DEEPSEEK_API_KEY", "deepseek-v4-pro", false, thinkingEnabled, "high", 0.3, 8192,
+                null, null, null);
     }
 
     private AgentTool searchTool() throws Exception {
@@ -544,9 +686,32 @@ class AgentRuntimeTest {
         };
     }
 
+    private AgentTool draftTool(String name, AtomicInteger executions) throws Exception {
+        JsonNode schema = objectMapper.readTree("{\"type\":\"object\",\"additionalProperties\":false}");
+        ToolDescriptor descriptor = new ToolDescriptor(name, "1.0.0", name, schema,
+                ToolRiskLevel.LOW, false, true, Set.of("AI_DRAFT"), Set.of(DataClassification.STAFF_ONLY),
+                1000, Duration.ofSeconds(1), ToolAuditLevel.NO_ARGUMENTS);
+        return new AgentTool() {
+            @Override
+            public ToolDescriptor descriptor() {
+                return descriptor;
+            }
+
+            @Override
+            public ToolResult<Object> execute(ToolExecutionContext context, JsonNode input) {
+                executions.incrementAndGet();
+                return ToolResult.success(null, Map.of("tool", name, "status", "PASSED"), List.of(),
+                        DataClassification.STAFF_ONLY, TrustLevel.SERVER_AUTHORITATIVE);
+            }
+        };
+    }
+
     private static final class FakeAdapter implements ToolCallAdapter {
         private final Queue<GatewayResponse> script = new ArrayDeque<>();
         private final List<GatewayRequest> requests = new ArrayList<>();
+        private final List<CallSettings> settings = new ArrayList<>();
+        private boolean rejectNextThinkingCall;
+        private long delayMillis;
 
         @Override
         public String provider() {
@@ -561,6 +726,19 @@ class AgentRuntimeTest {
         @Override
         public GatewayResponse execute(AiModelEffectiveConfig config, CallSettings settings, GatewayRequest request) {
             requests.add(request);
+            this.settings.add(settings);
+            if (delayMillis > 0) {
+                try {
+                    Thread.sleep(delayMillis);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "model call interrupted");
+                }
+            }
+            if (rejectNextThinkingCall && settings.thinkingEnabled()) {
+                rejectNextThinkingCall = false;
+                throw new ThinkingModeUnavailableException("deepseek", config.model(), 400);
+            }
             return script.remove();
         }
     }

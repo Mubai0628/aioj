@@ -11,6 +11,7 @@ public class AiAgentRunEntity {
     private Long id;
     private String turnId;
     private String conversationId;
+    private String workspaceId;
     private Long userId;
     private String provider;
     private String model;
@@ -20,6 +21,9 @@ public class AiAgentRunEntity {
     private String budgetJson;
     private String policySnapshotId;
     private String outputMode;
+    private String executionMode;
+    private String safeSummary;
+    private LocalDateTime deadlineAt;
     private String errorCode;
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;
@@ -47,6 +51,9 @@ public class AiAgentRunEntity {
     public void setConversationId(String conversationId) {
         this.conversationId = conversationId;
     }
+
+    public String getWorkspaceId() { return workspaceId; }
+    public void setWorkspaceId(String workspaceId) { this.workspaceId = workspaceId; }
 
     public Long getUserId() {
         return userId;
@@ -119,6 +126,13 @@ public class AiAgentRunEntity {
     public void setOutputMode(String outputMode) {
         this.outputMode = outputMode;
     }
+
+    public String getExecutionMode() { return executionMode; }
+    public void setExecutionMode(String executionMode) { this.executionMode = executionMode; }
+    public String getSafeSummary() { return safeSummary; }
+    public void setSafeSummary(String safeSummary) { this.safeSummary = safeSummary; }
+    public LocalDateTime getDeadlineAt() { return deadlineAt; }
+    public void setDeadlineAt(LocalDateTime deadlineAt) { this.deadlineAt = deadlineAt; }
 
     public String getErrorCode() {
         return errorCode;

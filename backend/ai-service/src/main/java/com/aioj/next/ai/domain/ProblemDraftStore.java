@@ -20,6 +20,8 @@ import com.aioj.next.ai.domain.problem.VerificationFailureClassifier;
 import com.aioj.next.ai.domain.problem.VerificationOptions;
 import com.aioj.next.ai.domain.problem.VerificationReport;
 import com.aioj.next.ai.domain.problem.VerificationWarning;
+import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkingState;
+import com.aioj.next.ai.domain.draftagent.ProblemDraftReviewRiskService;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
@@ -29,6 +31,9 @@ import com.aioj.next.contract.ai.ProblemDraftRefineRequest;
 import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
 import com.aioj.next.contract.ai.ProblemDraftRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
+import com.aioj.next.contract.ai.ProblemDraftImportReadiness;
+import com.aioj.next.contract.ai.ProblemDraftReviewRisk;
+import com.aioj.next.contract.ai.ProblemDraftTestcaseArtifactSummary;
 import com.aioj.next.contract.problem.ProblemVisibility;
 import com.aioj.next.contract.problem.TestCaseDto;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -80,6 +85,7 @@ public class ProblemDraftStore {
     private final VerificationFailureClassifier verificationFailureClassifier;
     private ProblemDraftAuditSnapshotService auditSnapshotService;
     private ProblemDraftTestcaseArtifactService testcaseArtifactService;
+    private ProblemDraftReviewRiskService reviewRiskService;
 
     public ProblemDraftStore(
             AiProvider aiProvider,
@@ -116,6 +122,11 @@ public class ProblemDraftStore {
     @Autowired(required = false)
     public void setProblemDraftTestcaseArtifactService(ProblemDraftTestcaseArtifactService testcaseArtifactService) {
         this.testcaseArtifactService = testcaseArtifactService;
+    }
+
+    @Autowired(required = false)
+    public void setProblemDraftReviewRiskService(ProblemDraftReviewRiskService reviewRiskService) {
+        this.reviewRiskService = reviewRiskService;
     }
 
     @Transactional
@@ -503,9 +514,173 @@ public class ProblemDraftStore {
         }
     }
 
+    /**
+     * Final gate used exclusively by {@code draft.finalize}. The workspace keeps
+     * mutable state; this method creates one immutable PENDING_REVIEW version
+     * only after the coordinator has verified the current fingerprint.
+     */
+    @Transactional
+    public ProblemDraftResponse finalizeAgentWorkspace(
+            Long userId,
+            String workspaceId,
+            Long candidateDraftId,
+            long stateVersion,
+            Long agentRunId,
+            Integer requestedCfRating,
+            String reviewRisk,
+            String contentFingerprint,
+            String verificationFingerprint,
+            ProblemDraftWorkingState state,
+            VerificationReport staticReport,
+            String verificationReportJson,
+            String model,
+            long promptTokens,
+            long completionTokens
+    ) {
+        if (workspaceId == null || workspaceId.isBlank() || candidateDraftId == null || state == null) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "Problem draft workspace state is incomplete");
+        }
+        ProblemDraftEntity existing = problemDraftMapper.selectById(candidateDraftId);
+        if (existing != null) {
+            if (!workspaceId.equals(existing.getWorkspaceId())
+                    || !verificationFingerprint.equals(existing.getVerificationFingerprint())) {
+                throw new DomainException(ErrorCode.CONFLICT, "Problem draft finalize id is already in use");
+            }
+        }
+        VerificationReport authoritativeStatic = staticReport == null
+                ? VerificationReport.of(List.of(new VerificationError("STATIC_NOT_RUN", "Static validation is required", null)), List.of())
+                : staticReport;
+        if (!authoritativeStatic.passed()) {
+            throw new DomainException(ErrorCode.VALIDATION_FAILED,
+                    "Problem draft cannot be finalized before static validation passes");
+        }
+        if (existing != null) {
+            existing.setStateVersion(stateVersion);
+            existing.setAgentRunId(agentRunId);
+            existing.setValidationStatus("VALID");
+            existing.setValidationErrors(toJson(authoritativeStatic.errorMessages()));
+            existing.setVerificationStatus(VERIFICATION_EXECUTION_VERIFIED);
+            existing.setVerificationReportJson(verificationReportJson);
+            problemDraftMapper.updateById(existing);
+            return toResponse(existing);
+        }
+        ProblemDraftResponse response = state.toResponse(candidateDraftId, nonBlank(model, aiProvider.model()),
+                Math.max(0, promptTokens), Math.max(0, completionTokens));
+        response = new ProblemDraftResponse(
+                response.id(), STATUS_PENDING_REVIEW, response.title(), response.difficulty(), response.statement(),
+                response.notes(), response.standardSolutionLanguage(), response.standardSolutionCode(),
+                response.referenceSolutionLanguage(), response.referenceSolutionCode(),
+                response.testcaseGeneratorPython(), response.stressTestcaseGeneratorPython(), response.generationPlan(),
+                response.tags(), "VALID", authoritativeStatic.errorMessages(), response.testCases(),
+                response.timeLimitMillis(), response.memoryLimitKb(), null, response.model(), response.promptTokens(),
+                response.completionTokens(), response.createdAt(), null, null, null, null, null,
+                VERIFICATION_EXECUTION_VERIFIED, verificationReportJson, 0, null
+        );
+        persist(userId, response);
+        ProblemDraftEntity entity = problemDraftMapper.selectById(candidateDraftId);
+        entity.setWorkspaceId(workspaceId);
+        entity.setStateVersion(stateVersion);
+        entity.setContentFingerprint(contentFingerprint);
+        entity.setVerificationFingerprint(verificationFingerprint);
+        entity.setRequestedCfRating(requestedCfRating);
+        entity.setReviewRisk(reviewRisk);
+        entity.setAgentRunId(agentRunId);
+        problemDraftMapper.updateById(entity);
+        return toResponse(entity);
+    }
+
+    /**
+     * Finalize runs cannot know aggregate model usage until the model returns after draft.finalize.
+     * Bind those totals to the immutable draft only when workspace, actor and Agent run all match.
+     */
+    @Transactional
+    public void updateFinalizedAgentUsage(Long userId, String workspaceId, Long draftId, Long agentRunId,
+                                          String model, long promptTokens, long completionTokens) {
+        ProblemDraftEntity entity = problemDraftMapper.selectById(draftId);
+        if (entity == null || !java.util.Objects.equals(entity.getCreatorUserId(), userId)
+                || !java.util.Objects.equals(entity.getWorkspaceId(), workspaceId)
+                || !java.util.Objects.equals(entity.getAgentRunId(), agentRunId)) {
+            throw new DomainException(ErrorCode.CONFLICT,
+                    "Finalized problem draft does not match the Agent run");
+        }
+        DraftPayload payload = readPayload(entity.getDraftJson());
+        entity.setDraftJson(toJson(new DraftPayload(
+                payload.statement(), payload.notes(), payload.standardSolutionLanguage(),
+                payload.standardSolutionCode(), payload.referenceSolutionLanguage(),
+                payload.referenceSolutionCode(), payload.testcaseGeneratorPython(),
+                payload.stressTestcaseGeneratorPython(), payload.generationPlan(), payload.tags(),
+                payload.testCases(), payload.timeLimitMillis(), payload.memoryLimitKb(),
+                Math.max(0, promptTokens), Math.max(0, completionTokens)
+        )));
+        entity.setModel(nonBlank(model, entity.getModel()));
+        problemDraftMapper.updateById(entity);
+    }
+
+    /**
+     * Persists a human edit as a new immutable workspace version. Execution
+     * evidence is deliberately reset; the workspace must run the Agent gates
+     * again before this version can be imported.
+     */
+    @Transactional
+    public ProblemDraftResponse createHumanWorkspaceVersion(
+            Long userId,
+            String workspaceId,
+            Long candidateDraftId,
+            long stateVersion,
+            Integer requestedCfRating,
+            String reviewRisk,
+            String contentFingerprint,
+            String verificationFingerprint,
+            ProblemDraftWorkingState state,
+            VerificationReport staticReport,
+            Long refinedFromDraftId,
+            String refineNote,
+            String model
+    ) {
+        if (workspaceId == null || workspaceId.isBlank() || candidateDraftId == null || state == null) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "Problem draft workspace edit is incomplete");
+        }
+        if (problemDraftMapper.selectById(candidateDraftId) != null) {
+            throw new DomainException(ErrorCode.CONFLICT, "Problem draft workspace version is already in use");
+        }
+        VerificationReport report = staticReport == null
+                ? VerificationReport.of(List.of(new VerificationError(
+                        "STATIC_NOT_RUN", "Static validation is required", null)), List.of())
+                : staticReport;
+        ProblemDraftResponse base = state.toResponse(candidateDraftId, nonBlank(model, aiProvider.model()), 0, 0);
+        ProblemDraftResponse response = new ProblemDraftResponse(
+                base.id(), STATUS_PENDING_REVIEW, base.title(), base.difficulty(), base.statement(), base.notes(),
+                base.standardSolutionLanguage(), base.standardSolutionCode(), base.referenceSolutionLanguage(),
+                base.referenceSolutionCode(), base.testcaseGeneratorPython(), base.stressTestcaseGeneratorPython(),
+                base.generationPlan(), base.tags(), report.passed() ? "VALID" : "INVALID", report.errorMessages(),
+                base.testCases(), base.timeLimitMillis(), base.memoryLimitKb(), null, base.model(), 0, 0,
+                base.createdAt(), null, null, null, refinedFromDraftId, refineNote, VERIFICATION_NOT_RUN,
+                toJson(Map.of(
+                        "status", "HUMAN_EDIT_REQUIRES_AGENT_VALIDATION",
+                        "verificationFingerprint", verificationFingerprint,
+                        "staticPassed", report.passed()
+                )), 0, null
+        );
+        persist(userId, response);
+        ProblemDraftEntity entity = problemDraftMapper.selectById(candidateDraftId);
+        entity.setWorkspaceId(workspaceId);
+        entity.setStateVersion(stateVersion);
+        entity.setContentFingerprint(contentFingerprint);
+        entity.setVerificationFingerprint(verificationFingerprint);
+        entity.setRequestedCfRating(requestedCfRating);
+        entity.setReviewRisk(reviewRisk);
+        entity.setAgentRunId(null);
+        problemDraftMapper.updateById(entity);
+        return toResponse(entity);
+    }
+
     public ProblemDraftResponse approve(Long id, Long reviewerUserId, ProblemDraftApprovalRequest request, String authorization) {
         ProblemDraftEntity draft = requireMutableDraft(id);
         boolean importProblem = request != null && Boolean.TRUE.equals(request.importProblem());
+        if (importProblem && draft.getWorkspaceId() != null) {
+            throw new DomainException(ErrorCode.CONFLICT,
+                    "Agent workspace drafts must be approved first, then imported through the recoverable import workflow");
+        }
         if (importProblem && !STATUS_APPROVED.equals(draft.getStatus())) {
             throw new DomainException(ErrorCode.CONFLICT, "Problem draft must be approved before import");
         }
@@ -1165,6 +1340,14 @@ public class ProblemDraftStore {
 
     private ProblemDraftResponse toResponse(ProblemDraftEntity entity) {
         DraftPayload payload = readPayload(entity.getDraftJson());
+        ProblemDraftTestcaseArtifactEntity artifact = testcaseArtifactService == null
+                ? null : testcaseArtifactService.latestReady(entity.getId());
+        ProblemDraftTestcaseArtifactSummary artifactSummary = testcaseArtifactSummary(
+                artifact, entity.getVerificationFingerprint());
+        ProblemDraftImportReadiness readiness = importReadiness(entity, artifact);
+        boolean manualUnverified = readiness != null && readiness.requiresUnverifiedAcknowledgement();
+        ProblemDraftReviewRisk risk = reviewRiskService == null ? null
+                : reviewRiskService.derive(entity.getDifficulty(), entity.getRequestedCfRating(), manualUnverified);
         return new ProblemDraftResponse(
                 entity.getId(),
                 entity.getStatus(),
@@ -1197,9 +1380,67 @@ public class ProblemDraftStore {
                 entity.getRefineNote(),
                 nonBlank(entity.getVerificationStatus(), VERIFICATION_NOT_RUN),
                 entity.getVerificationReportJson(),
-                repairAttemptCount(entity.getRepairAttemptCount()),
-                entity.getLastRepairReason()
+                repairAttemptCount(entity.getRepairAttemptCount()), entity.getLastRepairReason(),
+                entity.getWorkspaceId(), entity.getStateVersion(), entity.getContentFingerprint(),
+                entity.getVerificationFingerprint(), entity.getRequestedCfRating(), risk,
+                artifactSummary, readiness
         );
+    }
+
+    private ProblemDraftTestcaseArtifactSummary testcaseArtifactSummary(
+            ProblemDraftTestcaseArtifactEntity artifact, String currentFingerprint
+    ) {
+        if (artifact == null) {
+            return null;
+        }
+        boolean stale = !java.util.Objects.equals(currentFingerprint, artifact.getVerificationFingerprint())
+                || "STALE".equals(artifact.getExecutionStatus());
+        return new ProblemDraftTestcaseArtifactSummary(
+                artifact.getId(), nonBlank(artifact.getSource(), "AGENT_GENERATED"), artifact.getStatus(),
+                nonBlank(artifact.getFormatStatus(), "READY"),
+                nonBlank(artifact.getExecutionStatus(), "NOT_RUN"), artifact.getVerificationMode(),
+                artifact.getVerificationFingerprint(), stale, artifact.getCaseCount(),
+                artifact.getFileSizeBytes(), artifact.getSha256(), artifact.getFailureSummary(),
+                artifact.getAgentRunId(), toInstant(artifact.getGeneratedAt()), toInstant(artifact.getValidatedAt()),
+                artifact.getImportedProblemId(), artifact.getProblemTestcasePackageId()
+        );
+    }
+
+    private ProblemDraftImportReadiness importReadiness(ProblemDraftEntity draft,
+                                                         ProblemDraftTestcaseArtifactEntity artifact) {
+        if (draft.getWorkspaceId() == null) {
+            return null;
+        }
+        List<String> blockers = new ArrayList<>();
+        List<String> actions = new ArrayList<>();
+        if (!STATUS_APPROVED.equals(draft.getStatus())) {
+            blockers.add("DRAFT_NOT_APPROVED");
+            actions.add("APPROVE_CONTENT");
+        }
+        if (!"VALID".equals(draft.getValidationStatus())) {
+            blockers.add("STATIC_CONTENT_INVALID");
+            actions.add("FIX_STATIC_VALIDATION");
+        }
+        if (artifact == null) {
+            blockers.add("TESTCASE_PACKAGE_MISSING");
+            actions.add("GENERATE_OR_UPLOAD_PACKAGE");
+        } else {
+            if (!STATUS_PENDING_REVIEW.equals(draft.getStatus()) && !STATUS_APPROVED.equals(draft.getStatus())) {
+                blockers.add("DRAFT_LIFECYCLE_BLOCKED");
+            }
+            if (!"READY".equals(artifact.getFormatStatus())) {
+                blockers.add("TESTCASE_FORMAT_NOT_READY");
+                actions.add("FIX_PACKAGE_FORMAT");
+            }
+            if (!java.util.Objects.equals(draft.getVerificationFingerprint(), artifact.getVerificationFingerprint())) {
+                blockers.add("TESTCASE_ARTIFACT_STALE");
+                actions.add("REGENERATE_OR_REUPLOAD_PACKAGE");
+            }
+        }
+        boolean verified = artifact != null && "PASSED".equals(artifact.getExecutionStatus());
+        boolean requiresAck = artifact != null && !verified;
+        String mode = verified ? "AGENT_VERIFIED" : requiresAck ? "MANUAL_UNVERIFIED" : null;
+        return new ProblemDraftImportReadiness(blockers.isEmpty(), requiresAck, mode, blockers, actions);
     }
 
     private ProblemDraftEntity requireVisibleDraft(Long id) {

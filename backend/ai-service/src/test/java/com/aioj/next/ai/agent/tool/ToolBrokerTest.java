@@ -10,6 +10,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -19,6 +24,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ToolBrokerTest {
 
@@ -90,6 +96,85 @@ class ToolBrokerTest {
         assertThat(result.status()).isEqualTo(ToolStatus.EXECUTION_ERROR);
         JsonNode payload = objectMapper.readTree(result.data());
         assertThat(payload.path("errorCode").asText()).isEqualTo("TOOL_EXECUTION_ERROR");
+    }
+
+    @Test
+    void authorizedExecutionIsPreAuditedAsRunningAndThenCompleted() throws Exception {
+        ToolAuditService.AuditHandle handle = new ToolAuditService.AuditHandle(99L);
+        when(auditService.start(any(), anyLong(), anyInt(), any(), anyString(), anyString(),
+                anyString(), anyString())).thenReturn(handle);
+        AgentTool tool = fakeTool("context.search_exact", Set.of("AI_CHAT"), schema(), (context, input) ->
+                ToolResult.success(null, Map.of("hits", List.of()), List.of(),
+                        DataClassification.USER_PRIVATE, null));
+
+        ToolResult<String> result = broker(tool).execute(executionContext(Set.of("AI_CHAT")), 42L, 1,
+                "call-audit", "context.search_exact", "{\"query\":\"x\"}");
+
+        assertThat(result.status()).isEqualTo(ToolStatus.SUCCESS);
+        verify(auditService).start(any(), anyLong(), anyInt(), any(), anyString(), anyString(),
+                anyString(), anyString());
+        verify(auditService).complete(org.mockito.ArgumentMatchers.eq(handle),
+                org.mockito.ArgumentMatchers.eq(ToolStatus.SUCCESS), any(), anyString(), anyLong(),
+                org.mockito.ArgumentMatchers.isNull());
+    }
+
+    @Test
+    void descriptorTimeoutInterruptsToolAndReturnsStructuredTimeout() throws Exception {
+        JsonNode schema = schema();
+        ToolDescriptor descriptor = new ToolDescriptor(
+                "context.search_exact", "1.0.0", "slow tool", schema,
+                ToolRiskLevel.LOW, true, true, Set.of("AI_CHAT"),
+                Set.of(DataClassification.USER_PRIVATE), 1000, Duration.ofMillis(30), ToolAuditLevel.FULL);
+        AgentTool slowTool = new AgentTool() {
+            @Override
+            public ToolDescriptor descriptor() {
+                return descriptor;
+            }
+
+            @Override
+            public ToolResult<Object> execute(ToolExecutionContext context, JsonNode input) {
+                try {
+                    Thread.sleep(5_000);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+                return ToolResult.success(null, Map.of(), List.of(), DataClassification.USER_PRIVATE, null);
+            }
+        };
+
+        ToolResult<String> result = broker(slowTool).execute(executionContext(Set.of("AI_CHAT")), 42L, 1,
+                "call-timeout", "context.search_exact", "{\"query\":\"x\"}");
+
+        assertThat(result.status()).isEqualTo(ToolStatus.TIMEOUT);
+        assertThat(objectMapper.readTree(result.data()).path("errorCode").asText())
+                .isEqualTo("TOOL_EXECUTION_TIMEOUT");
+    }
+
+    @Test
+    void cancelRunInterruptsInFlightTool() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        AgentTool tool = fakeTool("context.search_exact", Set.of("AI_CHAT"), schema(), (context, input) -> {
+            entered.countDown();
+            try {
+                Thread.sleep(5_000);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+            return ToolResult.success(null, Map.of(), List.of(), DataClassification.USER_PRIVATE, null);
+        });
+        ToolBroker broker = broker(tool);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<ToolResult<String>> future = caller.submit(() -> broker.execute(
+                    executionContext(Set.of("AI_CHAT")), 77L, 1, "call-cancel",
+                    "context.search_exact", "{\"query\":\"x\"}"));
+            assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
+
+            assertThat(broker.cancelRun(77L)).isEqualTo(1);
+            assertThat(future.get(1, TimeUnit.SECONDS).status()).isEqualTo(ToolStatus.CANCELLED);
+        } finally {
+            caller.shutdownNow();
+        }
     }
 
     private ToolBroker broker(AgentTool... tools) {

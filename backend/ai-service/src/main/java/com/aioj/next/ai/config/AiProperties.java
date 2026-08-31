@@ -524,6 +524,12 @@ public class AiProperties {
 
     public static class ProblemDraft {
         private int maxRepairAttempts = 5;
+        private int maxAgentSteps = 20;
+        private int maxToolCalls = 16;
+        private int maxSandboxCalls = 8;
+        private int maxTestcaseGenerations = 2;
+        private int maxTestcasePackageRuns = 2;
+        private int maxRunMinutes = 15;
         private String testcaseArtifactStorageRoot = System.getProperty("user.home") + "/.ai-oj-next/ai-draft-testcase-artifacts";
         private long maxOfficialCaseBytes = 8L * 1024L * 1024L;
         private long maxOfficialPackageBytes = 50L * 1024L * 1024L;
@@ -561,6 +567,54 @@ public class AiProperties {
 
         public void setMaxRepairAttempts(int maxRepairAttempts) {
             this.maxRepairAttempts = Math.max(0, maxRepairAttempts);
+        }
+
+        public int getMaxAgentSteps() {
+            return maxAgentSteps;
+        }
+
+        public void setMaxAgentSteps(int maxAgentSteps) {
+            this.maxAgentSteps = Math.max(1, maxAgentSteps);
+        }
+
+        public int getMaxToolCalls() {
+            return maxToolCalls;
+        }
+
+        public void setMaxToolCalls(int maxToolCalls) {
+            this.maxToolCalls = Math.max(0, maxToolCalls);
+        }
+
+        public int getMaxSandboxCalls() {
+            return maxSandboxCalls;
+        }
+
+        public void setMaxSandboxCalls(int maxSandboxCalls) {
+            this.maxSandboxCalls = Math.max(0, maxSandboxCalls);
+        }
+
+        public int getMaxTestcaseGenerations() {
+            return maxTestcaseGenerations;
+        }
+
+        public void setMaxTestcaseGenerations(int maxTestcaseGenerations) {
+            this.maxTestcaseGenerations = Math.max(0, maxTestcaseGenerations);
+        }
+
+        public int getMaxTestcasePackageRuns() {
+            return maxTestcasePackageRuns;
+        }
+
+        public void setMaxTestcasePackageRuns(int maxTestcasePackageRuns) {
+            this.maxTestcasePackageRuns = Math.max(0, maxTestcasePackageRuns);
+        }
+
+        public int getMaxRunMinutes() {
+            return maxRunMinutes;
+        }
+
+        public void setMaxRunMinutes(int maxRunMinutes) {
+            this.maxRunMinutes = Math.max(1, maxRunMinutes);
         }
 
         public String getTestcaseArtifactStorageRoot() {

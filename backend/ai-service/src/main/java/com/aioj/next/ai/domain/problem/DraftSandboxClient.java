@@ -91,6 +91,12 @@ public class DraftSandboxClient {
     }
 
     public DraftExecutionReport verifyDraftDetailed(ProblemDraftResponse draft, VerificationOptions options) {
+        return verifyDraftDetailed(draft, options, null);
+    }
+
+    /** Agent variant that preserves the actual workspace actor on generated artifacts. */
+    public DraftExecutionReport verifyDraftDetailed(ProblemDraftResponse draft, VerificationOptions options,
+                                                    Long creatorUserId) {
         List<VerificationError> errors = new ArrayList<>();
         List<VerificationWarning> warnings = new ArrayList<>();
         CrossCheckReport crossCheckReport = null;
@@ -120,7 +126,15 @@ public class DraftSandboxClient {
         } finally {
             deleteCompiledFile(compile);
         }
-        return new DraftExecutionReport(report(errors, warnings), crossCheckReport, complexityReport, officialPackageReport);
+        DraftExecutionReport result = new DraftExecutionReport(
+                report(errors, warnings), crossCheckReport, complexityReport, officialPackageReport);
+        // The generated package is not authoritative until every check for the same draft content
+        // (samples, generator, complexity and optional independent reference) has passed. Persisting
+        // earlier would leave a READY artifact behind after a later gate failed.
+        if (result.passed() && officialPackageReport != null && officialPackageReport.passed()) {
+            persistOfficialPackageArtifact(draft, creatorUserId, officialPackageReport);
+        }
+        return result;
     }
 
     private CompileResponse compile(ProblemDraftResponse draft) {
@@ -135,6 +149,74 @@ public class DraftSandboxClient {
                 timeLimitMillis,
                 memoryLimitKb
         ), COMPILE_TYPE);
+    }
+
+    /** Agent-facing bounded execution. The compiled file id never leaves this client. */
+    public CodeExecutionResult executeCode(String language, String sourceCode, String stdin,
+                                           Integer timeLimitMillis, Integer memoryLimitKb,
+                                           Integer stdoutLimitBytes) {
+        CompileResponse compile = null;
+        try {
+            String normalizedLanguage = defaultLanguage(language);
+            compile = compile(normalizedLanguage, sourceCode, timeLimitMillis, memoryLimitKb);
+            if (!"ACCEPTED".equals(compile.status())) {
+                return new CodeExecutionResult(compile.status(), compile.message(), "", compile.stderr(),
+                        compile.timeMillis(), compile.memoryKb(), compile.exitStatus(), compile.runTimeMillis(),
+                        compile.procPeak());
+            }
+            RunResponse run = run(normalizedLanguage, sourceCode, compile.fileId(), stdin,
+                    timeLimitMillis, memoryLimitKb, stdoutLimitBytes);
+            return new CodeExecutionResult(run.status(), run.message(), run.stdout(), run.stderr(), run.timeMillis(),
+                    run.memoryKb(), run.exitStatus(), run.runTimeMillis(), run.procPeak());
+        } finally {
+            deleteCompiledFile(compile);
+        }
+    }
+
+    /** Runs only the public samples and returns field-safe mismatch summaries. */
+    public SampleExecutionResult runSamples(ProblemDraftResponse draft) {
+        if (draft == null) {
+            return new SampleExecutionResult(VerificationReport.of(List.of(
+                    new VerificationError("SANDBOX_NO_DRAFT", "draft is required", null)), List.of()),
+                    0, 0, null, null, null);
+        }
+        CompileResponse compile = null;
+        List<VerificationError> errors = new ArrayList<>();
+        try {
+            compile = compile(draft);
+            if (!"ACCEPTED".equals(compile.status())) {
+                errors.add(error("SANDBOX_COMPILE_FAILED",
+                        "standardSolutionCode compile failed: " + firstText(compile.message(), compile.stderr()),
+                        "standardSolutionCode"));
+                return new SampleExecutionResult(report(errors, List.of()), 0, draft.testCases() == null ? 0 : draft.testCases().size(),
+                        compile.timeMillis(), compile.memoryKb(), compile.procPeak());
+            }
+            long maxTime = 0L;
+            long maxMemory = 0L;
+            int maxProcesses = 0;
+            int passed = 0;
+            List<TestCaseDto> cases = draft.testCases() == null ? List.of() : draft.testCases();
+            for (int index = 0; index < cases.size(); index++) {
+                TestCaseDto testCase = cases.get(index);
+                RunResponse run = run(draft, compile.fileId(), testCase.input(), stdoutLimit(testCase.expectedOutput()));
+                maxTime = Math.max(maxTime, run.timeMillis() == null ? 0L : run.timeMillis());
+                maxMemory = Math.max(maxMemory, run.memoryKb() == null ? 0L : run.memoryKb());
+                maxProcesses = Math.max(maxProcesses, run.procPeak() == null ? 0 : run.procPeak());
+                if (!"ACCEPTED".equals(run.status())) {
+                    errors.add(error("SANDBOX_SAMPLE_FAILED",
+                            "sample case " + (index + 1) + " execution failed: " + firstText(run.message(), run.stderr()),
+                            "testCases[" + index + "]"));
+                } else if (!sameOutput(testCase.expectedOutput(), run.stdout())) {
+                    errors.add(error("SANDBOX_SAMPLE_MISMATCH", "sample case " + (index + 1) + " output mismatch",
+                            "testCases[" + index + "].expectedOutput"));
+                } else {
+                    passed++;
+                }
+            }
+            return new SampleExecutionResult(report(errors, List.of()), passed, cases.size(), maxTime, maxMemory, maxProcesses);
+        } finally {
+            deleteCompiledFile(compile);
+        }
     }
 
     private void verifySamples(ProblemDraftResponse draft, CompileResponse compile, List<VerificationError> errors) {
@@ -158,7 +240,8 @@ public class DraftSandboxClient {
     }
 
     private HiddenCaseVerificationResult verifyGeneratorAndHiddenCases(ProblemDraftResponse draft, CompileResponse compile,
-                                                                       VerificationOptions options, List<VerificationError> errors,
+                                                                       VerificationOptions options,
+                                                                       List<VerificationError> errors,
                                                                        List<VerificationWarning> warnings) {
         if (!StringUtils.hasText(draft.testcaseGeneratorPython())) {
             return HiddenCaseVerificationResult.empty();
@@ -196,7 +279,6 @@ public class DraftSandboxClient {
                     officialPackageErrorField(code)));
             return new HiddenCaseVerificationResult(List.of(), generatedInputCount(script, officialPackage), officialPackage);
         }
-        persistOfficialPackageArtifact(draft, officialPackage);
         List<ComplexityBenchmarkRun> benchmarkRuns = officialPackage.cases().stream()
                 .sorted(Comparator.comparing(OfficialTestcaseCaseReport::name, Comparator.nullsLast(String::compareTo)))
                 .map(item -> new ComplexityBenchmarkRun(
@@ -225,11 +307,12 @@ public class DraftSandboxClient {
         return officialPackage == null || officialPackage.caseCount() == null ? 0 : officialPackage.caseCount();
     }
 
-    private void persistOfficialPackageArtifact(ProblemDraftResponse draft, OfficialTestcasePackageReport report) {
+    private void persistOfficialPackageArtifact(ProblemDraftResponse draft, Long creatorUserId,
+                                                OfficialTestcasePackageReport report) {
         if (testcaseArtifactService == null || draft == null || report == null || !report.passed()) {
             return;
         }
-        testcaseArtifactService.storeFromOfficialPackage(draft.id(), null, report);
+        testcaseArtifactService.storeFromOfficialPackage(draft.id(), creatorUserId, report);
     }
 
     private List<ComplexityBenchmarkRun> materializeHiddenCaseOutputs(ProblemDraftResponse draft, CompileResponse compile,
@@ -971,7 +1054,7 @@ public class DraftSandboxClient {
     }
 
     private record CompileResponse(String status, String message, String fileId, String stderr, Long timeMillis,
-                                   Long memoryKb, Integer exitStatus, Long runTimeMillis) {
+                                   Long memoryKb, Integer exitStatus, Long runTimeMillis, Integer procPeak) {
     }
 
     private record DeleteFileRequest(String fileId) {
@@ -982,7 +1065,16 @@ public class DraftSandboxClient {
     }
 
     private record RunResponse(String status, String message, String stdout, String stderr, Long timeMillis,
-                               Long memoryKb, Integer exitStatus, Long runTimeMillis) {
+                               Long memoryKb, Integer exitStatus, Long runTimeMillis, Integer procPeak) {
+    }
+
+    public record CodeExecutionResult(String status, String message, String stdout, String stderr,
+                                      Long timeMillis, Long memoryKb, Integer exitStatus,
+                                      Long runTimeMillis, Integer procPeak) {
+    }
+
+    public record SampleExecutionResult(VerificationReport report, int passedCaseCount, int totalCaseCount,
+                                        Long maxTimeMillis, Long maxMemoryKb, Integer maxProcessCount) {
     }
 
     private record PythonScriptRequest(String script, Integer timeLimitMillis, Integer memoryLimitKb,

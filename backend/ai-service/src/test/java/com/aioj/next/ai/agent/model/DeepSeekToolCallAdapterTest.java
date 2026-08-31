@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class DeepSeekToolCallAdapterTest {
@@ -76,7 +77,7 @@ class DeepSeekToolCallAdapterTest {
 
     @Test
     void toolNamesAreWireEncodedInRequestAndDecodedInResponse() throws Exception {
-        respondWithChat("{\"choices\":[{\"message\":{\"content\":null,\"tool_calls\":["
+        respondWithChat("{\"choices\":[{\"message\":{\"content\":null,\"reasoning_content\":\"private plan\",\"tool_calls\":["
                 + "{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"context__search_exact\","
                 + "\"arguments\":\"{\\\"exactTerms\\\":[\\\"二分\\\"]}\"}}]},\"finish_reason\":\"tool_calls\"}],"
                 + "\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":7,\"prompt_cache_hit_tokens\":12}}");
@@ -95,6 +96,41 @@ class DeepSeekToolCallAdapterTest {
         assertThat(response.promptTokens()).isEqualTo(20);
         assertThat(response.completionTokens()).isEqualTo(7);
         assertThat(response.cacheHitTokens()).isEqualTo(12);
+        assertThat(response.reasoningContent()).isEqualTo("private plan");
+    }
+
+    @Test
+    void reasoningContentIsEchoedOnlyOnAssistantMessageInsideToolLoop() throws Exception {
+        respondWithChat("{\"choices\":[{\"message\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}");
+        GatewayToolCall call = new GatewayToolCall("call_1", "context.search_exact", "{}");
+        GatewayRequest request = new GatewayRequest(List.of(
+                GatewayMessage.user("question"),
+                GatewayMessage.assistant("", "private chain", List.of(call)),
+                GatewayMessage.toolResult("call_1", "{\"status\":\"SUCCESS\"}")),
+                tools(), ToolChoiceMode.AUTO, CallProfile.CHAT_STREAM);
+
+        adapter.execute(config("deepseek-v4-pro"), new CallSettings(true, "high", 0.3, 4096), request);
+
+        JsonNode messages = objectMapper.readTree(recordedBody.get()).path("messages");
+        assertThat(messages.get(0).has("reasoning_content")).isFalse();
+        assertThat(messages.get(1).path("reasoning_content").asText()).isEqualTo("private chain");
+        assertThat(messages.get(2).has("reasoning_content")).isFalse();
+    }
+
+    @Test
+    void explicitThinkingCapabilityRejectionHasTypedFallbackSignal() {
+        server.expect(request -> recordedBody.set(((MockClientHttpRequest) request).getBodyAsString()))
+                .andRespond(withBadRequest().body("{\"error\":{\"message\":\"thinking is unsupported for this model\"}}")
+                        .contentType(MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> adapter.execute(config("deepseek-chat"),
+                new CallSettings(true, "high", 0.3, 4096), request(List.of())))
+                .isInstanceOf(ThinkingModeUnavailableException.class)
+                .satisfies(error -> {
+                    ThinkingModeUnavailableException capability = (ThinkingModeUnavailableException) error;
+                    assertThat(capability.provider()).isEqualTo("deepseek");
+                    assertThat(capability.httpStatus()).isEqualTo(400);
+                });
     }
 
     @Test

@@ -24,6 +24,10 @@ public class ProblemEntity {
     private BigDecimal javaTimeLimitMultiplier;
     private Integer memoryLimitKb;
     private Boolean aiGenerated;
+    private String aiOriginWorkspaceId;
+    private Long aiOriginDraftId;
+    private String aiReviewRisk;
+    private String aiTestcaseVerificationMode;
     private ProblemVisibility visibility;
     private Long createdBy;
     private Instant createdAt;
@@ -128,6 +132,15 @@ public class ProblemEntity {
     public void setAiGenerated(Boolean aiGenerated) {
         this.aiGenerated = aiGenerated;
     }
+
+    public String getAiOriginWorkspaceId() { return aiOriginWorkspaceId; }
+    public void setAiOriginWorkspaceId(String aiOriginWorkspaceId) { this.aiOriginWorkspaceId = aiOriginWorkspaceId; }
+    public Long getAiOriginDraftId() { return aiOriginDraftId; }
+    public void setAiOriginDraftId(Long aiOriginDraftId) { this.aiOriginDraftId = aiOriginDraftId; }
+    public String getAiReviewRisk() { return aiReviewRisk; }
+    public void setAiReviewRisk(String aiReviewRisk) { this.aiReviewRisk = aiReviewRisk; }
+    public String getAiTestcaseVerificationMode() { return aiTestcaseVerificationMode; }
+    public void setAiTestcaseVerificationMode(String aiTestcaseVerificationMode) { this.aiTestcaseVerificationMode = aiTestcaseVerificationMode; }
 
     public ProblemVisibility getVisibility() {
         return visibility;
