@@ -36,6 +36,9 @@ import com.aioj.next.problem.persistence.mapper.PlagiarismJobMapper;
 import com.aioj.next.problem.persistence.mapper.PlagiarismJobSubmissionMapper;
 import com.aioj.next.problem.persistence.mapper.PlagiarismPairMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -94,6 +97,7 @@ class PlagiarismServiceTest {
 
     @BeforeEach
     void setUp() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), SubmissionEntity.class);
         PlagiarismProperties properties = new PlagiarismProperties();
         properties.setMaxFragmentExcerptChars(500);
         Executor directExecutor = Runnable::run;

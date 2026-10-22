@@ -18,6 +18,9 @@ import com.aioj.next.problem.persistence.mapper.ContestProblemMapper;
 import com.aioj.next.problem.persistence.mapper.ContestRunMapper;
 import com.aioj.next.problem.persistence.mapper.ContestRunProblemSnapshotMapper;
 import com.aioj.next.problem.persistence.mapper.ProblemMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +56,10 @@ class ContestProblemVisibilityServiceTest {
 
     @BeforeEach
     void setUp() {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
+        TableInfoHelper.initTableInfo(assistant, ContestParticipantEntity.class);
+        TableInfoHelper.initTableInfo(assistant, ContestRunEntity.class);
+        TableInfoHelper.initTableInfo(assistant, ContestRunProblemSnapshotEntity.class);
         service = new ContestProblemVisibilityService(runMapper, contestProblemMapper, participantMapper,
                 problemMapper, runProblemSnapshotMapper, contestMapper, new ContestProperties());
     }

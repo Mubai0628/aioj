@@ -14,7 +14,10 @@ import com.aioj.next.contract.ai.AdminContestAiMessageResponse;
 import com.aioj.next.contract.ai.AdminContestAiUsageSummary;
 import com.aioj.next.contract.ai.ContestParticipantProfile;
 import com.aioj.next.contract.contest.ContestRunWindow;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,6 +60,9 @@ class ContestAiUsageServiceTest {
 
     @BeforeEach
     void setUp() {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
+        TableInfoHelper.initTableInfo(assistant, AiMessageEntity.class);
+        TableInfoHelper.initTableInfo(assistant, OperationAuditEventEntity.class);
         service = new ContestAiUsageService(usageMapper, conversationMapper, messageMapper, auditMapper,
                 problemServiceClient, auditWriter);
     }

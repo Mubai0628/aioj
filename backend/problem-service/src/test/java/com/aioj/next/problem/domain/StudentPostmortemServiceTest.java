@@ -23,6 +23,7 @@ import com.aioj.next.problem.persistence.entity.ContestRunEntity;
 import com.aioj.next.problem.persistence.entity.ContestRunProblemSnapshotEntity;
 import com.aioj.next.problem.persistence.entity.ContestStudentPostmortemReportEntity;
 import com.aioj.next.problem.persistence.entity.ContestStudentPostmortemWeaknessCandidateEntity;
+import com.aioj.next.problem.persistence.entity.SubmissionCaseResultEntity;
 import com.aioj.next.problem.persistence.entity.SubmissionEntity;
 import com.aioj.next.problem.persistence.mapper.ContestMapper;
 import com.aioj.next.problem.persistence.mapper.ContestParticipantMapper;
@@ -32,6 +33,9 @@ import com.aioj.next.problem.persistence.mapper.ContestStudentPostmortemReportMa
 import com.aioj.next.problem.persistence.mapper.ContestStudentPostmortemWeaknessCandidateMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionCaseResultMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -86,6 +90,9 @@ class StudentPostmortemServiceTest {
 
     @BeforeEach
     void setUp() {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
+        TableInfoHelper.initTableInfo(assistant, SubmissionEntity.class);
+        TableInfoHelper.initTableInfo(assistant, SubmissionCaseResultEntity.class);
         org.mockito.Mockito.lenient().when(visibilityService.hiddenContestProblemIdsForRun(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(java.util.Set.of());
         service = new StudentPostmortemService(contestMapper, contestRunMapper, participantMapper,

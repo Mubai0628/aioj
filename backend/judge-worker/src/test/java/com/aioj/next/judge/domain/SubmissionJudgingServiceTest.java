@@ -11,7 +11,11 @@ import com.aioj.next.judge.persistence.entity.SubmissionEntity;
 import com.aioj.next.judge.persistence.mapper.JudgeAuditLogMapper;
 import com.aioj.next.judge.persistence.mapper.SubmissionCaseResultMapper;
 import com.aioj.next.judge.persistence.mapper.SubmissionMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -40,6 +44,11 @@ class SubmissionJudgingServiceTest {
             new JudgeWorkerProperties(),
             eventClient
     );
+
+    @BeforeEach
+    void initTableInfo() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), SubmissionEntity.class);
+    }
 
     @AfterEach
     void tearDown() {

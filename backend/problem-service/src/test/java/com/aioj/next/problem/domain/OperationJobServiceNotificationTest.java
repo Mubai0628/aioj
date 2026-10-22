@@ -14,6 +14,10 @@ import com.aioj.next.problem.domain.notification.UserNotificationService;
 import com.aioj.next.problem.persistence.entity.OperationJobEntity;
 import com.aioj.next.problem.persistence.mapper.OperationJobArtifactMapper;
 import com.aioj.next.problem.persistence.mapper.OperationJobMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeEach;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +55,11 @@ class OperationJobServiceNotificationTest {
     @Mock private UserNotificationService notificationService;
 
     private OperationJobService service;
+
+    @BeforeEach
+    void initTableInfo() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), OperationJobEntity.class);
+    }
 
     @AfterEach
     void shutDown() {

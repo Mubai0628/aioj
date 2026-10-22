@@ -42,6 +42,9 @@ import com.aioj.next.problem.persistence.mapper.LearningGroupMemberMapper;
 import com.aioj.next.problem.persistence.mapper.ProblemSubtaskMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionCaseResultMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -110,6 +113,7 @@ class ContestScoreboardServiceTest {
 
     @BeforeEach
     void setUp() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), SubmissionEntity.class);
         org.mockito.Mockito.lenient().when(visibilityService.hiddenContestProblemIdsForRun(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(java.util.Set.of());
         service = new ContestScoreboardService(contestMapper, contestRunMapper, contestRunAllowedGroupMapper, contestProblemMapper,

@@ -38,7 +38,10 @@ import com.aioj.next.problem.persistence.mapper.ContestRunMapper;
 import com.aioj.next.problem.persistence.mapper.LearningGroupMapper;
 import com.aioj.next.problem.persistence.mapper.LearningGroupMemberMapper;
 import com.aioj.next.problem.persistence.mapper.UserAccountMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -92,6 +95,7 @@ class ContestServiceTest {
 
     @BeforeEach
     void setUp() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ContestEntity.class);
         service = new ContestService(contestMapper, contestProblemMapper, scoringRuleMapper, learningGroupMapper,
                 learningGroupMemberMapper, contestParticipantMapper, contestParticipantSnapshotMapper,
                 contestRunMapper, userAccountMapper, problemCatalog);

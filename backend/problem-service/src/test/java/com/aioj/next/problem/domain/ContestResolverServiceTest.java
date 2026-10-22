@@ -30,6 +30,9 @@ import com.aioj.next.problem.persistence.mapper.ContestResolverSessionMapper;
 import com.aioj.next.problem.persistence.mapper.ContestResolverStepMapper;
 import com.aioj.next.problem.persistence.mapper.ContestRunMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,6 +82,7 @@ class ContestResolverServiceTest {
 
     @BeforeEach
     void setUp() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), SubmissionEntity.class);
         ObjectMapper objectMapper = new ObjectMapper();
         service = new ContestResolverService(contestMapper, contestRunMapper, contestProblemMapper,
                 contestParticipantMapper, submissionMapper, sessionMapper, stepMapper, scoreboardService, objectMapper);
