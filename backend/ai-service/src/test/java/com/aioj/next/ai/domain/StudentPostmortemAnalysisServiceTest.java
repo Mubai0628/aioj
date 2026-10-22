@@ -31,8 +31,13 @@ class StudentPostmortemAnalysisServiceTest {
 
         assertThat(response.success()).isTrue();
         assertThat(response.markdown()).contains("个人成绩概览");
-        assertThat(response.weaknessCandidates()).isNotEmpty();
+        assertThat(response.weaknessCandidates()).hasSize(1);
         assertThat(response.weaknessCandidates().get(0).knowledgeNode()).isEqualTo("binary_search");
+        var candidate = response.weaknessCandidates().get(0);
+        assertThat(candidate.symptom()).isEqualTo("提交后仍未通过");
+        assertThat(candidate.evidence()).hasSize(1);
+        assertThat(candidate.evidence().get(0)).contains("WRONG_ANSWER");
+        assertThat(candidate.symptom()).isNotEqualTo(candidate.evidence().get(0));
         assertThat(response.practiceSuggestions()).isNotEmpty();
         verify(quotaService).record(7L, "mock", "mock-model", 80, 32, true);
     }
@@ -67,7 +72,8 @@ class StudentPostmortemAnalysisServiceTest {
         StudentPostmortemAnalysisService service = new StudentPostmortemAnalysisService(provider, quotaService,
                 new AiCapacityService(new com.aioj.next.ai.config.AiProperties()), new ObjectMapper());
 
-        service.analyze(acmRequest());
+        var response = service.analyze(acmRequest());
+        assertThat(response.weaknessCandidates()).isEmpty();
 
         var contextCaptor = forClass(AiChatContext.class);
         verify(provider).chat(any(AiChatRequest.class), contextCaptor.capture(), eq(AiModelScope.REPORT_ANALYSIS));
@@ -77,6 +83,83 @@ class StudentPostmortemAnalysisServiceTest {
         assertThat(pack).contains("int main()");
         assertThat(pack).contains("Do not mention total score");
     }
+
+    @Test
+    void unattemptedAcmProblemIsNotAWeaknessCandidate() {
+        AiProvider provider = mock(AiProvider.class);
+        AiQuotaService quotaService = mock(AiQuotaService.class);
+        when(provider.chat(any(AiChatRequest.class), any(AiChatContext.class), eq(AiModelScope.REPORT_ANALYSIS)))
+                .thenReturn(new AiCompletion("ok", "mock", "mock-model", 1, 1));
+        StudentPostmortemAnalysisService service = new StudentPostmortemAnalysisService(provider, quotaService,
+                new AiCapacityService(new com.aioj.next.ai.config.AiProperties()), new ObjectMapper());
+
+        StudentPostmortemAnalysisRequest request = new StudentPostmortemAnalysisRequest(
+                7L, 12L, 34L, 56L, 7L,
+                "Spring Contest", "Replay Run", "ACM",
+                """
+                        {
+                          "submissionCount": 0,
+                          "weaknessSeeds": [],
+                          "problems": [
+                            {
+                              "label": "B",
+                              "title": "迷宫最短逃脱",
+                              "bestStatus": null,
+                              "submissionCount": 0,
+                              "tags": ["BFS"]
+                            }
+                          ]
+                        }
+                        """,
+                "B 题没有提交记录。",
+                List.of()
+        );
+
+        var response = service.analyze(request);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.weaknessCandidates()).isEmpty();
+    }
+
+    @Test
+        void acceptedAcmProblemWithSeedRemainsAReviewCandidate() {
+        AiProvider provider = mock(AiProvider.class);
+        AiQuotaService quotaService = mock(AiQuotaService.class);
+        when(provider.chat(any(AiChatRequest.class), any(AiChatContext.class), eq(AiModelScope.REPORT_ANALYSIS)))
+                .thenReturn(new AiCompletion("ok", "mock", "mock-model", 1, 1));
+        StudentPostmortemAnalysisService service = new StudentPostmortemAnalysisService(provider, quotaService,
+                new AiCapacityService(new com.aioj.next.ai.config.AiProperties()), new ObjectMapper());
+
+        StudentPostmortemAnalysisRequest request = new StudentPostmortemAnalysisRequest(
+                7L, 12L, 34L, 56L, 7L,
+                "Spring Contest", "Replay Run", "ACM",
+                """
+                        {
+                        "weaknessSeeds": ["A 星港间距：最佳状态 ACCEPTED，提交 3 次，标签 binary_search"],
+                        "problems": [
+                                {
+                                "label": "A",
+                                "title": "星港间距",
+                                "bestStatus": "ACCEPTED",
+                                "submissionCount": 3,
+                                "tags": ["binary_search"]
+                                }
+                        ]
+                        }
+                        """,
+                "A 题最终通过，但有需要复盘的记录。",
+                List.of()
+        );
+
+        var response = service.analyze(request);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.weaknessCandidates()).hasSize(1);
+        var candidate = response.weaknessCandidates().get(0);
+        assertThat(candidate.knowledgeNode()).isEqualTo("binary_search");
+        assertThat(candidate.symptom()).contains("最终通过");
+        assertThat(candidate.evidence().get(0)).contains("ACCEPTED");
+        }
 
     private StudentPostmortemAnalysisRequest request() {
         return new StudentPostmortemAnalysisRequest(
@@ -94,7 +177,7 @@ class StudentPostmortemAnalysisServiceTest {
                           "acceptedCount": 1,
                           "totalScore": 35,
                           "maxScore": 100,
-                          "weaknessSeeds": ["binary_search: A 星港间距 得分 35/100"],
+                          "weaknessSeeds": ["A 星港间距：最佳状态 WRONG_ANSWER，得分 35/100，标签 binary_search, greedy"],
                           "problems": [
                             {
                               "label": "A",
@@ -102,6 +185,7 @@ class StudentPostmortemAnalysisServiceTest {
                               "bestStatus": "WRONG_ANSWER",
                               "bestScore": 35,
                               "maxScore": 100,
+                              "submissionCount": 3,
                               "tags": ["binary_search", "greedy"]
                             }
                           ]

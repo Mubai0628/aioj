@@ -20,8 +20,11 @@ import java.util.Map;
 public class SandboxExecutionClient {
     private static final int DEFAULT_STDOUT_BASE_COLLECT_LIMIT_BYTES = 64 * 1024;
     private static final int DEFAULT_STDERR_COLLECT_LIMIT_BYTES = 64 * 1024;
-    private static final int DEFAULT_SCRIPT_TARGET_CASE_COUNT = 3;
-    private static final int MAX_SCRIPT_TARGET_CASE_COUNT = 20;
+    /** Hidden testcase validation is intentionally exhaustive: every generated
+     * input must be verified and packaged. These values remain only for binary
+     * compatibility with older callers; they no longer truncate official data. */
+    private static final int DEFAULT_SCRIPT_TARGET_CASE_COUNT = Integer.MAX_VALUE;
+    private static final int MAX_SCRIPT_TARGET_CASE_COUNT = Integer.MAX_VALUE;
     private static final String COLLECT_MODE_PAIRED = "PAIRED";
     private static final String COLLECT_MODE_OFFICIAL_INPUTS = "OFFICIAL_INPUTS";
     private static final String COLLECT_MODE_OFFICIAL_PACKAGE = "OFFICIAL_PACKAGE";
@@ -71,12 +74,12 @@ public class SandboxExecutionClient {
         Long runTimeMs = nanosToMillis(result.runTime());
         String stderr = fileContent(result, "stderr");
         if (!"Accepted".equals(result.status())) {
-            return CompileOutcome.failed(firstText(stderr, result.error(), result.status()), timeMs, memoryKb,
-                    stderr, result.exitStatus(), runTimeMs, result.procPeak());
+            return CompileOutcome.failed(result.status(), firstText(stderr, result.error(), result.status()), timeMs,
+                    memoryKb, stderr, result.exitStatus(), runTimeMs, result.procPeak());
         }
         String fileId = result.fileIds() == null ? null : result.fileIds().get(lang.executableName());
         if (!StringUtils.hasText(fileId)) {
-            return CompileOutcome.failed("Compile succeeded but sandbox did not return cached fileId",
+            return CompileOutcome.failed("Internal Error", "Compile succeeded but sandbox did not return cached fileId",
                     timeMs, memoryKb, stderr, result.exitStatus(), runTimeMs, result.procPeak());
         }
         return CompileOutcome.success(fileId, timeMs, memoryKb, stderr, result.exitStatus(), runTimeMs,
@@ -269,14 +272,14 @@ public class SandboxExecutionClient {
                 files = {}
                 if collect_mode == 'OFFICIAL_INPUTS':
                     official_inputs = [name for name in input_names if not is_stress_case(name)]
-                    for name in official_inputs[:target_case_count]:
+                    for name in official_inputs:
                         for suffix in ('.in', '.out'):
                             if suffix not in parts[name]:
                                 continue
                             relative, path = parts[name][suffix]
                             files[relative] = bounded_text(path)
                 else:
-                    for name in pair_names[:target_case_count]:
+                    for name in pair_names:
                         for suffix in ('.in', '.out'):
                             relative, path = parts[name][suffix]
                             files[relative] = bounded_text(path)
@@ -480,12 +483,18 @@ public class SandboxExecutionClient {
                     scan_root = '.'
                     generated_input_count, generated_output_count = count_generated(Path('.'), Path('.'))
 
-                if len(inputs) < TARGET_CASE_COUNT:
+                if not inputs:
                     write_package('FAILED', 'GENERATOR_MISSING_INPUTS',
-                                  f'testcaseGeneratorPython generated {len(inputs)} official .in cases, expected at least {TARGET_CASE_COUNT}',
+                                  'testcaseGeneratorPython generated no official .in cases',
                                   scan_root=scan_root, generated_input_count=generated_input_count,
                                   generated_output_count=generated_output_count)
                     sys.exit(0)
+
+                # Auxiliary stress_small_* inputs are used only for optional
+                # cross-checking and are not official hidden test cases. The
+                # coverage denominator must describe the exact set that will
+                # be packaged and verified below.
+                generated_input_count = len(inputs)
 
                 compile_result = compile_standard()
                 if compile_result is not None and compile_result.returncode != 0:
@@ -501,7 +510,10 @@ public class SandboxExecutionClient {
 
                 cases = []
                 total_bytes = 0
-                for index, (key, relative, input_path) in enumerate(inputs[:TARGET_CASE_COUNT], 1):
+                # Exhaustive validation is a hard correctness invariant. Never
+                # slice this collection: generatedInputCount must equal the
+                # number of verified and packaged cases.
+                for index, (key, relative, input_path) in enumerate(inputs, 1):
                     input_size = input_path.stat().st_size
                     if input_size > MAX_CASE_BYTES:
                         write_package('FAILED', 'GENERATOR_CASE_TOO_LARGE',
@@ -561,6 +573,15 @@ public class SandboxExecutionClient {
                         'message': 'Accepted'
                     })
 
+                # A successful package is exhaustive: every discovered input
+                # must have been executed and materialized into the package.
+                if len(cases) != len(inputs) or len(cases) != generated_input_count:
+                    write_package('FAILED', 'HIDDEN_CASE_COVERAGE_INCOMPLETE',
+                                  f'generated={generated_input_count}, candidates={len(inputs)}, verified={len(cases)}',
+                                  cases=cases, scan_root=scan_root,
+                                  generated_input_count=generated_input_count,
+                                  generated_output_count=generated_output_count)
+                    sys.exit(0)
                 manifest_json = json.dumps(manifest_for(cases), ensure_ascii=False, separators=(',', ':'))
                 (package_root / 'manifest.json').write_text(manifest_json, encoding='utf-8')
                 with zipfile.ZipFile(OUTPUT_ZIP, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
@@ -790,6 +811,7 @@ public class SandboxExecutionClient {
     }
 
     public record CompileOutcome(boolean failed,
+                                 String sandboxStatus,
                                  String fileId,
                                  String message,
                                  Long timeMillis,
@@ -800,19 +822,36 @@ public class SandboxExecutionClient {
                                  Integer procPeak) {
         public CompileOutcome(boolean failed, String fileId, String message, Long timeMillis, Long memoryKb,
                               String stderr, Integer exitStatus, Long runTimeMillis) {
-            this(failed, fileId, message, timeMillis, memoryKb, stderr, exitStatus, runTimeMillis, null);
+            this(failed, failed ? null : "Accepted", fileId, message, timeMillis, memoryKb, stderr,
+                    exitStatus, runTimeMillis, null);
+        }
+
+        public CompileOutcome(boolean failed, String fileId, String message, Long timeMillis, Long memoryKb,
+                              String stderr, Integer exitStatus, Long runTimeMillis, Integer procPeak) {
+            this(failed, failed ? null : "Accepted", fileId, message, timeMillis, memoryKb, stderr,
+                    exitStatus, runTimeMillis, procPeak);
         }
 
         static CompileOutcome success(String fileId, Long timeMillis, Long memoryKb, String stderr,
                                       Integer exitStatus, Long runTimeMillis, Integer procPeak) {
-            return new CompileOutcome(false, fileId, "Accepted", timeMillis, memoryKb, stderr,
+            return new CompileOutcome(false, "Accepted", fileId, "Accepted", timeMillis, memoryKb, stderr,
                     exitStatus, runTimeMillis, procPeak);
         }
 
-        static CompileOutcome failed(String message, Long timeMillis, Long memoryKb, String stderr,
+        static CompileOutcome failed(String sandboxStatus, String message, Long timeMillis, Long memoryKb, String stderr,
                                      Integer exitStatus, Long runTimeMillis, Integer procPeak) {
-            return new CompileOutcome(true, null, message, timeMillis, memoryKb, stderr,
+            return new CompileOutcome(true, sandboxStatus, null, message, timeMillis, memoryKb, stderr,
                     exitStatus, runTimeMillis, procPeak);
+        }
+
+        static CompileOutcome failed(String sandboxStatus, String message, Long timeMillis, Long memoryKb, String stderr,
+                                     Integer exitStatus, Long runTimeMillis) {
+            return failed(sandboxStatus, message, timeMillis, memoryKb, stderr, exitStatus, runTimeMillis, null);
+        }
+
+        static CompileOutcome success(String fileId, Long timeMillis, Long memoryKb, String stderr,
+                                      Integer exitStatus, Long runTimeMillis) {
+            return success(fileId, timeMillis, memoryKb, stderr, exitStatus, runTimeMillis, null);
         }
     }
 

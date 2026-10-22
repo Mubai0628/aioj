@@ -23,6 +23,15 @@ docs/en/                    English design documents
 archive/                    本机私有资料，Git 忽略
 ```
 
+### 近期功能迭代
+
+- 学生首页个性化推荐：结合日常提交记录与学习画像信号，排除已通过和比赛提交。
+- 题库自然语言检索：题目索引 + Embedding 相似度，Embedding 不可用时退回关键词检索。
+- 比赛个人复盘：确定性命中项 + AI 组织成中文复盘，AI 失败时保留规则结果。
+- 学习画像证据展示：按提交聚合证据，过滤内部字段，并提供 Tutor 交接入口。
+
+实现范围、接口、数据库迁移、验证方式与当前限制见[功能交接说明](docs/yuhao-aioj-feature-handoff.md)。
+
 ### 构建与验证
 
 ```powershell

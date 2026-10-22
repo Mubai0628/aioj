@@ -1,3 +1,4 @@
+//服务端查询和分页逻辑,真正执行查询和业务计算
 package com.aioj.next.problem.domain;
 
 import com.aioj.next.common.api.PageResponse;
@@ -50,11 +51,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SubmissionService {
     private static final Logger log = LoggerFactory.getLogger(SubmissionService.class);
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("java", "cpp", "python");
+    private static final int SUBMISSION_RATE_LIMIT = 30;
+    private static final long SUBMISSION_RATE_WINDOW_SECONDS = 60;
+    private final ConcurrentHashMap<Long, RateWindow> submissionRateWindows = new ConcurrentHashMap<>();
     private static final ZoneId ZONE = ZoneId.systemDefault();
 
     private final ProblemCatalog problemCatalog;
@@ -113,6 +119,18 @@ public class SubmissionService {
         } else if (request.contestProblemId() != null) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Contest is required for contest problem submissions");
         }
+        String idempotencyKey = normalizeIdempotencyKey(metadata == null ? null : metadata.idempotencyKey());
+        if (idempotencyKey != null) {
+            SubmissionEntity existing = submissionMapper.selectOne(new LambdaQueryWrapper<SubmissionEntity>()
+                    .eq(SubmissionEntity::getUserId, userId)
+                    .eq(SubmissionEntity::getIdempotencyKey, scopedIdempotencyKey(userId, idempotencyKey))
+                    .last("LIMIT 1"));
+            if (existing != null) {
+                assertSameRequest(existing, request, language, contestContext);
+                return toResponse(existing, false, false);
+            }
+        }
+        enforceSubmissionRateLimit(userId, now);
         SubmissionEntity submission = new SubmissionEntity();
         submission.setProblemId(request.problemId());
         submission.setUserId(userId);
@@ -126,6 +144,7 @@ public class SubmissionService {
         submission.setVisibleToParticipant(true);
         submission.setLanguage(language);
         submission.setCode(request.code());
+        submission.setIdempotencyKey(idempotencyKey == null ? null : scopedIdempotencyKey(userId, idempotencyKey));
         submission.setStatus(SubmissionStatus.QUEUED);
         submission.setJudgeMessage("Queued for judging");
         submission.setRetryCount(0);
@@ -145,6 +164,22 @@ public class SubmissionService {
                 language, TraceIds.current(), effectiveTimeLimitMillis, memoryLimitKb));
         return toResponse(submission, false, false);
     }
+
+    private void enforceSubmissionRateLimit(Long userId, Instant now) {
+        RateWindow updated = submissionRateWindows.compute(userId, (key, current) -> {
+            long epoch = now.getEpochSecond();
+            if (current == null || epoch - current.windowStart >= SUBMISSION_RATE_WINDOW_SECONDS) {
+                return new RateWindow(epoch, 1);
+            }
+            return new RateWindow(current.windowStart, current.count + 1);
+        });
+        if (updated.count > SUBMISSION_RATE_LIMIT) {
+            throw new DomainException(ErrorCode.TOO_MANY_REQUESTS,
+                    "Submission rate limit exceeded; please wait before submitting again");
+        }
+    }
+
+    private record RateWindow(long windowStart, int count) {}
 
     public SubmissionResponse get(Long id) {
         SubmissionEntity submission = submissionMapper.selectById(id);
@@ -329,6 +364,35 @@ public class SubmissionService {
         return language.trim().toLowerCase(Locale.ROOT);
     }
 
+    private String normalizeIdempotencyKey(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.length() > 96) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "Idempotency-Key is too long");
+        }
+        return normalized;
+    }
+
+    private String scopedIdempotencyKey(Long userId, String key) {
+        return userId + ":" + key;
+    }
+
+    private void assertSameRequest(SubmissionEntity existing, SubmissionCreateRequest request,
+                                   String language, ContestSubmissionContext contestContext) {
+        boolean same = Objects.equals(existing.getProblemId(), request.problemId())
+                && Objects.equals(existing.getLanguage(), language)
+                && Objects.equals(existing.getCode(), request.code())
+                && Objects.equals(existing.getContestId(), contestContext == null ? null : contestContext.contest().getId())
+                && Objects.equals(existing.getContestRunId(), contestContext == null || contestContext.contestRun() == null
+                ? null : contestContext.contestRun().getId())
+                && Objects.equals(existing.getContestProblemId(), contestContext == null ? null : contestContext.contestProblem().getId());
+        if (!same) {
+            throw new DomainException(ErrorCode.CONFLICT, "Idempotency-Key was already used for a different submission");
+        }
+    }
+
     private String normalizeOptionalLanguage(String language) {
         if (!StringUtils.hasText(language)) {
             return null;
@@ -369,7 +433,8 @@ public class SubmissionService {
                 submission.getContestId(), submission.getContestRunId(), submission.getContestProblemId(), submission.getContestParticipantId(),
                 submission.getSubmittedAtContestMillis(), !Boolean.FALSE.equals(submission.getVisibleToParticipant()),
                 submission.getLanguage(), includeCode ? submission.getCode() : null,
-                submission.getStatus(), submission.getJudgeMessage(),
+                submission.getStatus(), submission.getJudgePhase(), submission.getSandboxStatus(),
+                submission.getJudgeMessage(),
                 submission.getTimeMillis(), submission.getMemoryKb(),
                 includeCode ? submission.getStdoutExcerpt() : null,
                 includeCode ? submission.getStderrExcerpt() : null,
@@ -389,9 +454,10 @@ public class SubmissionService {
                 .map(result -> new SubmissionCaseResultResponse(result.getId(), result.getSubmissionId(),
                         result.getContestId(), result.getContestProblemId(), result.getContestParticipantId(),
                         result.getTestcasePackageId(), result.getCaseId(), result.getCaseIndex(),
-                        result.getCaseName(), result.getSubtaskKey(), result.getStatus(), result.getScore(),
+                        result.getCaseName(), result.getSubtaskKey(), result.getStatus(),
+                        result.getJudgePhase(), result.getSandboxStatus(), result.getScore(),
                         result.getMaxScore(), result.getTimeMillis(), result.getMemoryKb(), result.getMessage(),
-                        result.getCreatedAt()))
+                        result.getCreatedAt(), result.getSample()))
                 .toList();
     }
 

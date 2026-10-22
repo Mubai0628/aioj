@@ -72,6 +72,12 @@ aioj:
     max-draft-package-entries: ${JUDGE_MAX_DRAFT_PACKAGE_ENTRIES:500}
     max-draft-package-cases: ${JUDGE_MAX_DRAFT_PACKAGE_CASES:200}
     max-draft-package-run-millis: ${JUDGE_MAX_DRAFT_PACKAGE_RUN_MILLIS:540000}
+    compile-memory-multiplier: ${JUDGE_COMPILE_MEMORY_MULTIPLIER:2}
+    cpp-compile-min-memory-kb: ${JUDGE_CPP_COMPILE_MIN_MEMORY_KB:262144}
+    java-compile-min-memory-kb: ${JUDGE_JAVA_COMPILE_MIN_MEMORY_KB:524288}
+    checker-compile-min-memory-kb: ${JUDGE_CHECKER_COMPILE_MIN_MEMORY_KB:262144}
+    compile-time-multiplier: ${JUDGE_COMPILE_TIME_MULTIPLIER:10}
+    compile-max-time-millis: ${JUDGE_COMPILE_MAX_TIME_MILLIS:60000}
 
 management:
   endpoints:

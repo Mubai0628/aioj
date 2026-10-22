@@ -145,40 +145,66 @@ public class StudentPostmortemAnalysisService {
         }
         try {
             JsonNode root = objectMapper.readTree(request.statisticsJson());
-            List<StudentPostmortemWeaknessSuggestion> suggestions = new ArrayList<>();
-            Set<String> seen = new LinkedHashSet<>();
+            JsonNode problems = root.path("problems");
+            if (!problems.isArray()) {
+                return List.of();
+            }
+
+            List<String> seedTexts = new ArrayList<>();
             JsonNode seeds = root.path("weaknessSeeds");
             if (seeds.isArray()) {
                 for (JsonNode seed : seeds) {
-                    addSeedSuggestion(suggestions, seen, seed.asText(), 0.76);
+                    String value = seed.asText("");
+                    if (StringUtils.hasText(value)) {
+                        seedTexts.add(value);
+                    }
                 }
             }
-            JsonNode problems = root.path("problems");
-            if (problems.isArray()) {
-                for (JsonNode problem : problems) {
-                    String label = problem.path("label").asText("");
-                    String title = problem.path("title").asText("");
-                    String status = problem.path("bestStatus").asText("");
-                    if (isAcm(request)) {
-                        if (!"ACCEPTED".equals(status)) {
-                            List<String> tags = readTags(problem.path("tags"));
-                            int attempts = problem.path("submissionCount").asInt(0);
-                            addSuggestion(suggestions, seen,
-                                    "%s %s：最佳状态 %s，提交 %d 次".formatted(label, title, status, attempts),
-                                    tags,
-                                    attempts >= 3 ? 0.80 : 0.72);
-                        }
-                        continue;
-                    }
-                    double best = problem.path("bestScore").asDouble(0);
-                    double max = problem.path("maxScore").asDouble(0);
-                    if (!"ACCEPTED".equals(status) || (max > 0 && best / max < 0.7)) {
+
+            List<StudentPostmortemWeaknessSuggestion> suggestions = new ArrayList<>();
+            Set<String> seen = new LinkedHashSet<>();
+            for (JsonNode problem : problems) {
+                int attempts = problem.path("submissionCount").asInt(0);
+                if (attempts <= 0) {
+                    continue;
+                }
+
+                String label = problem.path("label").asText("");
+                String title = problem.path("title").asText("");
+                String status = problem.path("bestStatus").asText("");
+                String prefix = "%s %s：".formatted(label, title);
+                String matchingSeed = seedTexts.stream()
+                        .filter(seed -> seed.startsWith(prefix))
+                        .findFirst()
+                        .orElse(null);
+
+                if (isAcm(request)) {
+                    if (!"ACCEPTED".equals(status) || matchingSeed != null) {
                         List<String> tags = readTags(problem.path("tags"));
-                        addSuggestion(suggestions, seen,
-                                "%s %s：最佳状态 %s，得分 %.2f/%.2f".formatted(label, title, status, best, max),
-                                tags,
-                                max > 0 && best / max < 0.4 ? 0.82 : 0.72);
+                        String evidence = matchingSeed != null ? matchingSeed
+                                : "%s %s：最佳状态 %s，提交 %d 次".formatted(label, title, status, attempts);
+                        String symptom = "ACCEPTED".equals(status)
+                                ? "最终通过，但提交过程仍值得复盘"
+                                : "提交后仍未通过";
+                        addSuggestion(suggestions, seen, symptom, evidence, tags,
+                                attempts >= 3 ? 0.80 : 0.72);
                     }
+                    continue;
+                }
+
+                double best = problem.path("bestScore").asDouble(0);
+                double max = problem.path("maxScore").asDouble(0);
+                if (!"ACCEPTED".equals(status)
+                        || (max > 0 && best / max < 0.7)
+                        || matchingSeed != null) {
+                    List<String> tags = readTags(problem.path("tags"));
+                    String evidence = matchingSeed != null ? matchingSeed
+                            : "%s %s：最佳状态 %s，得分 %.2f/%.2f".formatted(label, title, status, best, max);
+                    String symptom = "ACCEPTED".equals(status)
+                            ? "最终通过，但得分或提交过程仍值得复盘"
+                            : "提交后仍未通过";
+                    addSuggestion(suggestions, seen, symptom, evidence, tags,
+                            max > 0 && best / max < 0.4 ? 0.82 : 0.72);
                 }
             }
             return suggestions.stream().limit(8).toList();
@@ -186,47 +212,21 @@ public class StudentPostmortemAnalysisService {
             return List.of();
         }
     }
-
     private void addSuggestion(List<StudentPostmortemWeaknessSuggestion> suggestions, Set<String> seen,
-                               String evidence, List<String> tags, double confidence) {
-        String normalized = summarize(evidence, 220);
-        if (!StringUtils.hasText(normalized) || !seen.add(normalized)) {
+                            String symptom, String evidence, List<String> tags, double confidence) {
+        String normalizedSymptom = summarize(symptom, 220);
+        String normalizedEvidence = summarize(evidence, 220);
+        if (!StringUtils.hasText(normalizedSymptom)
+                || !StringUtils.hasText(normalizedEvidence)
+                || !seen.add(normalizedEvidence)) {
             return;
         }
         String knowledgeNode = tags == null || tags.isEmpty() ? "赛后复盘薄弱点" : tags.get(0);
         suggestions.add(new StudentPostmortemWeaknessSuggestion(
                 knowledgeNode,
-                normalized,
+                normalizedSymptom,
                 tags == null ? List.of() : tags,
-                List.of(normalized),
-                confidence
-        ));
-    }
-
-    private void addSeedSuggestion(List<StudentPostmortemWeaknessSuggestion> suggestions, Set<String> seen,
-                                   String evidence, double confidence) {
-        String normalized = summarize(evidence, 220);
-        if (!StringUtils.hasText(normalized) || !seen.add(normalized)) {
-            return;
-        }
-        String knowledgeNode = "赛后复盘薄弱点";
-        List<String> tags = List.of();
-        int separator = normalized.indexOf(':');
-        if (separator < 0) {
-            separator = normalized.indexOf('：');
-        }
-        if (separator > 0) {
-            String candidate = normalized.substring(0, separator).trim();
-            if (StringUtils.hasText(candidate) && candidate.length() <= 80) {
-                knowledgeNode = candidate;
-                tags = List.of(candidate);
-            }
-        }
-        suggestions.add(new StudentPostmortemWeaknessSuggestion(
-                knowledgeNode,
-                normalized,
-                tags,
-                List.of(normalized),
+                List.of(normalizedEvidence),
                 confidence
         ));
     }

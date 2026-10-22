@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Bot, CheckCircle2, ListChecks, Send } from "lucide-react";
@@ -12,15 +13,21 @@ import { readableJudgeMessage } from "../lib/readableError";
 export function DashboardView() {
   const { t } = useI18n();
   const { profile } = useAuth();
-  const problemsQuery = useQuery({ queryKey: ["problems", "dashboard"], queryFn: () => api.problems({ page: 1, pageSize: 6 }) });
+  const problemsQuery = useQuery({queryKey: ["problems", "dashboard"],queryFn: () => api.problems({ page: 1, pageSize: 20 })});
   const submissionsQuery = useQuery({ queryKey: ["submissions", "mine", "dashboard"], queryFn: () => api.mySubmissions({ page: 1, pageSize: 8 }) });
-  const usageQuery = useQuery({ queryKey: ["ai", "usage"], queryFn: () => api.usage(), retry: 0 });
-
+  const usageQuery = useQuery({ queryKey: ["ai", "usage"], queryFn: () => api.usage(), retry: 0});
+  const recommendationsQuery = useQuery({
+  queryKey: ["tutor", "recommendations", "dashboard"],
+  queryFn: () => api.tutorRecommendations({ limit: 6 })
+  });
   const submissions = submissionsQuery.data?.records ?? [];
-  const accepted = submissions.filter((item) => item.status === "ACCEPTED").length;
+  const acceptedQuery = useQuery({                            // ← 新增：真实的"已通过"总数
+    queryKey: ["submissions", "mine", "accepted-count"],
+    queryFn: () => api.mySubmissions({ page: 1, pageSize: 1, mine: true, status: "ACCEPTED" })
+  });
   const latest = submissions[0];
   const aiUsage = usageQuery.data ? normalizeAiUsage(usageQuery.data) : null;
-
+  const recommendations = recommendationsQuery.data ?? [];
   return (
     <div className="mx-auto flex max-w-[1500px] flex-col gap-6 px-4 py-5 md:px-8">
       <PageSection
@@ -48,7 +55,7 @@ export function DashboardView() {
       <section className="grid gap-4 md:grid-cols-3">
         <Metric icon={<ListChecks className="size-4" />} label={t("dashboard.problemsAvailable")} value={problemsQuery.data?.total ?? "--"} />
         <Metric icon={<Send className="size-4" />} label={t("dashboard.mySubmissions")} value={submissionsQuery.data?.total ?? "--"} />
-        <Metric icon={<CheckCircle2 className="size-4" />} label={t("dashboard.accepted")} value={accepted} />
+        <Metric icon={<CheckCircle2 className="size-4" />} label={t("dashboard.accepted")} value={acceptedQuery.data?.total ?? "--"} />
       </section>
 
       <section className="grid min-h-0 gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.7fr)]">
@@ -63,30 +70,52 @@ export function DashboardView() {
             </Button>
           </div>
           <div className="divide-y divide-[var(--oj-border-soft)]">
-            {problemsQuery.isLoading ? Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="p-4"><SkeletonBlock className="h-14" /></div>
-            )) : problemsQuery.isError ? (
-              <div className="p-5"><ErrorPanel title={t("problems.loadFailed")} /></div>
-            ) : problemsQuery.data?.records.length ? problemsQuery.data.records.map((problem) => (
+            {recommendationsQuery.isLoading ? Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="p-4">
+                <SkeletonBlock className="h-14" />
+              </div>
+            )) : recommendationsQuery.isError ? (
+              <div className="p-5">
+                <ErrorPanel title={t("problems.loadFailed")} />
+              </div>
+            ) : recommendations.length ? recommendations.map(({ problem, reason }) => (
               <Link
-                key={problem.id}
+                key={problem.problemId}
                 to="/problems/$problemId"
-                params={{ problemId: problem.id }}
+                params={{ problemId: problem.problemId }}
                 className="block px-5 py-4 outline-none transition-colors hover:bg-[var(--oj-surface-muted)] focus-visible:ring-2 focus-visible:ring-[var(--oj-focus)]"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-[var(--oj-ink)]">{problem.title}</h3>
+                    <h3 className="truncate text-sm font-semibold text-[var(--oj-ink)]">
+                      {problem.title}
+                    </h3>
+
+                    <p className="mt-1 text-xs text-[var(--oj-ink-muted)]">
+                      {reason}
+                    </p>
+
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <Badge tone={difficultyTone(problem.difficulty)}>{t(`difficulty.${problem.difficulty}`)}</Badge>
-                      {problem.tags.slice(0, 3).map((tag) => <Badge key={tag}>{tag}</Badge>)}
+                      <Badge tone={difficultyTone(problem.difficulty)}>
+                        {t(`difficulty.${problem.difficulty}`)}
+                      </Badge>
+
+                      {problem.tags.slice(0, 3).map((tag) => (
+                        <Badge key={tag}>{tag}</Badge>
+                      ))}
                     </div>
                   </div>
-                  <span className="text-sm font-medium text-[var(--oj-primary)]">{t("dashboard.practice")}</span>
+
+                  <span className="text-sm font-medium text-[var(--oj-primary)]">
+                    {t("dashboard.practice")}
+                  </span>
                 </div>
               </Link>
             )) : (
-              <EmptyState title={t("dashboard.noRecommendedTitle")} description={t("dashboard.noRecommendedDesc")} />
+              <EmptyState
+                title={t("dashboard.noRecommendedTitle")}
+                description={t("dashboard.noRecommendedDesc")}
+              />
             )}
           </div>
         </div>

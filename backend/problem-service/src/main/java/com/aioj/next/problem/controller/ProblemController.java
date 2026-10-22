@@ -1,3 +1,4 @@
+//调用API接口的Controller,推荐信号接口建议放在 ProblemController，因为它服务的是“题目推荐”，但内部可以调用提交查询逻辑。
 package com.aioj.next.problem.controller;
 
 import com.aioj.next.common.api.ApiResponse;

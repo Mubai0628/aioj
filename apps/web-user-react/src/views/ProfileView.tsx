@@ -4,6 +4,7 @@ import { AlertTriangle, Ban, CheckCircle2, ChevronDown, Download, Eye, EyeOff, P
 import { ApiError, api, type AiLearningProfileEvidenceResponse, type AiLearningProfileResponse, type AiMemoryCandidateActionPayload, type AiMemoryCandidateResponse, type AiMemoryCategory, type AiMemoryReviewDetailResponse, type AiMemoryReviewListItemResponse, type BinaryFileResponse, type EntityId } from "@aioj/api-client";
 import { Badge, Button, cn } from "@aioj/ui-react";
 import { ConfirmDialog, EmptyState, ErrorPanel, Field, LoadingPanel, PageSection, inputClass, textareaClass } from "../components/Common";
+import { SubmissionDetailDialog } from "../components/SubmissionDetailDialog";
 import { useAuth } from "../lib/auth";
 import { formatDateTime } from "../lib/format";
 import { useI18n } from "../lib/i18n";
@@ -202,6 +203,180 @@ function displaySafeEvidence(value?: string | null) {
     if (line) kept.push(line);
   }
   return kept.join("\n");
+}
+
+type LearningProfileEvidenceGroup = {
+  key: string;
+  sourceId?: string | null;
+  sourceTypes: string[];
+  evidenceTypes: string[];
+  summaries: Array<{ text: string; count: number }>;
+  confidence?: number | null;
+  createdAt?: string | null;
+};
+
+function groupLearningProfileEvidence(evidence: AiLearningProfileEvidenceResponse[]): LearningProfileEvidenceGroup[] {
+  const groups = new Map<string, LearningProfileEvidenceGroup>();
+  for (const item of evidence) {
+    const sourceId = item.sourceId == null ? null : String(item.sourceId);
+    const key = sourceId ? `submission:${sourceId}` : `evidence:${item.id}`;
+    const summary = displaySafeEvidence(item.summary) || "";
+    const group = groups.get(key) ?? {
+      key,
+      sourceId,
+      sourceTypes: [],
+      evidenceTypes: [],
+      summaries: [],
+      confidence: null,
+      createdAt: item.createdAt
+    };
+    if (!group.sourceTypes.includes(item.sourceType)) group.sourceTypes.push(item.sourceType);
+    if (!group.evidenceTypes.includes(item.evidenceType)) group.evidenceTypes.push(item.evidenceType);
+    if (summary) {
+      const existing = group.summaries.find((candidate) => candidate.text === summary);
+      if (existing) existing.count += 1;
+      else group.summaries.push({ text: summary, count: 1 });
+    }
+    if (item.confidence != null && (group.confidence == null || item.confidence > group.confidence)) {
+      group.confidence = item.confidence;
+    }
+    groups.set(key, group);
+  }
+  return Array.from(groups.values());
+}
+
+function learningEvidenceTypeLabel(value: string) {
+  switch (value) {
+    case "SUBMISSION_ANALYSIS":
+      return "提交分析";
+    case "PROFILE_SIGNAL":
+      return "学习信号";
+    default:
+      return value;
+  }
+}
+
+function learningEvidenceSourceLabel(value: string) {
+  switch (value) {
+    case "SUBMISSION":
+      return "提交";
+    case "JUDGED_SUBMISSION":
+      return "判题提交";
+    default:
+      return value;
+  }
+}
+
+function isSubmissionEvidenceSource(value: string) {
+  return value === "SUBMISSION" || value === "JUDGED_SUBMISSION";
+}
+
+type ParsedLearningEvidence = {
+  submissionId: string;
+  status: string;
+  language: string;
+  rootCauseTags: string[];
+  algorithmTags: string[];
+  bugPatternTags: string[];
+  complexityTags: string[];
+  structuredSummary: string;
+  nextSteps: string;
+  evidenceItems: string;
+  judgeMessage: string;
+  fallback: string;
+};
+
+function splitLearningTags(value: string) {
+  return value.split(/[,，]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function learningTagLabel(value: string) {
+  return value.replaceAll("_", " ");
+}
+
+function learningStatusLabel(value: string) {
+  switch (value) {
+    case "ACCEPTED":
+      return "通过";
+    case "WRONG_ANSWER":
+      return "答案错误";
+    case "COMPILE_ERROR":
+      return "编译错误";
+    case "RUNTIME_ERROR":
+      return "运行错误";
+    case "TIME_LIMIT_EXCEEDED":
+      return "超时";
+    case "MEMORY_LIMIT_EXCEEDED":
+      return "内存超限";
+    default:
+      return value.replaceAll("_", " ");
+  }
+}
+
+function parseLearningEvidence(value: string): ParsedLearningEvidence {
+  const parsed: ParsedLearningEvidence = {
+    submissionId: "",
+    status: "",
+    language: "",
+    rootCauseTags: [],
+    algorithmTags: [],
+    bugPatternTags: [],
+    complexityTags: [],
+    structuredSummary: "",
+    nextSteps: "",
+    evidenceItems: "",
+    judgeMessage: "",
+    fallback: ""
+  };
+  const fallback: string[] = [];
+  for (const line of displaySafeEvidence(value).split("\n")) {
+    const separator = line.indexOf("=");
+    if (separator <= 0) {
+      if (line.trim()) fallback.push(line.trim());
+      continue;
+    }
+    const key = line.slice(0, separator).trim();
+    const item = line.slice(separator + 1).trim();
+    switch (key) {
+      case "submission":
+        parsed.submissionId = item;
+        break;
+      case "status":
+        parsed.status = item;
+        break;
+      case "language":
+        parsed.language = item;
+        break;
+      case "rootCauseTags":
+        parsed.rootCauseTags = splitLearningTags(item);
+        break;
+      case "algorithmTags":
+        parsed.algorithmTags = splitLearningTags(item);
+        break;
+      case "bugPatternTags":
+        parsed.bugPatternTags = splitLearningTags(item);
+        break;
+      case "complexityTags":
+        parsed.complexityTags = splitLearningTags(item);
+        break;
+      case "structuredSummary":
+        parsed.structuredSummary = item;
+        break;
+      case "nextSteps":
+        parsed.nextSteps = item;
+        break;
+      case "evidenceItems":
+        parsed.evidenceItems = item;
+        break;
+      case "judgeMessage":
+        parsed.judgeMessage = item;
+        break;
+      default:
+        break;
+    }
+  }
+  parsed.fallback = fallback.join("\n");
+  return parsed;
 }
 
 export function ProfileView() {
@@ -1136,6 +1311,21 @@ function LearningProfileCard({
   onDelete: () => void;
 }) {
   const { t } = useI18n();
+  const [selectedSubmissionId, setSelectedSubmissionId] = React.useState<EntityId | null>(null);
+  const evidenceGroups = React.useMemo(() => groupLearningProfileEvidence(evidence), [evidence]);
+  const evidenceOverview = React.useMemo(() => {
+    const details = evidenceGroups.flatMap((group) => group.summaries.map((summary) => parseLearningEvidence(summary.text)));
+    const tags = details.flatMap((detail) => [
+      ...detail.rootCauseTags,
+      ...detail.algorithmTags,
+      ...detail.bugPatternTags,
+      ...detail.complexityTags
+    ]).filter((tag, index, values) => values.indexOf(tag) === index).slice(0, 6);
+    const wrongAnswerCount = evidenceGroups.filter((group) =>
+      group.summaries.some((summary) => parseLearningEvidence(summary.text).status === "WRONG_ANSWER")
+    ).length;
+    return { tags, wrongAnswerCount };
+  }, [evidenceGroups]);
   const state = normalizedState(profile);
   const canSetActive = state === "CANDIDATE" || state === "RESOLVED" || state === "SUPERSEDED";
   const canMarkMastered = state !== "RESOLVED";
@@ -1209,25 +1399,106 @@ function LearningProfileCard({
           </div>
           {evidenceLoading ? <LoadingPanel label={t("profile.loading")} /> : null}
           {evidenceError ? <ErrorPanel title={t("profile.learningProfileEvidenceFailed")} /> : null}
-          {!evidenceLoading && !evidenceError && evidence.length ? (
+          {!evidenceLoading && !evidenceError && evidenceGroups.length ? (
             <div className="space-y-3">
-              {evidence.map((item) => (
-                <div key={item.id} className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone="neutral">{item.evidenceType}</Badge>
-                    <span className="text-xs text-[var(--oj-ink-muted)]">{item.sourceType}{item.sourceId ? ` #${item.sourceId}` : ""}</span>
-                    {item.confidence != null ? <span className="text-xs tabular-nums text-[var(--oj-ink-muted)]">{item.confidence.toFixed(2)}</span> : null}
-                    <span className="text-xs text-[var(--oj-ink-soft)]">{formatDateTime(item.createdAt)}</span>
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--oj-ink-muted)]">{displaySafeEvidence(item.summary) || t("profile.learningProfileEvidenceRedacted")}</p>
+              <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-amber-950">这条画像关联了 {evidenceGroups.length} 次提交</p>
+                  <Badge tone="amber">{evidenceGroups.length} 次提交</Badge>
                 </div>
-              ))}
+                <p className="mt-1 text-sm leading-6 text-amber-950">
+                  {evidenceOverview.wrongAnswerCount ? `${evidenceOverview.wrongAnswerCount} 次提交返回答案错误。` : "这些提交都被纳入了这条画像的证据。"}
+                  {evidenceOverview.tags.length ? ` 重点关注：${evidenceOverview.tags.map(learningTagLabel).join("、")}。` : ""}
+                </p>
+              </div>
+              <details className="rounded-xl border border-[var(--oj-border-soft)] bg-white px-4 py-3">
+                <summary className="cursor-pointer text-sm font-semibold text-[var(--oj-ink)]">展开每次提交的判断与下一步</summary>
+                <div className="mt-3 space-y-3">
+                {evidenceGroups.map((group) => (
+                <div key={group.key} className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="neutral">{group.evidenceTypes.map(learningEvidenceTypeLabel).join(" / ")}</Badge>
+                    <span className="text-xs text-[var(--oj-ink-muted)]">
+                      {group.sourceTypes.map(learningEvidenceSourceLabel).join(" / ")}
+                      {group.sourceId ? ` #${group.sourceId}` : ""}
+                    </span>
+                    {group.confidence != null ? <span className="text-xs tabular-nums text-[var(--oj-ink-muted)]">{group.confidence.toFixed(2)}</span> : null}
+                    <span className="text-xs text-[var(--oj-ink-soft)]">{formatDateTime(group.createdAt)}</span>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {group.summaries.length ? group.summaries.map((summary) => {
+                      const detail = parseLearningEvidence(summary.text);
+                      const tags = [
+                        ...detail.rootCauseTags,
+                        ...detail.algorithmTags,
+                        ...detail.bugPatternTags,
+                        ...detail.complexityTags
+                      ].filter((tag, index, values) => values.indexOf(tag) === index);
+                      return (
+                        <div key={summary.text} className="space-y-3">
+                          {detail.status || detail.language || tags.length ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {detail.status ? <Badge tone={detail.status === "ACCEPTED" ? "green" : "amber"}>{learningStatusLabel(detail.status)}</Badge> : null}
+                              {detail.language ? <span className="text-xs text-[var(--oj-ink-muted)]">语言：{detail.language}</span> : null}
+                              {tags.map((tag) => <Badge key={tag} tone="neutral">{learningTagLabel(tag)}</Badge>)}
+                              {summary.count > 1 ? <span className="text-xs text-[var(--oj-ink-soft)]">重复 {summary.count} 次</span> : null}
+                            </div>
+                          ) : null}
+                          {detail.structuredSummary ? (
+                            <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+                              <p className="text-xs font-semibold text-amber-950">判断</p>
+                              <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-amber-950">{detail.structuredSummary}</p>
+                            </div>
+                          ) : null}
+                          {detail.nextSteps ? (
+                            <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                              <p className="text-xs font-semibold text-blue-950">下一步</p>
+                              <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-blue-950">{detail.nextSteps}</p>
+                            </div>
+                          ) : null}
+                          {detail.evidenceItems || detail.judgeMessage ? (
+                            <details className="rounded-lg border border-[var(--oj-border-soft)] bg-white px-3 py-2">
+                              <summary className="cursor-pointer text-xs font-medium text-[var(--oj-ink-muted)]">查看判题依据</summary>
+                              {detail.evidenceItems ? <p className="mt-2 text-sm leading-6 text-[var(--oj-ink-muted)]">测试点：{detail.evidenceItems}</p> : null}
+                              {detail.judgeMessage ? <p className="mt-1 text-sm leading-6 text-[var(--oj-ink-muted)]">判题信息：{detail.judgeMessage}</p> : null}
+                            </details>
+                          ) : null}
+                          {!detail.structuredSummary && !detail.nextSteps && detail.fallback ? (
+                            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--oj-ink-muted)]">{detail.fallback}</p>
+                          ) : null}
+                        </div>
+                      );
+                    }) : <p className="text-sm leading-6 text-[var(--oj-ink-muted)]">{t("profile.learningProfileEvidenceRedacted")}</p>}
+                  </div>
+                  {group.sourceTypes.some(isSubmissionEvidenceSource) && group.sourceId ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-3"
+                      onClick={() => setSelectedSubmissionId(group.sourceId!)}
+                    >
+                      {t("submissions.viewCodeTitle")}
+                    </Button>
+                  ) : null}
+                </div>
+                ))}
+                </div>
+              </details>
             </div>
           ) : null}
           {!evidenceLoading && !evidenceError && !evidence.length ? (
             <p className="text-sm text-[var(--oj-ink-muted)]">{t("profile.learningProfileEvidenceEmpty")}</p>
           ) : null}
         </div>
+      ) : null}
+      {selectedSubmissionId ? (
+        <SubmissionDetailDialog
+          submissionId={selectedSubmissionId}
+          onOpenChange={(open) => {
+            if (!open) setSelectedSubmissionId(null);
+          }}
+        />
       ) : null}
     </article>
   );
