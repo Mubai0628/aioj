@@ -22,7 +22,7 @@ type RouterContext = {
 };
 
 type LoginSearch = { redirect?: string; expired?: string };
-type ProblemSearch = { keyword?: string; difficulty?: string; tag?: string; page?: number };
+type ProblemSearch = { keyword?: string; difficulty?: string; tag?: string; page?: number; mode?: "semantic" };
 type ProblemDetailSearch = { contestId?: string; contestRunId?: string; contestProblemId?: string };
 type ContestDetailSearch = { runId?: string; tab?: string };
 type ContestScoreboardSearch = { runId?: string };
@@ -128,6 +128,7 @@ const problemsRoute = createRoute({
     if (typeof search.keyword === "string") next.keyword = search.keyword;
     if (typeof search.difficulty === "string") next.difficulty = search.difficulty;
     if (typeof search.tag === "string") next.tag = search.tag;
+    if (search.mode === "semantic") next.mode = "semantic";
     const page = Number(search.page ?? 1);
     if (Number.isFinite(page) && page > 1) next.page = page;
     return next;

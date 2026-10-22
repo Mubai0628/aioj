@@ -31,6 +31,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,11 +68,12 @@ public class ProblemCatalog {
     private final OperationAuditService auditService;
     private final JdbcTemplate jdbcTemplate;
     private final ContestProblemVisibilityService visibilityService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ProblemCatalog(ProblemMapper problemMapper, ProblemTestCaseMapper testCaseMapper,
                           ProblemSolutionMapper solutionMapper, ProblemTestcaseGeneratorMapper testcaseGeneratorMapper,
                           ObjectMapper objectMapper, OperationAuditService auditService, JdbcTemplate jdbcTemplate,
-                          ContestProblemVisibilityService visibilityService) {
+                          ContestProblemVisibilityService visibilityService, ApplicationEventPublisher eventPublisher) {
         this.problemMapper = problemMapper;
         this.testCaseMapper = testCaseMapper;
         this.solutionMapper = solutionMapper;
@@ -80,6 +82,7 @@ public class ProblemCatalog {
         this.auditService = auditService;
         this.jdbcTemplate = jdbcTemplate;
         this.visibilityService = visibilityService;
+        this.eventPublisher = eventPublisher;
     }
 
     public PageResponse<ProblemResponse> list(long page, long pageSize, String keyword, Difficulty difficulty,
@@ -223,6 +226,7 @@ public class ProblemCatalog {
         replaceStandardSolutions(problem.getId(), request.standardSolutions(), request.standardSolutionLanguage(),
                 request.standardSolutionCode(), now, actorUserId);
         replaceTestcaseGenerator(problem.getId(), request.testcaseGeneratorPython(), now, actorUserId);
+        eventPublisher.publishEvent(new ProblemChangedEvent(problem.getId()));
         return toResponse(problem);
     }
 
@@ -243,6 +247,7 @@ public class ProblemCatalog {
         replaceStandardSolutions(problem.getId(), request.standardSolutions(), request.standardSolutionLanguage(),
                 request.standardSolutionCode(), problem.getUpdatedAt(), actorUserId);
         replaceTestcaseGenerator(problem.getId(), request.testcaseGeneratorPython(), problem.getUpdatedAt(), actorUserId);
+        eventPublisher.publishEvent(new ProblemChangedEvent(problem.getId()));
         return toResponse(problem);
     }
 
@@ -369,6 +374,7 @@ public class ProblemCatalog {
         replaceStandardSolutions(problem.getId(), request.standardSolutions(), request.standardSolutionLanguage(),
                 request.standardSolutionCode(), problem.getUpdatedAt(), actorUserId);
         replaceTestcaseGenerator(problem.getId(), request.testcaseGeneratorPython(), problem.getUpdatedAt(), actorUserId);
+        eventPublisher.publishEvent(new ProblemChangedEvent(problem.getId()));
         return problem;
     }
 
@@ -419,6 +425,7 @@ public class ProblemCatalog {
         problemMapper.updateById(problem);
         auditService.recordCurrentUser("SOFT_DELETE", "PROBLEM", problem.getId(), null, null, null,
                 "SUCCESS", Map.of("title", problem.getTitle()));
+        eventPublisher.publishEvent(new ProblemChangedEvent(problem.getId()));
     }
 
     @Transactional
@@ -429,6 +436,7 @@ public class ProblemCatalog {
         problemMapper.updateById(problem);
         auditService.recordCurrentUser("ARCHIVE", "PROBLEM", problem.getId(), null, null, null,
                 "SUCCESS", Map.of("title", problem.getTitle()));
+        eventPublisher.publishEvent(new ProblemChangedEvent(problem.getId()));
         return toResponse(problem);
     }
 
@@ -447,6 +455,7 @@ public class ProblemCatalog {
         problem.setUpdatedAt(now);
         auditService.recordCurrentUser("RESTORE", "PROBLEM", problem.getId(), null, null, null,
                 "SUCCESS", Map.of("title", problem.getTitle()));
+        eventPublisher.publishEvent(new ProblemChangedEvent(problem.getId()));
         return toResponse(problem);
     }
 

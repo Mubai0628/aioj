@@ -83,7 +83,7 @@ class ProblemCatalogLifecycleTest {
         });
         org.mockito.Mockito.lenient().when(visibilityService.isPrivate(any())).thenReturn(false);
         catalog = new ProblemCatalog(problemMapper, testCaseMapper, solutionMapper, testcaseGeneratorMapper,
-                new ObjectMapper(), auditService, jdbcTemplate, visibilityService);
+                new ObjectMapper(), auditService, jdbcTemplate, visibilityService, event -> { });
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new SecurityPrincipal(99L, "teacher", Set.of(Role.TEACHER)), "n/a"));
     }

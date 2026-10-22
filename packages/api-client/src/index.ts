@@ -1629,6 +1629,25 @@ export interface SubmissionCaseResultResponse {
   createdAt: string;
 }
 
+export type ProblemSearchMode = 'SEMANTIC' | 'KEYWORD';
+export type ProblemSearchFallbackReason = 'SEMANTIC_DISABLED' | 'RATE_LIMITED' | 'INDEX_NOT_READY' | 'EMBEDDING_UNAVAILABLE';
+
+export interface ProblemSearchHit {
+  problemId: EntityId;
+  title: string;
+  difficulty: Difficulty;
+  tags: string[];
+  score: number;
+}
+
+export interface ProblemSearchResponse {
+  items: ProblemSearchHit[];
+  /** How the results were found; KEYWORD with fallback set when semantic search could not run. */
+  mode: ProblemSearchMode;
+  fallback: boolean;
+  fallbackReason?: ProblemSearchFallbackReason | null;
+}
+
 export type ProblemRecommendationReason = 'PROFILE_WEAKNESS' | 'UNSOLVED_ATTEMPT' | 'WEAK_TAG' | 'NEW_PROBLEM' | 'COLD_START';
 
 export interface ProblemRecommendationResponse {
@@ -3797,6 +3816,8 @@ export const api = {
 
   problems: (params: ProblemListParams = {}) =>
     request<PageResponse<ProblemResponse>>(`/api/v1/problems${queryString({ page: 1, pageSize: 20, ...params })}`),
+  searchProblems: (params: { q: string; mode?: 'semantic' | 'keyword'; difficulty?: Difficulty | ''; limit?: number }) =>
+    request<ProblemSearchResponse>(`/api/v1/problems/search${queryString(params)}`),
   problemRecommendations: (params: { limit?: number } = {}) =>
     request<ProblemRecommendationsResponse>(`/api/v1/problems/recommendations${queryString(params)}`),
   problem: (id: EntityId, context: { contestRunId?: EntityId | null; contestProblemId?: EntityId | null; staffView?: boolean } = {}) =>

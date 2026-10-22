@@ -54,7 +54,7 @@ class ProblemCatalogAiImportTest {
     void setUp() {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ProblemEntity.class);
         catalog = new ProblemCatalog(problemMapper, testCaseMapper, solutionMapper, testcaseGeneratorMapper,
-                new ObjectMapper(), auditService, jdbcTemplate, visibilityService);
+                new ObjectMapper(), auditService, jdbcTemplate, visibilityService, event -> { });
         SecurityContextHolder.clearContext();
     }
 

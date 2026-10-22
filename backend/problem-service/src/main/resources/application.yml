@@ -56,6 +56,14 @@ aioj:
     ai-guard-grace-seconds: ${AIOJ_CONTEST_AI_GUARD_GRACE_SECONDS:600}
   submission:
     rate-limit-per-minute: ${AIOJ_SUBMISSION_RATE_LIMIT_PER_MINUTE:30}
+  problem-search:
+    semantic-enabled: ${AIOJ_PROBLEM_SEARCH_SEMANTIC_ENABLED:true}
+    max-input-chars: ${AIOJ_PROBLEM_SEARCH_MAX_INPUT_CHARS:2000}
+    query-rate-limit-per-minute: ${AIOJ_PROBLEM_SEARCH_QUERY_RATE_LIMIT_PER_MINUTE:20}
+    embed-batch-size: ${AIOJ_PROBLEM_SEARCH_EMBED_BATCH_SIZE:10}
+    max-attempts: ${AIOJ_PROBLEM_SEARCH_MAX_ATTEMPTS:8}
+    embed-poll-millis: ${AIOJ_PROBLEM_SEARCH_EMBED_POLL_MILLIS:30000}
+    reconcile-millis: ${AIOJ_PROBLEM_SEARCH_RECONCILE_MILLIS:1800000}
   contest-invitation-dispatch:
     concurrency: ${AIOJ_CONTEST_INVITATION_DISPATCH_CONCURRENCY:2}
     batch-size: ${AIOJ_CONTEST_INVITATION_DISPATCH_BATCH_SIZE:25}

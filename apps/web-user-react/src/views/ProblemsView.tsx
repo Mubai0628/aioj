@@ -1,9 +1,9 @@
 import * as React from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { FilterX, Search } from "lucide-react";
-import { api, type Difficulty } from "@aioj/api-client";
-import { Badge, Button } from "@aioj/ui-react";
+import { api, type Difficulty, type ProblemSearchResponse } from "@aioj/api-client";
+import { Badge, Button, cn } from "@aioj/ui-react";
 import { EmptyState, ErrorPanel, LoadingPanel, PageSection, inputClass } from "../components/Common";
 import { useI18n } from "../lib/i18n";
 import { difficultyTone } from "../lib/format";
@@ -13,11 +13,19 @@ const difficulties: Array<Difficulty | ""> = ["", "EASY", "MEDIUM", "HARD", "CHA
 export function ProblemsView() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { keyword?: string; difficulty?: Difficulty | ""; tag?: string; page?: number };
+  const search = useSearch({ strict: false }) as { keyword?: string; difficulty?: Difficulty | ""; tag?: string; page?: number; mode?: "semantic" };
   const [keyword, setKeyword] = React.useState(search.keyword ?? "");
   const [tag, setTag] = React.useState(search.tag ?? "");
   const difficulty = search.difficulty ?? "";
   const page = Number(search.page ?? 1);
+  const semanticMode = search.mode === "semantic";
+  const semanticQuery = semanticMode ? search.keyword?.trim() ?? "" : "";
+
+  const semanticSearchQuery = useQuery({
+    queryKey: ["problems", "search", { q: semanticQuery, difficulty }],
+    queryFn: () => api.searchProblems({ q: semanticQuery, mode: "semantic", difficulty, limit: 24 }),
+    enabled: Boolean(semanticQuery)
+  });
 
   const problemsQuery = useQuery({
     queryKey: ["problems", { page, keyword: search.keyword ?? "", difficulty, tag: search.tag ?? "" }],
@@ -27,7 +35,8 @@ export function ProblemsView() {
       keyword: search.keyword,
       difficulty,
       tag: search.tag
-    })
+    }),
+    enabled: !semanticQuery
   });
 
   function updateSearch(next: Partial<typeof search>) {
@@ -43,10 +52,15 @@ export function ProblemsView() {
 
   function applyFilters(event: React.FormEvent) {
     event.preventDefault();
-    updateSearch({ keyword: keyword.trim() || undefined, tag: tag.trim() || undefined });
+    updateSearch({ keyword: keyword.trim() || undefined, tag: semanticMode ? undefined : tag.trim() || undefined });
   }
 
-  const total = problemsQuery.data?.total ?? 0;
+  function switchMode(next: "semantic" | undefined) {
+    if (next === "semantic") setTag("");
+    updateSearch({ mode: next, keyword: keyword.trim() || undefined, tag: next === "semantic" ? undefined : tag.trim() || undefined });
+  }
+
+  const total = semanticQuery ? semanticSearchQuery.data?.items.length ?? 0 : problemsQuery.data?.total ?? 0;
   const maxPage = Math.max(1, Math.ceil(total / 12));
 
   return (
@@ -57,15 +71,30 @@ export function ProblemsView() {
         description={t("problems.subtitle", { count: total })}
       />
 
-      <form onSubmit={applyFilters} className="grid gap-3 rounded-2xl border border-[var(--oj-border)] bg-white p-4 lg:grid-cols-[minmax(240px,1fr)_220px_180px_auto]">
+      <form onSubmit={applyFilters} className={cn("grid gap-3 rounded-2xl border border-[var(--oj-border)] bg-white p-4",
+        semanticMode ? "lg:grid-cols-[auto_minmax(240px,1fr)_220px_auto]" : "lg:grid-cols-[auto_minmax(240px,1fr)_220px_180px_auto]")}>
+        <div role="group" aria-label={t("problems.searchModeLabel")} className="inline-flex h-10 rounded-xl border border-[var(--oj-border)] p-1">
+          {([undefined, "semantic"] as const).map((item) => (
+            <button
+              key={item ?? "keyword"}
+              type="button"
+              aria-pressed={search.mode === item}
+              onClick={() => switchMode(item)}
+              className={cn("rounded-lg px-3 text-sm font-medium transition-colors",
+                search.mode === item ? "bg-[var(--oj-primary)] text-white" : "text-[var(--oj-ink-muted)] hover:bg-[var(--oj-surface-muted)]")}
+            >
+              {item ? t("problems.searchModeSemantic") : t("problems.searchModeKeyword")}
+            </button>
+          ))}
+        </div>
         <label className="relative block">
-          <span className="sr-only">{t("problems.searchPlaceholder")}</span>
+          <span className="sr-only">{semanticMode ? t("problems.semanticPlaceholder") : t("problems.searchPlaceholder")}</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oj-ink-soft)]" aria-hidden="true" />
           <input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             className={`${inputClass} pl-9`}
-            placeholder={t("problems.searchPlaceholder")}
+            placeholder={semanticMode ? t("problems.semanticPlaceholder") : t("problems.searchPlaceholder")}
           />
         </label>
         <select
@@ -78,12 +107,14 @@ export function ProblemsView() {
             <option key={item || "all"} value={item}>{item ? t(`difficulty.${item}`) : t("problems.allDifficulties")}</option>
           ))}
         </select>
-        <input
-          value={tag}
-          onChange={(event) => setTag(event.target.value)}
-          className={inputClass}
-          placeholder={t("problems.tagPlaceholder")}
-        />
+        {semanticMode ? null : (
+          <input
+            value={tag}
+            onChange={(event) => setTag(event.target.value)}
+            className={inputClass}
+            placeholder={t("problems.tagPlaceholder")}
+          />
+        )}
         <div className="flex gap-2">
           <Button>{t("common.apply")}</Button>
           <Button
@@ -101,7 +132,9 @@ export function ProblemsView() {
         </div>
       </form>
 
-      {problemsQuery.isLoading ? (
+      {semanticQuery ? (
+        <SemanticResults query={semanticSearchQuery} />
+      ) : problemsQuery.isLoading ? (
         <LoadingPanel label={t("problems.loading")} />
       ) : problemsQuery.isError ? (
         <ErrorPanel title={t("problems.loadFailed")} />
@@ -144,5 +177,50 @@ export function ProblemsView() {
         <EmptyState title={t("problems.noResultsTitle")} description={t("problems.noResultsDescription")} />
       )}
     </div>
+  );
+}
+
+function SemanticResults({ query }: { query: UseQueryResult<ProblemSearchResponse> }) {
+  const { t } = useI18n();
+  if (query.isLoading) return <LoadingPanel label={t("problems.loading")} />;
+  if (query.isError || !query.data) return <ErrorPanel title={t("problems.loadFailed")} />;
+  const { items, fallback, fallbackReason } = query.data;
+  return (
+    <section className="space-y-4">
+      {fallback && fallbackReason ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
+          {t(`problems.semanticFallback.${fallbackReason}`)}
+        </p>
+      ) : items.length ? (
+        <p className="text-sm text-[var(--oj-ink-muted)]">{t("problems.semanticResults", { count: items.length })}</p>
+      ) : null}
+      {items.length ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {items.map((problem) => (
+            <Link
+              key={problem.problemId}
+              to="/problems/$problemId"
+              params={{ problemId: String(problem.problemId) }}
+              className="group flex min-h-40 flex-col justify-between rounded-2xl border border-[var(--oj-border)] bg-white p-5 outline-none transition-colors hover:border-[var(--oj-primary)] focus-visible:ring-2 focus-visible:ring-[var(--oj-focus)]"
+            >
+              <div>
+                <div className="mb-3 flex flex-wrap gap-2">
+                  <Badge tone={difficultyTone(problem.difficulty)}>{t(`difficulty.${problem.difficulty}`)}</Badge>
+                </div>
+                <h2 className="line-clamp-2 text-balance text-lg font-semibold text-[var(--oj-ink)]">{problem.title}</h2>
+              </div>
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {problem.tags.slice(0, 3).map((tagValue) => <Badge key={tagValue}>{tagValue}</Badge>)}
+                </div>
+                <span className="text-sm font-medium text-[var(--oj-primary)]">{t("problems.startPractice")}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title={t("problems.noResultsTitle")} description={t("problems.noResultsDescription")} />
+      )}
+    </section>
   );
 }
