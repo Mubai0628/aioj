@@ -133,6 +133,7 @@ class ProblemSearchServiceTest {
         assertThat(response.items()).hasSize(1);
         assertThat(meters.counter("aioj.problem.search.requests", "mode", "semantic", "result", "EMBEDDING_UNAVAILABLE")
                 .count()).isEqualTo(1.0);
+        verify(indexService).observeFailedEmbedding();
     }
 
     @Test

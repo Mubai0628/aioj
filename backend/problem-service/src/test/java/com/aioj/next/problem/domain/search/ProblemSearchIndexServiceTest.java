@@ -133,6 +133,25 @@ class ProblemSearchIndexServiceTest {
     }
 
     @Test
+    void failedRowsGetFreshAttemptsOnTheFirstSuccessAfterStartupOrAnOutage() {
+        service.observeHealthyEmbedding("m", 2);
+        service.observeHealthyEmbedding("m", 2);
+        service.observeFailedEmbedding();
+        service.observeHealthyEmbedding("m", 2);
+        verify(indexMapper, org.mockito.Mockito.times(1)).update(isNull(), any());
+
+        service.observeFailedEmbedding();
+        service.observeFailedEmbedding();
+        service.observeFailedEmbedding();
+        service.observeHealthyEmbedding("m", 2);
+
+        List<LambdaUpdateWrapper<ProblemSearchIndexEntity>> retries = capturedUpdates();
+        assertThat(retries).hasSize(2);
+        retries.get(1).getSqlSegment();
+        assertThat(retries.get(1).getParamNameValuePairs().values()).contains("FAILED", 0);
+    }
+
+    @Test
     void aRowClaimedByAnotherInstanceIsSkipped() {
         when(indexMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(due(0)));
         when(indexMapper.claim(eq(5L), eq("hash-5"), any(), any())).thenReturn(0);

@@ -104,6 +104,7 @@ public class ProblemSearchService {
         if (queryVector == null || !hasModel(vectors, queryVector)) {
             ProblemEmbeddingClient.Result result = embeddingClient.embed(query, "PROBLEM_QUERY");
             if (result.embedding() == null) {
+                indexService.observeFailedEmbedding();
                 return keyword(query, difficulty, limit, ProblemSearchFallbackReason.EMBEDDING_UNAVAILABLE);
             }
             queryVector = new QueryVector(result.embedding().vector(), result.embedding().model());

@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Keeps problem_search_index in line with the public problems. A change to a
@@ -41,7 +42,8 @@ public class ProblemSearchIndexService {
     private static final Duration CLAIM_LEASE = Duration.ofMinutes(2);
     private static final Duration FIRST_RETRY = Duration.ofMinutes(1);
     private static final Duration MAX_RETRY = Duration.ofHours(6);
-    private static final Duration REARM_INTERVAL = Duration.ofMinutes(10);
+    /** Consecutive failed embeddings after which the provider counts as down. */
+    private static final int OUTAGE_FAILURES = 3;
     private static final int RECONCILE_PAGE = 200;
 
     private final ProblemMapper problemMapper;
@@ -49,8 +51,10 @@ public class ProblemSearchIndexService {
     private final ProblemEmbeddingClient embeddingClient;
     private final ProblemSearchProperties properties;
     private final ObjectMapper objectMapper;
+    private final AtomicInteger consecutiveFailures = new AtomicInteger();
     private volatile String lastModel;
-    private volatile Instant lastRearm = Instant.EPOCH;
+    /** Set at startup and by an outage: the next healthy embedding gives every failed row fresh attempts. */
+    private volatile boolean retryFailedOnNextSuccess = true;
 
     public ProblemSearchIndexService(ProblemMapper problemMapper, ProblemSearchIndexMapper indexMapper,
                                      ProblemEmbeddingClient embeddingClient, ProblemSearchProperties properties,
@@ -154,8 +158,10 @@ public class ProblemSearchIndexService {
 
     /**
      * Seen on every successful embedding. A new model re-queues rows made by the
-     * old one, and proof that the provider works again re-arms rows that used up
-     * their attempts while it was down.
+     * old one. The first success after startup or after an outage retries every
+     * failed row at once, so rows do not sit out their backoff, or stay failed
+     * for good, once the provider works again. In between, a row whose own text
+     * keeps failing stops at its attempt limit.
      */
     void observeHealthyEmbedding(String model, int dimension) {
         Instant now = Instant.now();
@@ -166,14 +172,24 @@ public class ProblemSearchIndexService {
                 log.info("Embedding model is now {}; re-embedding {} problems", model, requeued);
             }
         }
-        if (lastRearm.plus(REARM_INTERVAL).isBefore(now)) {
-            lastRearm = now;
-            indexMapper.update(null, new LambdaUpdateWrapper<ProblemSearchIndexEntity>()
+        consecutiveFailures.set(0);
+        if (retryFailedOnNextSuccess) {
+            retryFailedOnNextSuccess = false;
+            int retried = indexMapper.update(null, new LambdaUpdateWrapper<ProblemSearchIndexEntity>()
                     .eq(ProblemSearchIndexEntity::getStatus, FAILED)
-                    .ge(ProblemSearchIndexEntity::getAttempts, properties.getMaxAttempts())
                     .set(ProblemSearchIndexEntity::getAttempts, 0)
                     .set(ProblemSearchIndexEntity::getNextAttemptAt, now)
                     .set(ProblemSearchIndexEntity::getUpdatedAt, now));
+            if (retried > 0) {
+                log.info("Embedding works; retrying {} failed problems now", retried);
+            }
+        }
+    }
+
+    /** Seen on every failed embedding, from indexing or from a search query. */
+    void observeFailedEmbedding() {
+        if (consecutiveFailures.incrementAndGet() >= OUTAGE_FAILURES) {
+            retryFailedOnNextSuccess = true;
         }
     }
 
@@ -202,6 +218,7 @@ public class ProblemSearchIndexService {
             observeHealthyEmbedding(result.embedding().model(), vector.length);
             return;
         }
+        observeFailedEmbedding();
         int attempts = Objects.requireNonNullElse(row.getAttempts(), 0) + 1;
         indexMapper.update(null, sameContent
                 .set(ProblemSearchIndexEntity::getStatus, FAILED)
