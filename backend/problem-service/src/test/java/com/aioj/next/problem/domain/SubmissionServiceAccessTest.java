@@ -1,5 +1,6 @@
 package com.aioj.next.problem.domain;
 
+import org.springframework.dao.DuplicateKeyException;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.common.error.DomainException;
@@ -71,6 +72,8 @@ class SubmissionServiceAccessTest {
     private ContestProblemVisibilityService visibilityService;
     @Mock
     private RabbitTemplate rabbitTemplate;
+    @Mock
+    private SubmissionRateLimiter rateLimiter;
 
     private SubmissionService service;
 
@@ -79,7 +82,7 @@ class SubmissionServiceAccessTest {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), SubmissionEntity.class);
         lenient().when(visibilityService.isPrivate(any())).thenReturn(false);
         lenient().when(visibilityService.hiddenRunProblemPairs(any(), any(), any())).thenReturn(java.util.Map.of());
-        service = new SubmissionService(problemCatalog, contestService, submissionMapper, caseResultMapper, fingerprintService, contestAiPolicyService, visibilityService, rabbitTemplate);
+        service = new SubmissionService(problemCatalog, contestService, submissionMapper, caseResultMapper, fingerprintService, contestAiPolicyService, visibilityService, rabbitTemplate, rateLimiter);
         lenient().when(caseResultMapper.selectList(any())).thenReturn(java.util.List.of());
     }
 
@@ -286,6 +289,74 @@ class SubmissionServiceAccessTest {
     }
 
     @Test
+    void sameIdempotencyKeyReplaysTheFirstSubmission() {
+        authenticate(91L, Role.STUDENT);
+        when(problemCatalog.findActive(1001L)).thenReturn(Optional.of(activeProblem()));
+        SubmissionEntity first = practiceSubmission(950L, "int main(){}");
+        first.setIdempotencyKey("91:client-key-1");
+        when(submissionMapper.selectOne(any())).thenReturn(first);
+
+        var result = service.submit(new SubmissionCreateRequest(1001L, "cpp", "int main(){}", null, null, null),
+                new SubmissionRequestMetadata("127.0.0.1", null, "test", " client-key-1 "));
+
+        assertEquals(950L, result.id());
+        verify(submissionMapper, never()).insert(any(SubmissionEntity.class));
+        verify(rateLimiter, never()).check(any(), any());
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any(Object.class), any(MessagePostProcessor.class));
+    }
+
+    @Test
+    void reusedIdempotencyKeyForDifferentCodeIsAConflict() {
+        authenticate(91L, Role.STUDENT);
+        when(problemCatalog.findActive(1001L)).thenReturn(Optional.of(activeProblem()));
+        when(submissionMapper.selectOne(any())).thenReturn(practiceSubmission(950L, "int main(){ return 1; }"));
+
+        DomainException error = assertThrows(DomainException.class, () -> service.submit(
+                new SubmissionCreateRequest(1001L, "cpp", "int main(){}", null, null, null),
+                new SubmissionRequestMetadata("127.0.0.1", null, "test", "client-key-1")));
+
+        assertEquals(ErrorCode.CONFLICT, error.errorCode());
+        verify(submissionMapper, never()).insert(any(SubmissionEntity.class));
+    }
+
+    @Test
+    void concurrentRequestWithSameKeyGetsTheCommittedWinner() {
+        authenticate(91L, Role.STUDENT);
+        when(problemCatalog.findActive(1001L)).thenReturn(Optional.of(activeProblem()));
+        SubmissionEntity winner = practiceSubmission(951L, "int main(){}");
+        when(submissionMapper.selectOne(any())).thenReturn(null, winner);
+        when(submissionMapper.insert(any(SubmissionEntity.class))).thenThrow(new DuplicateKeyException("uk_submission_idempotency"));
+
+        var result = service.submit(new SubmissionCreateRequest(1001L, "cpp", "int main(){}", null, null, null),
+                new SubmissionRequestMetadata("127.0.0.1", null, "test", "client-key-2"));
+
+        assertEquals(951L, result.id());
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any(Object.class), any(MessagePostProcessor.class));
+    }
+
+    @Test
+    void rateLimitedUserCannotCreateANewSubmission() {
+        authenticate(91L, Role.STUDENT);
+        when(problemCatalog.findActive(1001L)).thenReturn(Optional.of(activeProblem()));
+        org.mockito.Mockito.doThrow(new DomainException(ErrorCode.TOO_MANY_REQUESTS, "slow down"))
+                .when(rateLimiter).check(any(), any());
+
+        DomainException error = assertThrows(DomainException.class, () -> service.submit(
+                new SubmissionCreateRequest(1001L, "cpp", "int main(){}", null, null, null), null));
+
+        assertEquals(ErrorCode.TOO_MANY_REQUESTS, error.errorCode());
+        verify(submissionMapper, never()).insert(any(SubmissionEntity.class));
+    }
+
+    @Test
+    void malformedIdempotencyKeyIsRejected() {
+        assertThrows(DomainException.class, () -> SubmissionService.scopedIdempotencyKey(91L, "has spaces inside"));
+        assertThrows(DomainException.class, () -> SubmissionService.scopedIdempotencyKey(91L, "x".repeat(97)));
+        assertEquals("91:abc-123", SubmissionService.scopedIdempotencyKey(91L, " abc-123 "));
+        assertNull(SubmissionService.scopedIdempotencyKey(91L, "  "));
+    }
+
+    @Test
     void practiceScopeRejectsContestFilters() {
         authenticate(91L, Role.STUDENT);
 
@@ -358,6 +429,18 @@ class SubmissionServiceAccessTest {
         submission.setContestProblemId(null);
         submission.setContestParticipantId(null);
         submission.setSubmittedAtContestMillis(null);
+        return submission;
+    }
+
+    private SubmissionEntity practiceSubmission(Long id, String code) {
+        SubmissionEntity submission = new SubmissionEntity();
+        submission.setId(id);
+        submission.setProblemId(1001L);
+        submission.setUserId(91L);
+        submission.setLanguage("cpp");
+        submission.setCode(code);
+        submission.setStatus(SubmissionStatus.QUEUED);
+        submission.setVisibleToParticipant(true);
         return submission;
     }
 

@@ -1,5 +1,8 @@
 package com.aioj.next.problem.domain;
 
+import java.util.regex.Pattern;
+import java.util.Objects;
+import org.springframework.dao.DuplicateKeyException;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.api.TraceIds;
 import com.aioj.next.common.error.DomainException;
@@ -57,6 +60,7 @@ public class SubmissionService {
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("java", "cpp", "python");
     private static final ZoneId ZONE = ZoneId.systemDefault();
 
+    private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,96}");
     private final ProblemCatalog problemCatalog;
     private final ContestService contestService;
     private final SubmissionMapper submissionMapper;
@@ -65,13 +69,15 @@ public class SubmissionService {
     private final ContestAiPolicyService contestAiPolicyService;
     private final ContestProblemVisibilityService visibilityService;
     private final RabbitTemplate rabbitTemplate;
+    private final SubmissionRateLimiter rateLimiter;
 
     public SubmissionService(ProblemCatalog problemCatalog, ContestService contestService,
                              SubmissionMapper submissionMapper, SubmissionCaseResultMapper caseResultMapper,
                              SubmissionRequestFingerprintService fingerprintService,
                              ContestAiPolicyService contestAiPolicyService,
                              ContestProblemVisibilityService visibilityService,
-                             RabbitTemplate rabbitTemplate) {
+                             RabbitTemplate rabbitTemplate,
+                             SubmissionRateLimiter rateLimiter) {
         this.problemCatalog = problemCatalog;
         this.contestService = contestService;
         this.submissionMapper = submissionMapper;
@@ -80,6 +86,7 @@ public class SubmissionService {
         this.contestAiPolicyService = contestAiPolicyService;
         this.visibilityService = visibilityService;
         this.rabbitTemplate = rabbitTemplate;
+        this.rateLimiter = rateLimiter;
     }
 
     @Transactional
@@ -113,9 +120,20 @@ public class SubmissionService {
         } else if (request.contestProblemId() != null) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Contest is required for contest problem submissions");
         }
+        String idempotencyKey = scopedIdempotencyKey(userId, metadata == null ? null : metadata.idempotencyKey());
+        if (idempotencyKey != null) {
+            SubmissionEntity existing = submissionMapper.selectOne(new LambdaQueryWrapper<SubmissionEntity>()
+                    .eq(SubmissionEntity::getIdempotencyKey, idempotencyKey)
+                    .last("LIMIT 1"));
+            if (existing != null) {
+                return replay(existing, request, language, contestContext);
+            }
+        }
+        rateLimiter.check(userId, now);
         SubmissionEntity submission = new SubmissionEntity();
         submission.setProblemId(request.problemId());
         submission.setUserId(userId);
+        submission.setIdempotencyKey(idempotencyKey);
         if (contestContext != null) {
             submission.setContestId(contestContext.contest().getId());
             submission.setContestRunId(contestContext.contestRun() == null ? null : contestContext.contestRun().getId());
@@ -131,7 +149,22 @@ public class SubmissionService {
         submission.setRetryCount(0);
         submission.setCreatedAt(now);
         submission.setUpdatedAt(now);
-        submissionMapper.insert(submission);
+        try {
+            submissionMapper.insert(submission);
+        } catch (DuplicateKeyException ex) {
+            if (idempotencyKey == null) {
+                throw ex;
+            }
+            // A concurrent request with the same key committed first. A locking read
+            // sees it even under REPEATABLE READ, where a plain read would not.
+            SubmissionEntity winner = submissionMapper.selectOne(new LambdaQueryWrapper<SubmissionEntity>()
+                    .eq(SubmissionEntity::getIdempotencyKey, idempotencyKey)
+                    .last("LIMIT 1 FOR SHARE"));
+            if (winner == null) {
+                throw ex;
+            }
+            return replay(winner, request, language, contestContext);
+        }
         fingerprintService.record(submission, metadata, now);
 
         Long memoryLimitKb = problem.getMemoryLimitKb() == null ? null : problem.getMemoryLimitKb().longValue();
@@ -369,6 +402,39 @@ public class SubmissionService {
         Set<Long> hiddenContestProblemIds = hiddenPairs.getOrDefault(submission.getContestRunId(), Set.of());
         return submission.getContestProblemId() != null
                 && hiddenContestProblemIds.contains(submission.getContestProblemId());
+    }
+
+    /**
+     * Same user, same key: the first submission is the answer, as long as the
+     * request is the same submission; a different one under a reused key is a conflict.
+     */
+    private SubmissionResponse replay(SubmissionEntity existing, SubmissionCreateRequest request, String language,
+                                      ContestSubmissionContext contestContext) {
+        boolean same = Objects.equals(existing.getProblemId(), request.problemId())
+                && Objects.equals(existing.getLanguage(), language)
+                && Objects.equals(existing.getCode(), request.code())
+                && Objects.equals(existing.getContestId(), contestContext == null ? null : contestContext.contest().getId())
+                && Objects.equals(existing.getContestRunId(), contestContext == null || contestContext.contestRun() == null
+                ? null : contestContext.contestRun().getId())
+                && Objects.equals(existing.getContestProblemId(),
+                contestContext == null ? null : contestContext.contestProblem().getId());
+        if (!same) {
+            throw new DomainException(ErrorCode.CONFLICT, "Idempotency-Key was already used for a different submission");
+        }
+        return toResponse(existing, false, false);
+    }
+
+    static String scopedIdempotencyKey(Long userId, String key) {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        String normalized = key.trim();
+        if (!IDEMPOTENCY_KEY.matcher(normalized).matches()) {
+            throw new DomainException(ErrorCode.BAD_REQUEST,
+                    "Idempotency-Key must be 1-96 characters of letters, digits, '.', '_', ':' or '-'");
+        }
+        // The column is unique across users; the user prefix scopes a key to its owner.
+        return userId + ":" + normalized;
     }
 
     private SubmissionResponse toResponse(SubmissionEntity submission, boolean includeCode, boolean includeCaseResults) {

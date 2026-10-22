@@ -3226,6 +3226,23 @@ async function retryAfterAuthenticationError<T>(
 }
 
 
+export function newIdempotencyKey(): string {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+    return cryptoApi.randomUUID();
+  }
+  // randomUUID needs a secure context; getRandomValues does not.
+  const bytes = new Uint8Array(16);
+  if (cryptoApi && typeof cryptoApi.getRandomValues === 'function') {
+    cryptoApi.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   const snapshot = authStore.snapshot();
@@ -3872,8 +3889,16 @@ export const api = {
     );
   },
 
-  submit: (payload: SubmissionPayload) =>
-    request<SubmissionResponse>('/api/v1/submissions', { method: 'POST', body: JSON.stringify(payload) }),
+  /**
+   * Every submit carries an Idempotency-Key, so a resend after a token refresh
+   * (or an explicit retry with the same key) cannot create a second submission.
+   */
+  submit: (payload: SubmissionPayload, options: { idempotencyKey?: string } = {}) =>
+    request<SubmissionResponse>('/api/v1/submissions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Idempotency-Key': options.idempotencyKey ?? newIdempotencyKey() }
+    }),
   submission: (id: EntityId) => request<SubmissionResponse>(`/api/v1/submissions/${id}`),
   submissions: (params: SubmissionListParams = {}) =>
     request<PageResponse<SubmissionResponse>>(`/api/v1/submissions${queryString({ page: 1, pageSize: 20, ...params })}`),

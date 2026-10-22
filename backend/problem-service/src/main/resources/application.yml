@@ -54,6 +54,8 @@ aioj:
     worker-enabled: ${AIOJ_OPERATION_WORKER_ENABLED:true}
   contest:
     ai-guard-grace-seconds: ${AIOJ_CONTEST_AI_GUARD_GRACE_SECONDS:600}
+  submission:
+    rate-limit-per-minute: ${AIOJ_SUBMISSION_RATE_LIMIT_PER_MINUTE:30}
   contest-invitation-dispatch:
     concurrency: ${AIOJ_CONTEST_INVITATION_DISPATCH_CONCURRENCY:2}
     batch-size: ${AIOJ_CONTEST_INVITATION_DISPATCH_BATCH_SIZE:25}
