@@ -20,10 +20,16 @@ public class AiToolCallEntity {
     private String policyDecisionId;
     private String status;
     private String resultClassification;
+    private String safeSummaryJson;
+    private String resourceRefType;
+    private String resourceRefId;
+    private String resourceMetricsJson;
     private String resultHash;
     private Integer resultTokens;
     private Integer latencyMs;
     private String errorCode;
+    private LocalDateTime startedAt;
+    private LocalDateTime completedAt;
     private LocalDateTime createdAt;
 
     public Long getId() {
@@ -122,6 +128,15 @@ public class AiToolCallEntity {
         this.resultClassification = resultClassification;
     }
 
+    public String getSafeSummaryJson() { return safeSummaryJson; }
+    public void setSafeSummaryJson(String safeSummaryJson) { this.safeSummaryJson = safeSummaryJson; }
+    public String getResourceRefType() { return resourceRefType; }
+    public void setResourceRefType(String resourceRefType) { this.resourceRefType = resourceRefType; }
+    public String getResourceRefId() { return resourceRefId; }
+    public void setResourceRefId(String resourceRefId) { this.resourceRefId = resourceRefId; }
+    public String getResourceMetricsJson() { return resourceMetricsJson; }
+    public void setResourceMetricsJson(String resourceMetricsJson) { this.resourceMetricsJson = resourceMetricsJson; }
+
     public String getResultHash() {
         return resultHash;
     }
@@ -153,6 +168,11 @@ public class AiToolCallEntity {
     public void setErrorCode(String errorCode) {
         this.errorCode = errorCode;
     }
+
+    public LocalDateTime getStartedAt() { return startedAt; }
+    public void setStartedAt(LocalDateTime startedAt) { this.startedAt = startedAt; }
+    public LocalDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;

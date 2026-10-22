@@ -14,6 +14,10 @@ spring:
       maximum-pool-size: ${JUDGE_DB_POOL_MAX:4}
       minimum-idle: ${JUDGE_DB_POOL_MIN_IDLE:1}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:5000}
+  servlet:
+    multipart:
+      max-file-size: ${JUDGE_DRAFT_PACKAGE_MAX_UPLOAD:50MB}
+      max-request-size: ${JUDGE_DRAFT_PACKAGE_MAX_REQUEST:52MB}
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -45,6 +49,7 @@ aioj:
     sandbox-endpoint: ${SANDBOX_ENDPOINT:http://localhost:8090/execute}
     sandbox-token: ${SANDBOX_TOKEN:}
     sandbox-timeout: ${SANDBOX_TIMEOUT:PT10S}
+    sandbox-read-timeout: ${SANDBOX_READ_TIMEOUT:PT370S}
     language-whitelist: ${JUDGE_LANGUAGE_WHITELIST:java,cpp,python}
     cache-root: ${AIOJ_JUDGE_CACHE_ROOT:${user.home}/.ai-oj-next/judge-cache}
     problem-service-base-url: ${PROBLEM_SERVICE_BASE_URL:http://127.0.0.1:8202}
@@ -53,6 +58,20 @@ aioj:
     stdout-extra-collect-bytes: ${JUDGE_STDOUT_EXTRA_COLLECT_BYTES:65536}
     stdout-max-collect-limit-bytes: ${JUDGE_STDOUT_MAX_COLLECT_LIMIT_BYTES:4194304}
     stderr-collect-limit-bytes: ${JUDGE_STDERR_COLLECT_LIMIT_BYTES:65536}
+    max-source-bytes: ${JUDGE_MAX_SOURCE_BYTES:262144}
+    max-input-bytes: ${JUDGE_MAX_INPUT_BYTES:8388608}
+    max-batch-size: ${JUDGE_MAX_BATCH_SIZE:200}
+    max-batch-input-bytes: ${JUDGE_MAX_BATCH_INPUT_BYTES:33554432}
+    max-run-time-limit-millis: ${JUDGE_MAX_RUN_TIME_LIMIT_MILLIS:30000}
+    max-script-time-limit-millis: ${JUDGE_MAX_SCRIPT_TIME_LIMIT_MILLIS:180000}
+    max-memory-limit-kb: ${JUDGE_MAX_MEMORY_LIMIT_KB:1048576}
+    max-process-limit: ${JUDGE_MAX_PROCESS_LIMIT:80}
+    max-draft-package-bytes: ${JUDGE_MAX_DRAFT_PACKAGE_BYTES:52428800}
+    max-draft-package-uncompressed-bytes: ${JUDGE_MAX_DRAFT_PACKAGE_UNCOMPRESSED_BYTES:104857600}
+    max-draft-package-entry-bytes: ${JUDGE_MAX_DRAFT_PACKAGE_ENTRY_BYTES:8388608}
+    max-draft-package-entries: ${JUDGE_MAX_DRAFT_PACKAGE_ENTRIES:500}
+    max-draft-package-cases: ${JUDGE_MAX_DRAFT_PACKAGE_CASES:200}
+    max-draft-package-run-millis: ${JUDGE_MAX_DRAFT_PACKAGE_RUN_MILLIS:540000}
 
 management:
   endpoints:

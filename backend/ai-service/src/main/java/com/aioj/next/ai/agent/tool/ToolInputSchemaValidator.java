@@ -107,11 +107,15 @@ public final class ToolInputSchemaValidator {
             case "integer" -> {
                 if (!value.isIntegralNumber()) {
                     errors.add(path + ": expected integer");
+                } else {
+                    validateNumericBounds(schema, value, path, errors);
                 }
             }
             case "number" -> {
                 if (!value.isNumber()) {
                     errors.add(path + ": expected number");
+                } else {
+                    validateNumericBounds(schema, value, path, errors);
                 }
             }
             case "boolean" -> {
@@ -157,12 +161,28 @@ public final class ToolInputSchemaValidator {
             errors.add(path + ": expected array");
             return;
         }
+        if (schema.has("minItems") && value.size() < schema.get("minItems").asInt()) {
+            errors.add(path + ": fewer than minItems " + schema.get("minItems").asInt());
+        }
+        if (schema.has("maxItems") && value.size() > schema.get("maxItems").asInt()) {
+            errors.add(path + ": more than maxItems " + schema.get("maxItems").asInt());
+        }
         JsonNode items = schema.path("items");
         if (!items.isObject()) {
             return;
         }
         for (int i = 0; i < value.size(); i++) {
             validateNode(items, value.get(i), path + "[" + i + "]", errors);
+        }
+    }
+
+    private static void validateNumericBounds(JsonNode schema, JsonNode value, String path,
+                                              List<String> errors) {
+        if (schema.has("minimum") && value.decimalValue().compareTo(schema.get("minimum").decimalValue()) < 0) {
+            errors.add(path + ": less than minimum " + schema.get("minimum").asText());
+        }
+        if (schema.has("maximum") && value.decimalValue().compareTo(schema.get("maximum").decimalValue()) > 0) {
+            errors.add(path + ": greater than maximum " + schema.get("maximum").asText());
         }
     }
 }

@@ -58,6 +58,10 @@ abstract class AbstractOpenAiToolCallAdapter implements ToolCallAdapter {
                     .body(String.class);
             return parseResponse(response, config);
         } catch (RestClientResponseException ex) {
+            DomainException capabilityError = mapCapabilityError(config, settings, ex);
+            if (capabilityError != null) {
+                throw capabilityError;
+            }
             throw new DomainException(ErrorCode.INTERNAL_ERROR,
                     "AI provider HTTP " + ex.getStatusCode().value() + ": " + summarize(ex.getResponseBodyAsString(), config.apiKey()));
         } catch (RestClientException ex) {
@@ -95,6 +99,11 @@ abstract class AbstractOpenAiToolCallAdapter implements ToolCallAdapter {
             node.put("role", message.role());
             if (message.content() != null) {
                 node.put("content", message.content());
+            }
+            if ("assistant".equals(message.role()) && message.reasoningContent() != null) {
+                // DeepSeek requires the complete reasoning_content to be echoed
+                // for every subsequent request in the same tool-call loop.
+                node.put("reasoning_content", message.reasoningContent());
             }
             if (message.toolCalls() != null && !message.toolCalls().isEmpty()) {
                 List<Map<String, Object>> toolCalls = new ArrayList<>();
@@ -136,6 +145,10 @@ abstract class AbstractOpenAiToolCallAdapter implements ToolCallAdapter {
         JsonNode choice = root.path("choices").path(0);
         JsonNode message = choice.path("message");
         String content = textContent(message.path("content"));
+        JsonNode reasoningNode = message.path("reasoning_content");
+        String reasoningContent = reasoningNode.isMissingNode() || reasoningNode.isNull()
+                ? null
+                : textContent(reasoningNode);
         List<GatewayToolCall> toolCalls = new ArrayList<>();
         for (JsonNode call : message.path("tool_calls")) {
             JsonNode function = call.path("function");
@@ -151,6 +164,7 @@ abstract class AbstractOpenAiToolCallAdapter implements ToolCallAdapter {
         long cacheHitTokens = usage.path("prompt_cache_hit_tokens").asLong(0);
         return new GatewayResponse(
                 content,
+                reasoningContent,
                 toolCalls,
                 choice.path("finish_reason").asText(""),
                 promptTokens,
@@ -189,6 +203,12 @@ abstract class AbstractOpenAiToolCallAdapter implements ToolCallAdapter {
 
     /** Provider per-function schema flags (e.g. Kimi strict). */
     protected void customizeFunction(Map<String, Object> function) {
+    }
+
+    /** Provider-specific translation for an explicit capability rejection. */
+    protected DomainException mapCapabilityError(AiModelEffectiveConfig config, CallSettings settings,
+                                                  RestClientResponseException exception) {
+        return null;
     }
 
     protected ObjectMapper objectMapper() {

@@ -25,6 +25,7 @@ import com.aioj.next.ai.domain.AiModelConfigService;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.persistence.mapper.AiAgentRunMapper;
+import com.aioj.next.ai.persistence.mapper.ProblemDraftWorkspaceMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -97,12 +98,14 @@ class AgentProviderLiveTest {
         ModelGateway gateway = new ModelGateway(configService, List.of(adapter));
         AtomicBoolean toolRan = new AtomicBoolean(false);
         ToolRegistry registry = new ToolRegistry(List.of(echoTool(toolRan)));
-        ToolBroker broker = new ToolBroker(registry, new ToolAuthorizationService(),
-                new ToolResultSanitizer(objectMapper), mock(ToolAuditService.class), objectMapper);
+        ToolBroker broker = new ToolBroker(registry,
+                new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
+                new ToolResultSanitizer(objectMapper), mock(ToolAuditService.class), objectMapper,
+                new AiProperties());
         AgentRuntime runtime = new AgentRuntime(gateway, registry, broker, new ContextSectionRenderer(),
                 mock(ContextManifestService.class),
                 new AgentRunStateMachine(mock(AiAgentRunMapper.class), objectMapper), objectMapper,
-                mock(com.aioj.next.ai.agent.guard.ContextFingerprintGuard.class));
+                mock(com.aioj.next.ai.agent.guard.ContextFingerprintGuard.class), new AiProperties());
 
         List<ContextSection> sections = List.of(
                 ContextSection.text(ContextSectionType.SYSTEM_POLICY, 10, true, TrustLevel.SYSTEM_POLICY,

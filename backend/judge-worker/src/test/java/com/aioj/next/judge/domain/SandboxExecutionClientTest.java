@@ -31,4 +31,30 @@ class SandboxExecutionClientTest {
         assertThat(collector).contains("'manifestJson': manifest_json");
         assertThat(collector).contains("'scanRoot': scan_root");
     }
+
+    @Test
+    void generatedCollectorEnforcesFileCountAndByteBudgets() {
+        String collector = SandboxExecutionClient.generatedFilesCollector(5, "PAIRED", 1024, 4096, 12);
+
+        assertThat(collector).contains("max_entry_bytes = 1024");
+        assertThat(collector).contains("max_collected_bytes = 4096");
+        assertThat(collector).contains("max_entry_count = 12");
+        assertThat(collector).contains("generated testcase collection exceeds total size limit");
+        assertThat(collector).contains("generated testcase collection has too many entries");
+    }
+
+    @Test
+    void sandboxStatusesRemainMachineReadable() {
+        assertThat(SandboxExecutionClient.normalizeResultCode("Accepted")).isEqualTo("ACCEPTED");
+        assertThat(SandboxExecutionClient.normalizeResultCode("Time Limit Exceeded"))
+                .isEqualTo("TIME_LIMIT_EXCEEDED");
+        assertThat(SandboxExecutionClient.normalizeResultCode("Memory Limit Exceeded"))
+                .isEqualTo("MEMORY_LIMIT_EXCEEDED");
+        assertThat(SandboxExecutionClient.normalizeResultCode("Output Limit Exceeded"))
+                .isEqualTo("OUTPUT_LIMIT_EXCEEDED");
+        assertThat(SandboxExecutionClient.normalizeResultCode("Nonzero Exit Status"))
+                .isEqualTo("RUNTIME_ERROR");
+        assertThat(SandboxExecutionClient.normalizeResultCode("Signalled")).isEqualTo("RUNTIME_ERROR");
+        assertThat(SandboxExecutionClient.normalizeResultCode("Internal Error")).isEqualTo("SYSTEM_ERROR");
+    }
 }

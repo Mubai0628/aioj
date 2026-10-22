@@ -1,7 +1,9 @@
 import * as React from "react";
 import { api, type Difficulty, type ProblemDraftGenerationJobResponse, type ProblemDraftResponse, type TestCaseDto } from "@aioj/api-client";
 import { Badge, Button, cn } from "@aioj/ui-react";
-import { ErrorPanel, Field, SidePanel, inputClass, selectClass, textareaClass } from "./Common";
+import { ConfirmDialog, ErrorPanel, Field, LoadingPanel, SidePanel, inputClass, selectClass, textareaClass } from "./Common";
+import { AiDraftTestcasePanel } from "./AiDraftTestcasePanel";
+import { AiDraftWorkspaceContent, RiskNotices } from "./AiDraftAgentWorkspace";
 import { MarkdownView } from "./MarkdownView";
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
@@ -10,7 +12,7 @@ import { readableCaughtError } from "../lib/readableError";
 
 const DIFFICULTIES: Difficulty[] = ["EASY", "MEDIUM", "HARD", "CHALLENGE"];
 
-type DraftTab = "preview" | "verification" | "edit" | "regenerate";
+type DraftTab = "preview" | "verification" | "testcase" | "agent" | "edit";
 export type AiDraftAction = "approve" | "import" | "archive" | "restore" | "reject" | "delete" | "manualReview";
 
 export function AiDraftDetailPanel({
@@ -67,6 +69,7 @@ export function AiDraftDetailPanel({
   const [feedback, setFeedback] = React.useState("");
   const [refining, setRefining] = React.useState(false);
   const [regenerating, setRegenerating] = React.useState(false);
+  const [pendingDiscard, setPendingDiscard] = React.useState<DraftTab | "close" | null>(null);
 
   const currentDraft = localDraft ?? draft;
   const imported = Boolean(currentDraft?.importedProblemId);
@@ -176,6 +179,32 @@ export function AiDraftDetailPanel({
     }
   }
 
+  function requestTabChange(next: DraftTab) {
+    if (next !== tab && tab === "edit" && editDirty) {
+      setPendingDiscard(next);
+      return;
+    }
+    setTab(next);
+  }
+
+  function handleGuardedOpenChange(nextOpen: boolean) {
+    if (!nextOpen && editDirty) {
+      setPendingDiscard("close");
+      return;
+    }
+    onOpenChange(nextOpen);
+  }
+
+  function confirmDiscardChanges() {
+    const target = pendingDiscard;
+    if (currentDraft) resetForm(currentDraft);
+    if (target === "close") {
+      onOpenChange(false);
+    } else if (target) {
+      setTab(target);
+    }
+  }
+
   async function regenerateDraft() {
     if (!currentDraft) return;
     setRegenerating(true);
@@ -193,7 +222,7 @@ export function AiDraftDetailPanel({
   return (
     <SidePanel
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleGuardedOpenChange}
       wide
       presentation="workspace"
       title={t("drafts.detailTitle")}
@@ -234,7 +263,7 @@ export function AiDraftDetailPanel({
         </div>
       ) : null}
     >
-      {!currentDraft ? null : (
+      {!currentDraft ? <LoadingPanel label={t("drafts.detailLoading")} /> : (
         <div className="min-w-0 space-y-5">
           <header className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -252,11 +281,14 @@ export function AiDraftDetailPanel({
             </div>
           </header>
 
-          <div className="flex flex-wrap gap-2 border-b border-[var(--oj-border-soft)] pb-3">
-            <TabButton active={tab === "preview"} onClick={() => setTab("preview")}>{t("drafts.detailTabsPreview")}</TabButton>
-            <TabButton active={tab === "verification"} onClick={() => setTab("verification")}>{t("drafts.detailTabsVerification")}</TabButton>
-            <TabButton active={tab === "edit"} onClick={() => setTab("edit")}>{t("drafts.detailTabsEdit")}</TabButton>
-            <TabButton active={tab === "regenerate"} onClick={() => setTab("regenerate")}>{t("drafts.detailTabsRegenerate")}</TabButton>
+          <RiskNotices reviewRisk={currentDraft.reviewRisk} />
+
+          <div className="flex gap-2 overflow-x-auto border-b border-[var(--oj-border-soft)] pb-3">
+            <TabButton active={tab === "preview"} onClick={() => requestTabChange("preview")}>{t("drafts.detailTabsPreview")}</TabButton>
+            <TabButton active={tab === "verification"} onClick={() => requestTabChange("verification")}>{t("drafts.detailTabsVerification")}</TabButton>
+            <TabButton active={tab === "testcase"} onClick={() => requestTabChange("testcase")}>{t("drafts.detailTabsTestcase")}</TabButton>
+            <TabButton active={tab === "agent"} onClick={() => requestTabChange("agent")}>{t("drafts.detailTabsAgent")}</TabButton>
+            <TabButton active={tab === "edit"} onClick={() => requestTabChange("edit")}>{t("drafts.detailTabsEdit")}</TabButton>
           </div>
 
           {tab === "preview" ? (
@@ -312,6 +344,28 @@ export function AiDraftDetailPanel({
 
           {tab === "verification" ? (
             <VerificationReportPanel draft={currentDraft} />
+          ) : null}
+
+          {tab === "testcase" ? (
+            <AiDraftTestcasePanel draft={currentDraft} onUpdated={async (nextDraft) => {
+              setLocalDraft(nextDraft);
+              resetForm(nextDraft);
+              await onUpdated(nextDraft);
+            }} />
+          ) : null}
+
+          {tab === "agent" ? (
+            currentDraft.workspaceId ? (
+              <AiDraftWorkspaceContent workspaceId={currentDraft.workspaceId} currentDraftId={currentDraft.id} />
+            ) : (
+              <div className="space-y-4">
+                <ErrorPanel tone="warning" title={t("draftWorkspace.legacyTitle")} description={t("draftWorkspace.legacyDraftDescription")} />
+                <Field label={t("drafts.regenerateFeedbackLabel")}>
+                  <textarea className={`${textareaClass} min-h-[260px]`} value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder={t("drafts.regenerateFeedbackPlaceholder")} />
+                </Field>
+                <Button className="w-full sm:w-auto" disabled={regenerating || !feedback.trim()} onClick={() => void regenerateDraft()}>{regenerating ? t("common.loading") : t("drafts.regenerateSubmit")}</Button>
+              </div>
+            )
           ) : null}
 
           {tab === "edit" ? (
@@ -442,16 +496,20 @@ export function AiDraftDetailPanel({
             </div>
           ) : null}
 
-          {tab === "regenerate" ? (
-            <div className="space-y-4">
-              <Field label={t("drafts.regenerateFeedbackLabel")}>
-                <textarea className={`${textareaClass} min-h-[260px]`} value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder={t("drafts.regenerateFeedbackPlaceholder")} />
-              </Field>
-              <Button disabled={regenerating || !feedback.trim()} onClick={() => void regenerateDraft()}>{regenerating ? t("common.loading") : t("drafts.regenerateSubmit")}</Button>
-            </div>
-          ) : null}
         </div>
       )}
+      <ConfirmDialog
+        open={pendingDiscard !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPendingDiscard(null);
+        }}
+        tone="neutral"
+        title={t("drafts.discardChangesTitle")}
+        description={t("drafts.discardChangesDescription")}
+        cancelLabel={t("common.cancel")}
+        confirmLabel={t("drafts.discardChangesConfirm")}
+        onConfirm={confirmDiscardChanges}
+      />
     </SidePanel>
   );
 }
@@ -924,7 +982,7 @@ function TabButton({ active, children, onClick }: { active: boolean; children: R
     <button
       type="button"
       className={cn(
-        "h-9 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oj-focus)]",
+        "h-9 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oj-focus)]",
         active ? "bg-[var(--oj-primary)] text-white" : "text-[var(--oj-ink-muted)] hover:bg-[var(--oj-surface-muted)] hover:text-[var(--oj-ink)]"
       )}
       onClick={onClick}

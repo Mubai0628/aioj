@@ -22,7 +22,8 @@ public class ToolRegistry {
     private static final Pattern NAME_PATTERN = Pattern.compile("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$");
     /** Fields a model must never be able to supply (design doc §4.1). */
     private static final Set<String> FORBIDDEN_INPUT_FIELDS = Set.of(
-            "userid", "role", "isadmin", "visibility", "permission", "tenantid"
+            "userid", "creatoruserid", "role", "isadmin", "visibility", "permission", "tenantid",
+            "workspaceid", "draftid", "generationjobid", "jobid", "agentrunid", "turnid", "conversationid"
     );
 
     private final Map<String, AgentTool> toolsByName;

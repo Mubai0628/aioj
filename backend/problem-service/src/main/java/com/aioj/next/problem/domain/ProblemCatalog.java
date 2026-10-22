@@ -35,6 +35,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -178,6 +179,17 @@ public class ProblemCatalog {
         return Optional.ofNullable(problemMapper.selectOne(activeProblemQuery().eq(ProblemEntity::getId, id)));
     }
 
+    /**
+     * Internal import lookup. Lifecycle filtering is intentionally deferred to the
+     * mutation methods so a deleted/archived row still reserves its workspace key
+     * and cannot be silently replaced with a second problem.
+     */
+    public Optional<ProblemEntity> findByAiOriginWorkspaceId(String workspaceId) {
+        return Optional.ofNullable(problemMapper.selectOne(new LambdaQueryWrapper<ProblemEntity>()
+                .eq(ProblemEntity::getAiOriginWorkspaceId, workspaceId)
+                .last("LIMIT 1")));
+    }
+
     /** Internal helper for other services (e.g. AI usage records) that need titles regardless of visibility. */
     public List<com.aioj.next.contract.ai.ProblemTitleInfo> problemTitles(List<Long> ids) {
         if (ids == null || ids.isEmpty()) {
@@ -196,26 +208,28 @@ public class ProblemCatalog {
     @Transactional
     public ProblemResponse create(ProblemCreateRequest request, boolean aiGenerated) {
         Instant now = Instant.now();
+        Long actorUserId = SecuritySupport.currentUserId();
         ProblemEntity problem = new ProblemEntity();
         apply(problem, request.title(), request.difficulty(), request.statement(), request.notes(), request.tags(),
                 request.timeLimitMillis(), request.memoryLimitKb(), request.languageTimeLimitMultipliers());
         problem.setAiGenerated(aiGenerated);
         problem.setVisibility(request.visibility() == null ? ProblemVisibility.PUBLIC : request.visibility());
-        problem.setCreatedBy(SecuritySupport.currentUserId());
+        problem.setCreatedBy(actorUserId);
         problem.setCreatedAt(now);
         problem.setUpdatedAt(now);
         problem.setDeleted(false);
         problemMapper.insert(problem);
         replaceTestCases(problem.getId(), request.testCases());
         replaceStandardSolutions(problem.getId(), request.standardSolutions(), request.standardSolutionLanguage(),
-                request.standardSolutionCode(), now);
-        replaceTestcaseGenerator(problem.getId(), request.testcaseGeneratorPython(), now);
+                request.standardSolutionCode(), now, actorUserId);
+        replaceTestcaseGenerator(problem.getId(), request.testcaseGeneratorPython(), now, actorUserId);
         return toResponse(problem);
     }
 
     @Transactional
     public ProblemResponse update(Long id, ProblemUpdateRequest request) {
         ProblemEntity problem = requireActiveProblem(id);
+        Long actorUserId = SecuritySupport.currentUserId();
         apply(problem, request.title(), request.difficulty(), request.statement(), request.notes(), request.tags(),
                 request.timeLimitMillis(), request.memoryLimitKb(), request.languageTimeLimitMultipliers());
         if (request.visibility() != null) {
@@ -227,9 +241,135 @@ public class ProblemCatalog {
         problemMapper.updateById(problem);
         replaceTestCases(problem.getId(), request.testCases());
         replaceStandardSolutions(problem.getId(), request.standardSolutions(), request.standardSolutionLanguage(),
-                request.standardSolutionCode(), problem.getUpdatedAt());
-        replaceTestcaseGenerator(problem.getId(), request.testcaseGeneratorPython(), problem.getUpdatedAt());
+                request.standardSolutionCode(), problem.getUpdatedAt(), actorUserId);
+        replaceTestcaseGenerator(problem.getId(), request.testcaseGeneratorPython(), problem.getUpdatedAt(), actorUserId);
         return toResponse(problem);
+    }
+
+    /**
+     * Creates the private, non-published target used while an AI draft import saga
+     * uploads and validates its testcase package. The actor is applied explicitly
+     * to persisted provenance; this method never impersonates the actor in Spring
+     * Security and is only reachable through the internal import service.
+     */
+    @Transactional
+    public ProblemEntity createAiDraftImportTarget(ProblemCreateRequest request, Long actorUserId,
+                                                    String workspaceId, Long draftId,
+                                                    String reviewRisk, String verificationMode) {
+        Instant now = Instant.now();
+        ProblemEntity problem = new ProblemEntity();
+        apply(problem, request.title(), request.difficulty(), request.statement(), request.notes(), request.tags(),
+                request.timeLimitMillis(), request.memoryLimitKb(), request.languageTimeLimitMultipliers());
+        problem.setAiGenerated(true);
+        problem.setAiOriginWorkspaceId(workspaceId);
+        problem.setAiOriginDraftId(draftId);
+        problem.setAiReviewRisk(reviewRisk);
+        problem.setAiTestcaseVerificationMode(verificationMode);
+        problem.setVisibility(ProblemVisibility.PRIVATE);
+        problem.setCreatedBy(actorUserId);
+        problem.setCreatedAt(now);
+        problem.setUpdatedAt(now);
+        problem.setDeleted(false);
+        problemMapper.insert(problem);
+        replaceTestCases(problem.getId(), request.testCases());
+        replaceStandardSolutions(problem.getId(), request.standardSolutions(), request.standardSolutionLanguage(),
+                request.standardSolutionCode(), now, actorUserId);
+        replaceTestcaseGenerator(problem.getId(), request.testcaseGeneratorPython(), now, actorUserId);
+        return problem;
+    }
+
+    /**
+     * Claims a server-derived legacy import target for its first durable Agent
+     * workspace. The conditional update prevents two workspaces from silently
+     * taking ownership of the same problem. Problem content, visibility and the
+     * active testcase package are intentionally left untouched.
+     */
+    @Transactional
+    public ProblemEntity claimAiDraftImportTarget(Long problemId, String workspaceId) {
+        ProblemEntity problem = requireActiveProblem(problemId);
+        String currentWorkspaceId = problem.getAiOriginWorkspaceId();
+        if (currentWorkspaceId != null && !workspaceId.equals(currentWorkspaceId)) {
+            throw new DomainException(ErrorCode.CONFLICT,
+                    "Problem is already bound to another AI draft workspace");
+        }
+        if (workspaceId.equals(currentWorkspaceId)) {
+            return problem;
+        }
+        int updated;
+        try {
+            updated = problemMapper.update(null, new UpdateWrapper<ProblemEntity>()
+                    .eq("id", problemId)
+                    .isNull("ai_origin_workspace_id")
+                    .set("ai_generated", true)
+                    .set("ai_origin_workspace_id", workspaceId)
+                    .set("updated_at", Instant.now()));
+        } catch (DuplicateKeyException duplicate) {
+            ProblemEntity winner = findByAiOriginWorkspaceId(workspaceId).orElse(null);
+            if (winner != null && problemId.equals(winner.getId())) {
+                return winner;
+            }
+            throw new DomainException(ErrorCode.CONFLICT,
+                    "AI draft workspace was claimed by another problem");
+        }
+        if (updated != 1) {
+            ProblemEntity winner = findByAiOriginWorkspaceId(workspaceId).orElse(null);
+            if (winner != null && problemId.equals(winner.getId())) {
+                return winner;
+            }
+            throw new DomainException(ErrorCode.CONFLICT,
+                    "Problem was claimed by another AI draft workspace");
+        }
+        problem.setAiGenerated(true);
+        problem.setAiOriginWorkspaceId(workspaceId);
+        return problem;
+    }
+
+    /**
+     * Pins an existing workspace target to the immutable draft being imported
+     * without changing its current statement, active package, or visibility.
+     */
+    @Transactional
+    public ProblemEntity prepareExistingAiDraftImport(Long problemId, String workspaceId, Long draftId,
+                                                       String reviewRisk, String verificationMode) {
+        ProblemEntity problem = requireActiveProblem(problemId);
+        assertAiImportWorkspace(problem, workspaceId);
+        problem.setAiGenerated(true);
+        problem.setAiOriginDraftId(draftId);
+        problem.setAiReviewRisk(reviewRisk);
+        problem.setAiTestcaseVerificationMode(verificationMode);
+        problem.setUpdatedAt(Instant.now());
+        problemMapper.updateById(problem);
+        return problem;
+    }
+
+    /**
+     * Replaces all mutable problem content as part of the caller's transaction.
+     * Testcase package activation is deliberately coordinated by the import
+     * service so both changes commit or roll back together.
+     */
+    @Transactional
+    public ProblemEntity commitAiDraftImport(Long problemId, ProblemUpdateRequest request, Long actorUserId,
+                                              String workspaceId, Long draftId, String reviewRisk,
+                                              String verificationMode, ProblemVisibility targetVisibility) {
+        ProblemEntity problem = requireActiveProblem(problemId);
+        assertAiImportWorkspace(problem, workspaceId);
+        if (!draftId.equals(problem.getAiOriginDraftId())) {
+            throw new DomainException(ErrorCode.CONFLICT, "AI draft import target changed; prepare the draft again");
+        }
+        apply(problem, request.title(), request.difficulty(), request.statement(), request.notes(), request.tags(),
+                request.timeLimitMillis(), request.memoryLimitKb(), request.languageTimeLimitMultipliers());
+        problem.setAiGenerated(true);
+        problem.setAiOriginDraftId(draftId);
+        problem.setAiReviewRisk(reviewRisk);
+        problem.setAiTestcaseVerificationMode(verificationMode);
+        problem.setVisibility(targetVisibility);
+        problem.setUpdatedAt(Instant.now());
+        problemMapper.updateById(problem);
+        replaceTestCases(problem.getId(), request.testCases());
+        replaceStandardSolutions(problem.getId(), request.standardSolutions(), request.standardSolutionLanguage(),
+                request.standardSolutionCode(), problem.getUpdatedAt(), actorUserId);
+        replaceTestcaseGenerator(problem.getId(), request.testcaseGeneratorPython(), problem.getUpdatedAt(), actorUserId);
+        return problem;
     }
 
     public ProblemSolutionResponse standardSolution(Long id) {
@@ -408,21 +548,22 @@ public class ProblemCatalog {
     }
 
     private void replaceStandardSolutions(Long problemId, List<ProblemStandardSolutionPayload> standardSolutions,
-                                          String legacyLanguage, String legacyContent, Instant now) {
+                                          String legacyLanguage, String legacyContent, Instant now,
+                                          Long actorUserId) {
         solutionMapper.delete(new LambdaQueryWrapper<ProblemSolutionEntity>()
                 .eq(ProblemSolutionEntity::getProblemId, problemId));
         if (standardSolutions != null) {
-            insertStandardSolutions(problemId, standardSolutions, now);
+            insertStandardSolutions(problemId, standardSolutions, now, actorUserId);
             return;
         }
         if (!StringUtils.hasText(legacyContent)) {
             return;
         }
-        insertStandardSolution(problemId, normalizeSolutionLanguage(legacyLanguage), legacyContent, now);
+        insertStandardSolution(problemId, normalizeSolutionLanguage(legacyLanguage), legacyContent, now, actorUserId);
     }
 
     private void insertStandardSolutions(Long problemId, List<ProblemStandardSolutionPayload> standardSolutions,
-                                         Instant now) {
+                                         Instant now, Long actorUserId) {
         if (standardSolutions.size() > STANDARD_SOLUTION_LANGUAGES.size()) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "At most three standard solutions are supported");
         }
@@ -443,23 +584,24 @@ public class ProblemCatalog {
         for (String language : STANDARD_SOLUTION_LANGUAGES) {
             String content = byLanguage.get(language);
             if (StringUtils.hasText(content)) {
-                insertStandardSolution(problemId, language, content, now);
+                insertStandardSolution(problemId, language, content, now, actorUserId);
             }
         }
     }
 
-    private void insertStandardSolution(Long problemId, String language, String content, Instant now) {
+    private void insertStandardSolution(Long problemId, String language, String content, Instant now,
+                                        Long actorUserId) {
         ProblemSolutionEntity solution = new ProblemSolutionEntity();
         solution.setProblemId(problemId);
         solution.setLanguage(language);
         solution.setContent(content.trim());
-        solution.setCreatedBy(SecuritySupport.currentUserId());
+        solution.setCreatedBy(actorUserId);
         solution.setCreatedAt(now);
         solution.setUpdatedAt(now);
         solutionMapper.insert(solution);
     }
 
-    private void replaceTestcaseGenerator(Long problemId, String content, Instant now) {
+    private void replaceTestcaseGenerator(Long problemId, String content, Instant now, Long actorUserId) {
         testcaseGeneratorMapper.delete(new LambdaQueryWrapper<ProblemTestcaseGeneratorEntity>()
                 .eq(ProblemTestcaseGeneratorEntity::getProblemId, problemId));
         if (!StringUtils.hasText(content)) {
@@ -468,10 +610,17 @@ public class ProblemCatalog {
         ProblemTestcaseGeneratorEntity generator = new ProblemTestcaseGeneratorEntity();
         generator.setProblemId(problemId);
         generator.setContent(content.trim());
-        generator.setCreatedBy(SecuritySupport.currentUserId());
+        generator.setCreatedBy(actorUserId);
         generator.setCreatedAt(now);
         generator.setUpdatedAt(now);
         testcaseGeneratorMapper.insert(generator);
+    }
+
+    private void assertAiImportWorkspace(ProblemEntity problem, String workspaceId) {
+        if (!Boolean.TRUE.equals(problem.getAiGenerated())
+                || !workspaceId.equals(problem.getAiOriginWorkspaceId())) {
+            throw new DomainException(ErrorCode.CONFLICT, "Problem is not owned by this AI draft workspace");
+        }
     }
 
     private ProblemResponse toResponse(ProblemEntity problem) {
@@ -488,6 +637,7 @@ public class ProblemCatalog {
                 problem.getNotes(), fromJson(problem.getTags()), samples, problem.getTimeLimitMillis(),
                 toMultiplierResponse(problem), problem.getMemoryLimitKb(),
                 Boolean.TRUE.equals(problem.getAiGenerated()),
+                problem.getAiReviewRisk(), problem.getAiTestcaseVerificationMode(),
                 problem.getVisibility() == null ? ProblemVisibility.PUBLIC : problem.getVisibility(),
                 problem.getCreatedAt(), problem.getArchivedAt(),
                 problem.getDeletedAt(), problem.getDeletedBy());

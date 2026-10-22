@@ -9,6 +9,7 @@ import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
@@ -29,6 +31,7 @@ import java.util.Locale;
 public class ProblemDraftTestcaseArtifactService {
     public static final String STATUS_READY = "READY";
     public static final String STATUS_SUPERSEDED = "SUPERSEDED";
+    public static final String STATUS_WRITING = "WRITING";
 
     private final ProblemDraftTestcaseArtifactMapper mapper;
     private final ObjectMapper objectMapper;
@@ -56,12 +59,14 @@ public class ProblemDraftTestcaseArtifactService {
         if (!StringUtils.hasText(report.packageFileId())) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Official testcase package file id is missing");
         }
+        Path temp = null;
+        ProblemDraftTestcaseArtifactEntity entity = null;
         try {
             Files.createDirectories(storageRoot);
             Path draftDir = storageRoot.resolve(String.valueOf(draftId)).normalize();
             ensureInsideStorage(draftDir);
             Files.createDirectories(draftDir);
-            Path temp = Files.createTempFile(draftDir, "official-hidden-", ".zip.tmp");
+            temp = Files.createTempFile(draftDir, "official-hidden-", ".zip.tmp");
             downloadPackage(report.packageFileId(), temp);
             long size = Files.size(temp);
             String sha256 = sha256(temp);
@@ -78,10 +83,13 @@ public class ProblemDraftTestcaseArtifactService {
                         "Official testcase package SHA-256 mismatch after download");
             }
             LocalDateTime now = LocalDateTime.now();
-            ProblemDraftTestcaseArtifactEntity entity = new ProblemDraftTestcaseArtifactEntity();
+            entity = new ProblemDraftTestcaseArtifactEntity();
             entity.setDraftId(draftId);
             entity.setCreatorUserId(creatorUserId);
-            entity.setStatus(STATUS_READY);
+            entity.setSource("AGENT_GENERATED");
+            entity.setStatus(STATUS_WRITING);
+            entity.setFormatStatus("PROCESSING");
+            entity.setExecutionStatus("NOT_RUN");
             entity.setFileName(safeFileName(report.packageFileName()));
             entity.setStoragePath("");
             entity.setFileSizeBytes(size);
@@ -91,23 +99,78 @@ public class ProblemDraftTestcaseArtifactService {
             entity.setTotalOutputBytes(report.totalOutputBytes() == null ? 0L : report.totalOutputBytes());
             entity.setLargestCaseBytes(report.largestCaseBytes() == null ? 0L : report.largestCaseBytes());
             entity.setPackageSummaryJson(objectMapper.writeValueAsString(report));
+            entity.setGeneratedAt(now);
             entity.setCreatedAt(now);
             entity.setUpdatedAt(now);
             mapper.insert(entity);
 
             Path finalPath = draftDir.resolve(entity.getId() + ".zip").normalize();
             ensureInsideStorage(finalPath);
-            Files.move(temp, finalPath, StandardCopyOption.REPLACE_EXISTING);
+            moveAtomically(temp, finalPath);
+            temp = null;
             entity.setStoragePath(storageRoot.relativize(finalPath).toString().replace('\\', '/'));
+            entity.setStatus(STATUS_READY);
+            entity.setFormatStatus("READY");
             mapper.updateById(entity);
             supersedeOlder(draftId, entity.getId());
             return entity;
         } catch (DomainException ex) {
+            markFailed(entity, ex.getMessage());
             throw ex;
         } catch (Exception ex) {
+            markFailed(entity, "Official testcase package could not be persisted");
             throw new DomainException(ErrorCode.INTERNAL_ERROR,
-                    "Failed to persist official testcase package artifact: " + ex.getMessage());
+                    "Failed to persist official testcase package artifact");
+        } finally {
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException ignored) {
+                    // Best-effort local cleanup.
+                }
+            }
+            deleteRemoteFile(report.packageFileId());
         }
+    }
+
+    public ProblemDraftTestcaseArtifactEntity bindAgentArtifact(Long artifactId, String workspaceId,
+                                                                Long creatorUserId,
+                                                                String verificationFingerprint,
+                                                                Long agentRunId) {
+        ProblemDraftTestcaseArtifactEntity entity = mapper.selectById(artifactId);
+        if (entity == null || !STATUS_READY.equals(entity.getStatus())) {
+            throw new DomainException(ErrorCode.NOT_FOUND, "Problem draft testcase artifact not found");
+        }
+        entity.setWorkspaceId(workspaceId);
+        entity.setCreatorUserId(creatorUserId);
+        entity.setSource("AGENT_GENERATED");
+        entity.setFormatStatus("READY");
+        entity.setExecutionStatus("NOT_RUN");
+        entity.setVerificationMode(null);
+        entity.setVerificationFingerprint(verificationFingerprint);
+        entity.setAgentRunId(agentRunId);
+        entity.setGeneratedAt(entity.getGeneratedAt() == null ? LocalDateTime.now() : entity.getGeneratedAt());
+        entity.setUpdatedAt(LocalDateTime.now());
+        mapper.updateById(entity);
+        return entity;
+    }
+
+    public ProblemDraftTestcaseArtifactEntity latestReadyForDraft(Long draftId) {
+        return latestReady(draftId);
+    }
+
+    public ProblemDraftTestcaseArtifactEntity requireWorkspaceArtifact(Long artifactId, String workspaceId,
+                                                                       Long creatorUserId) {
+        ProblemDraftTestcaseArtifactEntity entity = mapper.selectOne(new QueryWrapper<ProblemDraftTestcaseArtifactEntity>()
+                .eq("id", artifactId)
+                .eq("workspace_id", workspaceId)
+                .eq("creator_user_id", creatorUserId)
+                .notIn("status", java.util.List.of(STATUS_SUPERSEDED, "FAILED"))
+                .last("LIMIT 1"));
+        if (entity == null) {
+            throw new DomainException(ErrorCode.NOT_FOUND, "Problem draft testcase artifact not found");
+        }
+        return entity;
     }
 
     public ProblemDraftTestcaseArtifactEntity latestReady(Long draftId) {
@@ -168,6 +231,50 @@ public class ProblemDraftTestcaseArtifactService {
                     }
                     return null;
                 });
+    }
+
+    private void deleteRemoteFile(String fileId) {
+        if (!StringUtils.hasText(fileId)) {
+            return;
+        }
+        try {
+            judgeWorkerClient.post()
+                    .uri("/api/v1/internal/sandbox/delete-file")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(java.util.Map.of("fileId", fileId))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RuntimeException ignored) {
+            // Cache TTL remains the final cleanup backstop.
+        }
+    }
+
+    private void moveAtomically(Path source, Path destination) throws IOException {
+        try {
+            Files.move(source, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(source, destination, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private void markFailed(ProblemDraftTestcaseArtifactEntity entity, String message) {
+        if (entity == null || entity.getId() == null) {
+            return;
+        }
+        try {
+            entity.setStatus("FAILED");
+            entity.setFormatStatus("FAILED");
+            entity.setFailureSummary(safeFailure(message));
+            entity.setUpdatedAt(LocalDateTime.now());
+            mapper.updateById(entity);
+        } catch (RuntimeException ignored) {
+            // The original persistence failure remains authoritative.
+        }
+    }
+
+    private String safeFailure(String message) {
+        String value = StringUtils.hasText(message) ? message.trim() : "Testcase artifact persistence failed";
+        return value.length() <= 1000 ? value : value.substring(0, 1000);
     }
 
     private void supersedeOlder(Long draftId, Long keepId) {

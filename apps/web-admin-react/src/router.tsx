@@ -18,7 +18,7 @@ type RouterContext = {
 };
 
 type LoginSearch = { redirect?: string; expired?: string; registered?: string; account?: string };
-type AiDraftsSearch = { draftId?: string; tab?: "generate" | "jobs" | "box" };
+type AiDraftsSearch = { draftId?: string; workspaceId?: string; tab?: "generate" | "jobs" | "box" };
 
 const ADMIN_APP_ROLES: readonly Role[] = ["TEACHER", "ADMIN"];
 const ADMIN_ONLY_ROLES: readonly Role[] = ["ADMIN"];
@@ -193,6 +193,7 @@ const aiDraftsRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): AiDraftsSearch => {
     const next: AiDraftsSearch = {};
     if (typeof search.draftId === "string") next.draftId = search.draftId;
+    if (typeof search.workspaceId === "string") next.workspaceId = search.workspaceId;
     if (search.tab === "generate" || search.tab === "jobs" || search.tab === "box") next.tab = search.tab;
     return next;
   },

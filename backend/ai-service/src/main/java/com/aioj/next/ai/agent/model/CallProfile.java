@@ -10,6 +10,8 @@ public enum CallProfile {
     CHAT_STREAM(false, 4096, 0.3, false),
     /** Restricted turn: full generation, output-guard check, pseudo-stream replay (P3). */
     CHAT_BUFFERED(false, 4096, 0.3, false),
+    /** Problem-draft Agent: model-led tool loop with controlled standard fallback. */
+    PROBLEM_DRAFT(false, 8192, 0.2, false),
     /** Small structured outputs (classification/judgement): thinking off, JSON object. */
     STRUCTURED_SMALL(true, 4096, 0.1, true),
     /** Async curator structured outputs (TurnDigest etc.): thinking off, JSON object. */

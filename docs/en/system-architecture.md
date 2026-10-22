@@ -42,6 +42,8 @@ problem-service persists a submission and publishes a RabbitMQ job. judge-worker
 
 ai-service calculates permission and policy on the server, builds minimal context, invokes the provider and authorized tools, and persists usage and audit evidence. AI accesses problem-service through minimal service contracts rather than reading another service's database tables.
 
+AI problem drafting follows `ProblemDraftAgentCoordinator → AgentRuntime → ToolBroker`. ai-service delegates code, sample, and package execution through a protected contract to judge-worker, which calls Sandbox; ai-service never accesses Docker directly. After human approval, a recoverable import saga commits the problem content and a `READY` package through problem-service. See [AI problem-draft Agent architecture](problem-draft-agent-architecture.md).
+
 ### Notifications
 
 Persistent notification records are the source of truth; SSE is only a real-time wake-up signal. After disconnect or refresh, the client uses REST recovery to restore unread state.
@@ -60,9 +62,12 @@ Persistent notification records are the source of truth; SSE is only a real-time
 - Redis stores rebuildable cache and short-lived state.
 - RabbitMQ stores asynchronous judge jobs and bounded retry state.
 - Testcase packages, operation artifacts, AI-draft artifacts, and judge cache use file/volume storage; large hidden tests do not enter MySQL.
+- V66 adds AI-draft workspaces, bounded execution metadata, chunk-upload sessions, and recoverable import sagas, and extends existing draft/artifact/Agent-audit/problem records with provenance and fingerprints. Unwired draft job/attempt/artifact tables from V49–V51 remain historical structures and do not enter the active path.
 
 ## Production topology
 
 The selected production topology combines application services, data services, judge-worker, and Sandbox on one host. The application network carries business traffic, while an internal judge network connects only judge-worker and Sandbox. Sandbox has no public port, host network, Docker socket, business mount, or database/JWT/AI/deployment secret.
 
 Sandbox remains `privileged`, so a successful escape could compromise the host and all colocated data. Network and resource controls cannot fully remove that risk; see the [security architecture](security-architecture.md).
+
+The AI problem-draft Agent refactor currently exists only in the local working tree and is `IMPLEMENTED_UNVERIFIED`; it has not connected to or updated production node `aioj_a`.

@@ -66,6 +66,19 @@ class ModelGatewayTest {
     }
 
     @Test
+    void controlledStandardRetryForcesThinkingOffWithoutChangingConfig() {
+        RecordingAdapter deepseek = new RecordingAdapter("deepseek", ProviderCapabilities.deepSeek());
+        AiModelEffectiveConfig config = config("deepseek", "deepseek-v4-pro");
+        ModelGateway gateway = new ModelGateway(configService, List.of(deepseek));
+
+        gateway.callWithoutThinking(config, new GatewayRequest(List.of(GatewayMessage.user("hi")), List.of(),
+                ToolChoiceMode.AUTO, CallProfile.PROBLEM_DRAFT));
+
+        assertThat(config.thinkingEnabled()).isTrue();
+        assertThat(deepseek.lastSettings.thinkingEnabled()).isFalse();
+    }
+
+    @Test
     void unknownProviderIsExplicitError() {
         when(configService.effectiveConfig(AiModelScope.TEXT_GENERATION)).thenReturn(config("openai", "gpt-5"));
         ModelGateway gateway = new ModelGateway(configService, List.of(new RecordingAdapter("deepseek", ProviderCapabilities.deepSeek())));

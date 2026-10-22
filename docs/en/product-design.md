@@ -32,7 +32,11 @@ A contest blueprint describes reusable rules; a contest run describes one concre
 
 ### AI assistance
 
-The tutor uses authorized current context, auditable tools, and layered memory. During a contest, server-side policy constrains private-problem questions and requests for complete solutions to public contest problems. AI problem generation always follows draft → review/approve → import.
+The tutor uses authorized current context, auditable tools, and layered memory. During a contest, server-side policy constrains private-problem questions and requests for complete solutions to public contest problems.
+
+AI problem generation uses a continuous, problem-isolated Agent workspace. Teachers can inspect safe tool traces and resource summaries, continue repairs in the same context, and choose Agent-generated or manually uploaded testcase packages. Once a manual package is format-ready, they may run full Agent acceptance or directly import it as `MANUAL_UNVERIFIED` after a second confirmation. Neither path can bypass content approval, format checks, or fingerprint consistency. The complete lifecycle remains draft → review/approve → import.
+
+Administration surfaces persist a human-review warning for difficult AI problems and a stronger warning for packages that did not pass Agent execution acceptance. Student surfaces retain only the existing AI label and never show internal reasoning or administration audit. The workspace supports both desktop tables/timelines and mobile cards/single-column detail.
 
 ### Learning memory
 

@@ -1545,6 +1545,8 @@ export interface ProblemResponse {
   languageTimeLimitMultipliers?: ProblemLanguageTimeLimitMultipliers | null;
   memoryLimitKb: number;
   aiGenerated: boolean;
+  aiReviewRisk?: string | null;
+  aiTestcaseVerificationMode?: string | null;
   visibility?: ProblemVisibility | null;
   createdAt: string;
   archivedAt?: string | null;
@@ -2326,6 +2328,14 @@ export interface ProblemDraftResponse {
   verificationReportJson?: string | null;
   repairAttemptCount?: number | null;
   lastRepairReason?: string | null;
+  workspaceId?: EntityId | null;
+  stateVersion?: number | null;
+  contentFingerprint?: string | null;
+  verificationFingerprint?: string | null;
+  requestedCfRating?: number | null;
+  reviewRisk?: ProblemDraftReviewRisk | null;
+  testcaseArtifact?: ProblemDraftTestcaseArtifactResponse | null;
+  importReadiness?: ProblemDraftImportReadinessResponse | null;
 }
 
 export interface ProblemDraftRefinePayload {
@@ -2369,7 +2379,254 @@ export interface ProblemDraftGeneratePayload {
   enableReferenceCheck?: boolean;
 }
 
-export type ProblemDraftGenerationJobStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+export type ProblemDraftGenerationJobStatus = 'QUEUED' | 'RUNNING' | 'NEEDS_ATTENTION' | 'PENDING_REVIEW' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+
+export interface ProblemDraftReviewRisk {
+  code: string;
+  severity: string;
+  highDifficulty: boolean;
+  manualUnverified: boolean;
+  message?: string | null;
+}
+
+export type ProblemDraftAgentMode = 'AGENT' | 'LEGACY' | string;
+
+export type ProblemDraftWorkspaceStatus =
+  | ProblemDraftGenerationJobStatus
+  | 'ACTIVE'
+  | 'COMPLETED'
+  | string;
+
+export type ProblemDraftTestcaseArtifactSource = 'AGENT_GENERATED' | 'MANUAL_UPLOAD' | string;
+
+export type ProblemDraftTestcaseArtifactValidationStatus =
+  | 'NOT_RUN'
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'VERIFIED'
+  | 'FAILED'
+  | string;
+
+export interface ProblemDraftResourceMetrics {
+  wallTimeMillis?: number | null;
+  cpuTimeMillis?: number | null;
+  peakMemoryKb?: number | null;
+  inputBytes?: number | null;
+  outputBytes?: number | null;
+  testcaseCount?: number | null;
+  modelCallCount?: number | null;
+  toolCallCount?: number | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  [key: string]: unknown;
+}
+
+export interface ProblemDraftTestcaseArtifactResponse {
+  id: EntityId;
+  source: ProblemDraftTestcaseArtifactSource;
+  lifecycleStatus: string;
+  formatStatus: string;
+  executionStatus: string;
+  verificationMode?: string | null;
+  verificationFingerprint?: string | null;
+  stale: boolean;
+  failureSummary?: string | null;
+  agentRunId?: EntityId | null;
+  generatedAt?: string | null;
+  importedProblemId?: EntityId | null;
+  problemTestcasePackageId?: EntityId | null;
+  /* Optional compatibility aliases while older draft responses are phased out. */
+  status?: TestcasePackageStatus | string;
+  validationStatus?: ProblemDraftTestcaseArtifactValidationStatus | null;
+  fileName?: string | null;
+  fileSizeBytes: number;
+  sha256: string;
+  caseCount?: number | null;
+  sampleCount?: number | null;
+  contentFingerprint?: string | null;
+  safeSummary?: string | null;
+  errorMessage?: string | null;
+  createdAt?: string | null;
+  validatedAt?: string | null;
+  supersededAt?: string | null;
+}
+
+export interface ProblemDraftImportReadinessResponse {
+  ready: boolean;
+  requiresUnverifiedAcknowledgement: boolean;
+  verificationMode?: string | null;
+  blockerCodes: string[];
+  recommendedActions: string[];
+}
+
+export interface ProblemDraftWorkspaceResponse {
+  id: EntityId;
+  creatorUserId?: EntityId | null;
+  conversationId?: string | null;
+  generationJobId?: EntityId | null;
+  currentDraftId?: EntityId | null;
+  sourceDraftId?: EntityId | null;
+  currentAgentRunId?: EntityId | null;
+  status: ProblemDraftWorkspaceStatus;
+  stage?: string | null;
+  topic?: string | null;
+  title?: string | null;
+  agentMode?: ProblemDraftAgentMode | null;
+  stateVersion?: number | null;
+  requestedCfRating?: number | null;
+  reviewRisk?: ProblemDraftReviewRisk | null;
+  safeSummary?: string | null;
+  contentFingerprint?: string | null;
+  verificationFingerprint?: string | null;
+  resourceMetrics?: ProblemDraftResourceMetrics | null;
+  testcaseArtifact?: ProblemDraftTestcaseArtifactResponse | null;
+  importReadiness?: ProblemDraftImportReadinessResponse | null;
+  errorCode?: number | null;
+  errorKey?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
+export type ProblemDraftWorkspaceMessageRole = 'USER' | 'ASSISTANT' | 'SYSTEM' | 'TOOL' | string;
+
+export interface ProblemDraftWorkspaceMessageResponse {
+  id: EntityId;
+  workspaceId: EntityId;
+  role: ProblemDraftWorkspaceMessageRole;
+  content: string;
+  safeSummary?: string | null;
+  status?: string | null;
+  model?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export interface ProblemDraftAgentRunResponse {
+  id: EntityId;
+  workspaceId: EntityId;
+  status: string;
+  executionMode?: string | null;
+  provider?: string | null;
+  stepCount?: number | null;
+  stage?: string | null;
+  safeSummary?: string | null;
+  model?: string | null;
+  resourceMetrics?: ProblemDraftResourceMetrics | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  toolCallCount?: number | null;
+  errorCode?: string | number | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt?: string | null;
+}
+
+export interface ProblemDraftToolCallResponse {
+  id: EntityId;
+  workspaceId?: EntityId | null;
+  agentRunId?: EntityId | null;
+  callId?: string | null;
+  sequence?: number | null;
+  toolName: string;
+  status: string;
+  safeArgumentsSummary?: string | null;
+  safeResultSummary?: string | null;
+  safeSummary?: string | null;
+  resultClassification?: string | null;
+  resourceRefType?: string | null;
+  resourceRefId?: EntityId | null;
+  latencyMillis?: number | null;
+  resourceMetrics?: ProblemDraftResourceMetrics | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt?: string | null;
+}
+
+export type ProblemDraftWorkspaceTurnIntent =
+  | 'REFINE'
+  | 'REPAIR'
+  | 'REVALIDATE'
+  | 'GENERATE_TESTS'
+  | 'GENERAL'
+  | string;
+
+export interface ProblemDraftWorkspaceTurnRequest {
+  clientTurnId: string;
+  expectedCurrentDraftId?: EntityId | null;
+  message: string;
+  intent: ProblemDraftWorkspaceTurnIntent;
+}
+
+export interface ProblemDraftWorkspaceTurnResponse {
+  workspaceId: EntityId;
+  turnId: string;
+  status: string;
+  generationJobId?: EntityId | null;
+  agentRunId?: EntityId | null;
+  currentDraftId?: EntityId | null;
+  idempotentReplay: boolean;
+}
+
+export interface ProblemDraftTestcaseUploadInitRequest {
+  fileName: string;
+  fileSizeBytes: number;
+  sha256: string;
+}
+
+export interface ProblemDraftTestcaseUploadInitResponse {
+  uploadId: string;
+  workspaceId: EntityId;
+  status: TestcasePackageStatus | string;
+  chunkSizeBytes: number;
+  chunkCount: number;
+  expiresAt: string;
+}
+
+export interface ProblemDraftTestcaseUploadStatusResponse {
+  uploadId: string;
+  workspaceId: EntityId;
+  status: TestcasePackageStatus | string;
+  receivedChunkCount: number;
+  chunkCount: number;
+  uploadedSizeBytes: number;
+  expectedSizeBytes: number;
+  artifactId?: EntityId | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  expiresAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
+export interface ProblemDraftWorkspaceImportRequest {
+  artifactId: EntityId;
+  visibility: ProblemVisibility;
+  mode: string;
+  acknowledgeUnverified?: boolean | null;
+  idempotencyKey: string;
+}
+
+export interface ProblemDraftWorkspaceImportResponse {
+  sagaId: EntityId;
+  workspaceId: EntityId;
+  draftId: EntityId;
+  artifactId: EntityId;
+  state: string;
+  importMode: string;
+  problemId?: EntityId | null;
+  problemTestcasePackageId?: EntityId | null;
+  readiness: ProblemDraftImportReadinessResponse;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
 
 export interface ProblemDraftGenerationJobResponse {
   id: EntityId;
@@ -2390,6 +2647,9 @@ export interface ProblemDraftGenerationJobResponse {
   completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  workspaceId?: EntityId | null;
+  agentMode?: ProblemDraftAgentMode | null;
+  reviewRisk?: ProblemDraftReviewRisk | null;
 }
 
 export type ContestInvitationBatchItemStatus =
@@ -2686,7 +2946,7 @@ function queryString(params: Record<string, unknown> = {}) {
 }
 
 function preserveLargeIntegerIds(text: string) {
-  return text.replace(/("(?:(?:[A-Za-z0-9_]*Id)|id)"\s*:\s*)(-?\d{16,})/g, '$1"$2"');
+  return text.replace(/("(?:(?:[A-Za-z0-9_]*Id)|id|deletedBy)"\s*:\s*)(-?\d{16,})/g, '$1"$2"');
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -3694,12 +3954,6 @@ export const api = {
     }),
   deleteAiLearningProfile: (id: EntityId) =>
     request<void>(`/api/v1/ai/learning-profile/${id}`, { method: 'DELETE' }),
-  generateDraft: (payload: ProblemDraftGeneratePayload, opts?: { signal?: AbortSignal }) =>
-    request<ProblemDraftResponse>('/api/v1/ai/problem-drafts/generate', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      signal: opts?.signal
-    }),
   generateDraftStream: (payload: ProblemDraftGeneratePayload, opts?: ProblemDraftGenerateStreamOptions) =>
     streamProblemDraftGenerateRequest(payload, opts, true),
   createProblemDraftGenerationJob: (payload: ProblemDraftGeneratePayload, opts?: { signal?: AbortSignal }) =>
@@ -3717,6 +3971,66 @@ export const api = {
     request<PageResponse<ProblemDraftGenerationJobResponse>>(`/api/v1/admin/problem-draft-generation-jobs${queryString({ page: 1, pageSize: 20, ...params })}`),
   problemDraftGenerationJob: (id: EntityId) =>
     request<ProblemDraftGenerationJobResponse>(`/api/v1/admin/problem-draft-generation-jobs/${id}`),
+  problemDraftWorkspace: (workspaceId: EntityId) =>
+    request<ProblemDraftWorkspaceResponse>(`/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}`),
+  problemDraftWorkspaceMessages: (workspaceId: EntityId, params: { page?: number; pageSize?: number } = {}) =>
+    request<PageResponse<ProblemDraftWorkspaceMessageResponse>>(
+      `/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/messages${queryString({ page: 1, pageSize: 50, ...params })}`
+    ),
+  createProblemDraftWorkspaceTurn: (workspaceId: EntityId, payload: ProblemDraftWorkspaceTurnRequest) =>
+    request<ProblemDraftWorkspaceTurnResponse>(`/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/turns`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  problemDraftWorkspaceAgentRuns: (workspaceId: EntityId, afterId?: EntityId) =>
+    request<ProblemDraftAgentRunResponse[]>(
+      `/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/agent-runs${queryString({ afterId })}`
+    ),
+  problemDraftWorkspaceToolCalls: (workspaceId: EntityId, afterId?: EntityId) =>
+    request<ProblemDraftToolCallResponse[]>(
+      `/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/tool-calls${queryString({ afterId })}`
+    ),
+  initProblemDraftTestcaseUpload: (workspaceId: EntityId, payload: ProblemDraftTestcaseUploadInitRequest) =>
+    request<ProblemDraftTestcaseUploadInitResponse>(`/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/testcase-uploads`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  uploadProblemDraftTestcaseChunk: (
+    workspaceId: EntityId,
+    uploadId: string,
+    index: number,
+    chunk: Blob,
+    chunkSha256?: string
+  ) => request<ProblemDraftTestcaseUploadStatusResponse>(
+    `/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/testcase-uploads/${encodeURIComponent(uploadId)}/chunks/${index}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        ...(chunkSha256 ? { 'X-Chunk-Sha256': chunkSha256 } : {})
+      },
+      body: chunk
+    }
+  ),
+  completeProblemDraftTestcaseUpload: (workspaceId: EntityId, uploadId: string, sha256: string) =>
+    request<ProblemDraftTestcaseUploadStatusResponse>(
+      `/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/testcase-uploads/${encodeURIComponent(uploadId)}/complete`,
+      { method: 'POST', body: JSON.stringify({ sha256 }) }
+    ),
+  problemDraftTestcaseUploadStatus: (workspaceId: EntityId, uploadId: string) =>
+    request<ProblemDraftTestcaseUploadStatusResponse>(
+      `/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/testcase-uploads/${encodeURIComponent(uploadId)}/status`
+    ),
+  validateProblemDraftTestcaseArtifact: (workspaceId: EntityId, artifactId: EntityId) =>
+    request<ProblemDraftTestcaseArtifactResponse>(
+      `/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/testcase-artifacts/${artifactId}/agent-validation`,
+      { method: 'POST', body: '{}' }
+    ),
+  importProblemDraftWorkspace: (workspaceId: EntityId, payload: ProblemDraftWorkspaceImportRequest) =>
+    request<ProblemDraftWorkspaceImportResponse>(`/api/v1/ai/admin/problem-draft-workspaces/${workspaceId}/imports`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
   problemDrafts: (params: {
     page?: number;
     pageSize?: number;
@@ -3736,11 +4050,6 @@ export const api = {
     }),
   createProblemDraftRegenerationJob: (id: EntityId, feedback: string) =>
     request<ProblemDraftGenerationJobResponse>(`/api/v1/admin/problem-drafts/${id}/regeneration-job`, {
-      method: 'POST',
-      body: JSON.stringify({ feedback })
-    }),
-  regenerateDraft: (id: EntityId, feedback: string) =>
-    request<ProblemDraftResponse>(`/api/v1/admin/problem-drafts/${id}/regenerate`, {
       method: 'POST',
       body: JSON.stringify({ feedback })
     }),

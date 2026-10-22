@@ -8,6 +8,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -77,6 +80,62 @@ class InternalSandboxControllerTest {
     }
 
     @Test
+    void runOneClampsTimeMemoryAndStdoutBudgets() {
+        SandboxExecutionClient client = mock(SandboxExecutionClient.class);
+        when(client.runSource(eq("python"), eq("print(1)"), eq(null), eq(""), anyLong(), anyLong(), anyInt()))
+                .thenReturn(new SandboxExecutionClient.RunOutcome(
+                        "Accepted", "Accepted", 1L, 1L, "1\n", "", 0, 1L,
+                        null, null, Map.of(), "ACCEPTED", 1));
+        InternalSandboxController controller = controller(client);
+
+        InternalSandboxController.RunResponse response = controller.runOne(TOKEN,
+                new InternalSandboxController.RunRequest("python", "print(1)", null, "",
+                        Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE)).data();
+
+        ArgumentCaptor<Long> cpu = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Long> memory = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Integer> stdout = ArgumentCaptor.forClass(Integer.class);
+        verify(client).runSource(eq("python"), eq("print(1)"), eq(null), eq(""), cpu.capture(), memory.capture(),
+                stdout.capture());
+        assertThat(cpu.getValue()).isEqualTo(SandboxExecutionClient.millisToNanos(30_000));
+        assertThat(memory.getValue()).isEqualTo(SandboxExecutionClient.kbToBytes(1_048_576));
+        assertThat(stdout.getValue()).isEqualTo(4 * 1024 * 1024);
+        assertThat(response.status()).isEqualTo("ACCEPTED");
+        assertThat(response.procPeak()).isEqualTo(1);
+    }
+
+    @Test
+    void runBatchRejectsTooManyCasesBeforeExecution() {
+        SandboxExecutionClient client = mock(SandboxExecutionClient.class);
+        InternalSandboxController controller = controller(client);
+        List<String> inputs = java.util.Collections.nCopies(201, "1\n");
+
+        assertThatThrownBy(() -> controller.runBatch(TOKEN,
+                new InternalSandboxController.RunBatchRequest("python", "print(1)", null, inputs,
+                        1000, 262_144, 65_536)))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("too many inputs");
+        verify(client, never()).runSource(eq("python"), eq("print(1)"), eq(null), eq("1\n"),
+                anyLong(), anyLong(), anyInt());
+    }
+
+    @Test
+    void runOnePreservesDetailedSandboxFailureCode() {
+        SandboxExecutionClient client = mock(SandboxExecutionClient.class);
+        when(client.runSource(eq("python"), eq("while True: pass"), eq(null), eq(""), anyLong(), anyLong(), anyInt()))
+                .thenReturn(new SandboxExecutionClient.RunOutcome(
+                        "Time Limit Exceeded", "Time Limit Exceeded", 1000L, 1L, "", "", null, 1100L,
+                        null, null, Map.of(), "TIME_LIMIT_EXCEEDED", 1));
+        InternalSandboxController controller = controller(client);
+
+        InternalSandboxController.RunResponse response = controller.runOne(TOKEN,
+                new InternalSandboxController.RunRequest("python", "while True: pass", null, "",
+                        1000, 262_144, 65_536)).data();
+
+        assertThat(response.status()).isEqualTo("TIME_LIMIT_EXCEEDED");
+    }
+
+    @Test
     void runPythonScriptParsesPureCollectorJson() {
         InternalSandboxController.PythonScriptResponse response = runPythonScriptWithOutcome("""
                 {"files":{"001.in":"1 2\\n","001.out":"3\\n"}}
@@ -115,6 +174,38 @@ class InternalSandboxControllerTest {
                 eq(3), eq("OFFICIAL_INPUTS"));
         assertThat(cpuLimitCaptor.getValue()).isEqualTo(SandboxExecutionClient.millisToNanos(30_000L));
         assertThat(memoryLimitCaptor.getValue()).isEqualTo(SandboxExecutionClient.kbToBytes(524_288L));
+    }
+
+    @Test
+    void officialPackageWithoutCachedFileIdBecomesStructuredFailure() {
+        SandboxExecutionClient client = mock(SandboxExecutionClient.class);
+        when(client.runOfficialPackageScript(eq("script"), eq("cpp"), eq("int main(){}"),
+                anyLong(), anyLong(), anyInt(), eq(3), anyLong(), anyLong(), anyLong(), anyLong()))
+                .thenReturn(new SandboxExecutionClient.RunOutcome(
+                        "Accepted", "Accepted", 1L, 1L, "", "", 0, 1L,
+                        null,
+                        """
+                                {"status":"PASSED","packageFileName":".aioj_official_hidden.zip",\
+                                "packageFileSizeBytes":40000000,"caseCount":3}
+                                """,
+                        Map.of(), "ACCEPTED", 1));
+        InternalSandboxController controller = controller(client);
+
+        InternalSandboxController.PythonScriptResponse response = controller.runPythonScript(
+                TOKEN,
+                new InternalSandboxController.PythonScriptRequest(
+                        "script", 30_000, 524_288, 3, "OFFICIAL_PACKAGE",
+                        "cpp", "int main(){}", 1000, 262_144,
+                        8L * 1024L * 1024L, 50L * 1024L * 1024L
+                )
+        ).data();
+
+        assertThat(response.officialPackage()).isNotNull();
+        assertThat(response.officialPackage().status()).isEqualTo("FAILED");
+        assertThat(response.officialPackage().errorCode()).isEqualTo("PACKAGE_CACHE_FILE_MISSING");
+        assertThat(response.officialPackage().errorMessage()).contains("copy-out capacity");
+        assertThat(response.officialPackage().packageFileId()).isNull();
+        assertThat(response.officialPackage().packageFileSizeBytes()).isEqualTo(40_000_000L);
     }
 
     @Test

@@ -64,11 +64,13 @@ public class SandboxClient {
         this.outputComparator = outputComparator;
         this.objectMapper = objectMapper;
         this.sandboxExecutionClient = sandboxExecutionClient;
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
+                .connectTimeout(resolveTimeout(properties.getSandboxTimeout()))
+                .build());
+        requestFactory.setReadTimeout(resolveTimeout(properties.getSandboxReadTimeout()));
         RestClient.Builder builder = RestClient.builder()
                 .baseUrl(stripTrailingPath(properties.getSandboxEndpoint()))
-                .requestFactory(new JdkClientHttpRequestFactory(HttpClient.newBuilder()
-                        .connectTimeout(resolveTimeout(properties.getSandboxTimeout()))
-                        .build()));
+                .requestFactory(requestFactory);
         if (StringUtils.hasText(properties.getSandboxToken())) {
             builder.defaultHeader("Authorization", "Bearer " + properties.getSandboxToken());
         }
@@ -97,6 +99,11 @@ public class SandboxClient {
             if (!StringUtils.hasText(sourceCode)) {
                 return JudgeResult.systemError("Submission source code is empty");
             }
+            if (sourceCode.getBytes(StandardCharsets.UTF_8).length > positiveOrDefault(
+                    properties.getMaxSourceBytes(), 256 * 1024)) {
+                return new JudgeResult(SubmissionStatus.COMPILE_ERROR, "Submission source code exceeds the limit",
+                        0L, 0L, Instant.now(), null, null, null, null);
+            }
 
             Optional<PreparedTestcasePackage> preparedPackage = testcaseCache.prepareActivePackage(task.problemId());
             if (preparedPackage.isEmpty()) {
@@ -108,14 +115,22 @@ public class SandboxClient {
             }
 
             boolean collectCaseResults = task.contestMode() == ContestMode.IOI;
-            long cpuLimitNs = millisToNanos(nonNullOrDefault(task.timeLimitMillis(), DEFAULT_TIME_LIMIT_MILLIS));
-            long memoryLimitBytes = kbToBytes(nonNullOrDefault(task.memoryLimitKb(), DEFAULT_MEMORY_LIMIT_KB));
+            long cpuLimitNs = millisToNanos(Math.min(
+                    nonNullOrDefault(task.timeLimitMillis(), DEFAULT_TIME_LIMIT_MILLIS),
+                    positiveOrDefault(properties.getMaxRunTimeLimitMillis(), 30_000)));
+            long memoryLimitBytes = kbToBytes(Math.min(
+                    nonNullOrDefault(task.memoryLimitKb(), DEFAULT_MEMORY_LIMIT_KB),
+                    positiveOrDefault(properties.getMaxMemoryLimitKb(), 1_048_576)));
+            long compileCpuLimitNs = Math.min(safeMultiply(cpuLimitNs, 10),
+                    millisToNanos(positiveOrDefault(properties.getMaxScriptTimeLimitMillis(), 180_000)));
+            long compileMemoryLimitBytes = Math.min(safeMultiply(memoryLimitBytes, 2),
+                    kbToBytes(positiveOrDefault(properties.getMaxMemoryLimitKb(), 1_048_576)));
             String compiledFileId = null;
             String checkerFileId = null;
             try {
                 if (lang.requiresCompile()) {
-                    CompileOutcome compile = compileSource(lang, sourceCode, safeMultiply(cpuLimitNs, 10),
-                            safeMultiply(memoryLimitBytes, 2));
+                    CompileOutcome compile = compileSource(lang, sourceCode, compileCpuLimitNs,
+                            compileMemoryLimitBytes);
                     if (compile.failed()) {
                         if (collectCaseResults) {
                             List<JudgeCaseResult> caseResults = compileFailureCaseResults(testcasePackage, compile);
@@ -132,8 +147,8 @@ public class SandboxClient {
                     compiledFileId = compile.fileId();
                 }
                 if (testcasePackage.checkerType() == TestcaseCheckerType.CUSTOM) {
-                    CompileOutcome checkerCompile = compileChecker(testcasePackage, safeMultiply(cpuLimitNs, 10),
-                            safeMultiply(memoryLimitBytes, 2));
+                    CompileOutcome checkerCompile = compileChecker(testcasePackage, compileCpuLimitNs,
+                            compileMemoryLimitBytes);
                     if (checkerCompile.failed()) {
                         if (collectCaseResults) {
                             List<JudgeCaseResult> caseResults = compileFailureCaseResults(testcasePackage, checkerCompile,
@@ -252,8 +267,9 @@ public class SandboxClient {
                 "env", List.of("PATH=/usr/bin:/bin"),
                 "files", standardFiles("", stdoutBaseCollectLimitBytes(), stderrCollectLimitBytes()),
                 "cpuLimit", cpuLimitNs,
+                "clockLimit", wallClockLimit(cpuLimitNs),
                 "memoryLimit", memoryLimitBytes,
-                "procLimit", 50,
+                "procLimit", processLimit(50),
                 "copyIn", Map.of("checker.cpp", Map.of("content", checkerSource)),
                 "copyOutCached", List.of("checker")
         )));
@@ -288,8 +304,9 @@ public class SandboxClient {
         command.put("env", lang.envVars());
         command.put("files", standardFiles(stdin, stdoutCollectLimit, stderrCollectLimitBytes()));
         command.put("cpuLimit", cpuLimitNs);
+        command.put("clockLimit", wallClockLimit(cpuLimitNs));
         command.put("memoryLimit", memoryLimitBytes);
-        command.put("procLimit", 50);
+        command.put("procLimit", processLimit(50));
         Map<String, Object> copyIn = new LinkedHashMap<>();
         if (lang.requiresCompile()) {
             copyIn.put(lang.executableName(), Map.of("fileId", compiledFileId));
@@ -346,8 +363,9 @@ public class SandboxClient {
                 "env", List.of("PATH=/usr/bin:/bin"),
                 "files", standardFiles("", stdoutBaseCollectLimitBytes(), stderrCollectLimitBytes()),
                 "cpuLimit", cpuLimitNs,
+                "clockLimit", wallClockLimit(cpuLimitNs),
                 "memoryLimit", memoryLimitBytes,
-                "procLimit", 50,
+                "procLimit", processLimit(50),
                 "copyIn", copyIn
         )));
         SubmissionStatus sandboxStatus = mapStatus(result.status(), result.fileError());
@@ -482,7 +500,8 @@ public class SandboxClient {
             case "Time Limit Exceeded" -> SubmissionStatus.TIME_LIMIT_EXCEEDED;
             case "Memory Limit Exceeded" -> SubmissionStatus.MEMORY_LIMIT_EXCEEDED;
             case "Output Limit Exceeded" -> SubmissionStatus.OUTPUT_LIMIT_EXCEEDED;
-            case "Nonzero Exit Status", "Signalled" -> SubmissionStatus.RUNTIME_ERROR;
+            case "Nonzero Exit Status", "Non Zero Exit Status", "Signalled", "Dangerous Syscall" ->
+                    SubmissionStatus.RUNTIME_ERROR;
             case "File Error", "Internal Error" -> SubmissionStatus.SYSTEM_ERROR;
             default -> SubmissionStatus.SYSTEM_ERROR;
         };
@@ -563,6 +582,15 @@ public class SandboxClient {
             return Long.MAX_VALUE;
         }
         return value * factor;
+    }
+
+    private long wallClockLimit(long cpuLimitNs) {
+        long normalized = Math.max(1L, cpuLimitNs);
+        return Math.max(safeMultiply(normalized, 2L), safeAdd(normalized, millisToNanos(2_000L)));
+    }
+
+    private int processLimit(int requested) {
+        return Math.min(Math.max(1, requested), positiveOrDefault(properties.getMaxProcessLimit(), 80));
     }
 
     private static long safeAdd(long value, long addend) {

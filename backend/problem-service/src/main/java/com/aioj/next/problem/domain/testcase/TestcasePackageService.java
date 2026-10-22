@@ -351,8 +351,9 @@ public class TestcasePackageService {
         return testcasePackage;
     }
 
-    @Transactional
-    public TestcasePackageResponse activate(Long problemId, Long packageId) {
+    /** Internal import preflight. Package ownership and activation eligibility are
+     * checked before any problem content is mutated. */
+    public TestcasePackageEntity findActivatableOrThrow(Long problemId, Long packageId) {
         requireProblem(problemId);
         TestcasePackageEntity testcasePackage = requirePackage(problemId, packageId);
         if (testcasePackage.getStatus() != TestcasePackageStatus.READY) {
@@ -361,6 +362,12 @@ public class TestcasePackageService {
         if (testcasePackage.getArchivedAt() != null) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Archived testcase packages cannot be activated");
         }
+        return testcasePackage;
+    }
+
+    @Transactional
+    public TestcasePackageResponse activate(Long problemId, Long packageId) {
+        findActivatableOrThrow(problemId, packageId);
         Instant now = Instant.now();
         packageMapper.update(new TestcasePackageEntity(), new LambdaUpdateWrapper<TestcasePackageEntity>()
                 .eq(TestcasePackageEntity::getProblemId, problemId)

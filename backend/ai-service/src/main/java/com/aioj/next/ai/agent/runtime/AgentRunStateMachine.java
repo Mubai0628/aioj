@@ -72,6 +72,26 @@ public class AgentRunStateMachine {
                 .set("status", status));
     }
 
+    public void bindWorkspace(long runId, String workspaceId, java.time.Duration maxRunDuration) {
+        if (workspaceId == null || workspaceId.isBlank()) {
+            return;
+        }
+        UpdateWrapper<AiAgentRunEntity> update = new UpdateWrapper<AiAgentRunEntity>()
+                .eq("id", runId)
+                .set("workspace_id", workspaceId);
+        if (maxRunDuration != null && !maxRunDuration.isZero() && !maxRunDuration.isNegative()) {
+            update.set("deadline_at", LocalDateTime.now().plus(maxRunDuration));
+        }
+        update(runId, update);
+    }
+
+    public void annotate(long runId, String executionMode, String safeSummary) {
+        update(runId, new UpdateWrapper<AiAgentRunEntity>()
+                .eq("id", runId)
+                .set("execution_mode", executionMode)
+                .set("safe_summary", safeSummary));
+    }
+
     public void recordProgress(long runId, int steps, int toolCalls) {
         update(runId, new UpdateWrapper<AiAgentRunEntity>()
                 .eq("id", runId)

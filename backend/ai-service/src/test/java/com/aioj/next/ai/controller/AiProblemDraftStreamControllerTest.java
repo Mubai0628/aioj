@@ -9,6 +9,7 @@ import com.aioj.next.ai.domain.AiMemoryService;
 import com.aioj.next.ai.domain.AiProvider;
 import com.aioj.next.ai.domain.AiQuotaService;
 import com.aioj.next.ai.domain.ProblemDraftStore;
+import com.aioj.next.ai.domain.ProblemDraftGenerationJobService;
 import com.aioj.next.ai.domain.memory.AiMemoryCandidateService;
 import com.aioj.next.ai.domain.memory.AiMemoryDebugService;
 import com.aioj.next.ai.domain.memory.AiMemoryReviewService;
@@ -19,7 +20,9 @@ import com.aioj.next.common.error.GlobalExceptionHandler;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.contract.ai.ProblemDraftRequest;
+import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
+import com.aioj.next.contract.ai.ProblemDraftGenerationJobResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,6 +52,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
@@ -83,6 +87,8 @@ class AiProblemDraftStreamControllerTest {
     @Mock
     private ProblemDraftStore problemDraftStore;
     @Mock
+    private ProblemDraftGenerationJobService problemDraftGenerationJobService;
+    @Mock
     private AiAssistantResponseNormalizer responseNormalizer;
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -109,6 +115,7 @@ class AiProblemDraftStreamControllerTest {
                 objectMapper,
                 executor
         );
+        controller.setProblemDraftGenerationJobService(problemDraftGenerationJobService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -151,7 +158,9 @@ class AiProblemDraftStreamControllerTest {
                 null,
                 null
         );
-        when(problemDraftStore.generate(eq(USER_ID), any(ProblemDraftRequest.class))).thenAnswer(invocation -> {
+        ProblemDraftGenerationJobResponse job = queuedJob(101L, "ws-stream-1");
+        when(problemDraftGenerationJobService.create(eq(USER_ID), any(ProblemDraftRequest.class))).thenReturn(job);
+        when(problemDraftGenerationJobService.awaitCompatibilityResult(USER_ID, job.id())).thenAnswer(invocation -> {
             Thread.sleep(1_200L);
             return draft;
         });
@@ -177,7 +186,9 @@ class AiProblemDraftStreamControllerTest {
 
     @Test
     void generateDraftStreamSendsStructuredError() throws Exception {
-        when(problemDraftStore.generate(eq(USER_ID), any(ProblemDraftRequest.class)))
+        ProblemDraftGenerationJobResponse job = queuedJob(102L, "ws-stream-2");
+        when(problemDraftGenerationJobService.create(eq(USER_ID), any(ProblemDraftRequest.class))).thenReturn(job);
+        when(problemDraftGenerationJobService.awaitCompatibilityResult(USER_ID, job.id()))
                 .thenThrow(new DomainException(ErrorCode.TOO_MANY_REQUESTS, "AI service is busy; please try again later"));
 
         MvcResult started = mockMvc.perform(post("/ai/problem-drafts/generate/stream")
@@ -230,7 +241,9 @@ class AiProblemDraftStreamControllerTest {
                 null,
                 null
         );
-        when(problemDraftStore.generate(eq(USER_ID), any(ProblemDraftRequest.class))).thenAnswer(invocation -> {
+        ProblemDraftGenerationJobResponse job = queuedJob(103L, "ws-stream-3");
+        when(problemDraftGenerationJobService.create(eq(USER_ID), any(ProblemDraftRequest.class))).thenReturn(job);
+        when(problemDraftGenerationJobService.awaitCompatibilityResult(USER_ID, job.id())).thenAnswer(invocation -> {
             Thread.sleep(2_200L);
             return draft;
         });
@@ -251,6 +264,30 @@ class AiProblemDraftStreamControllerTest {
         assertThat(elapsedMillis.get(elapsedMillis.size() - 1)).isGreaterThan(elapsedMillis.get(0));
     }
 
+    @Test
+    void legacyRegenerateEndpointUsesDurableAgentJobInsteadOfFixedPipeline() throws Exception {
+        ProblemDraftResponse draft = new ProblemDraftResponse(
+                44L, "PENDING_REVIEW", "Agent Rewrite", "MEDIUM", "Solve it.", "notes",
+                "cpp", "int main(){return 0;}", "print('ok')", "plan", List.of("graph"),
+                "VALID", List.of(), List.of(), 1000, 262144, null, "mock", 1, 2,
+                Instant.now(), null, null, null, 42L, "improve coverage"
+        );
+        ProblemDraftGenerationJobResponse job = queuedJob(104L, "ws-regenerate-1");
+        when(problemDraftGenerationJobService.createRegeneration(
+                eq(USER_ID), eq(42L), any(ProblemDraftRegenerateRequest.class))).thenReturn(job);
+        when(problemDraftGenerationJobService.awaitCompatibilityResult(USER_ID, job.id())).thenReturn(draft);
+
+        MvcResult result = mockMvc.perform(post("/admin/problem-drafts/42/regenerate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"feedback\":\"improve coverage\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .contains("\"title\":\"Agent Rewrite\"");
+        verifyNoInteractions(problemDraftStore);
+    }
+
     private List<Long> heartbeatElapsedMillis(String body) {
         Matcher matcher = Pattern.compile("\"elapsedMillis\":(\\d+)").matcher(body);
         List<Long> values = new ArrayList<>();
@@ -258,6 +295,13 @@ class AiProblemDraftStreamControllerTest {
             values.add(Long.parseLong(matcher.group(1)));
         }
         return values;
+    }
+
+    private ProblemDraftGenerationJobResponse queuedJob(long id, String workspaceId) {
+        return new ProblemDraftGenerationJobResponse(
+                id, USER_ID, "GENERATE", null, "QUEUED", "QUEUED", "topic", 0, 20,
+                "queued", null, null, null, null, null, null, Instant.now(), Instant.now(),
+                workspaceId, null, 0L, 2000, null, "THINKING_TOOL_LOOP", null, null);
     }
 
     private void authenticate(Long userId) {

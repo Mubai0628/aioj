@@ -13,6 +13,15 @@ public class ProblemDraftGenerationJobEntity {
     private Long creatorUserId;
     private String jobType;
     private Long sourceDraftId;
+    private String workspaceId;
+    private String turnId;
+    private Long agentRunId;
+    private Long stateVersion;
+    private Integer requestedCfRating;
+    private String reviewRisk;
+    private String agentMode;
+    private String contentFingerprint;
+    private String verificationFingerprint;
     private String status;
     private String stage;
     private String requestJson;
@@ -39,6 +48,24 @@ public class ProblemDraftGenerationJobEntity {
     public void setJobType(String jobType) { this.jobType = jobType; }
     public Long getSourceDraftId() { return sourceDraftId; }
     public void setSourceDraftId(Long sourceDraftId) { this.sourceDraftId = sourceDraftId; }
+    public String getWorkspaceId() { return workspaceId; }
+    public void setWorkspaceId(String workspaceId) { this.workspaceId = workspaceId; }
+    public String getTurnId() { return turnId; }
+    public void setTurnId(String turnId) { this.turnId = turnId; }
+    public Long getAgentRunId() { return agentRunId; }
+    public void setAgentRunId(Long agentRunId) { this.agentRunId = agentRunId; }
+    public Long getStateVersion() { return stateVersion; }
+    public void setStateVersion(Long stateVersion) { this.stateVersion = stateVersion; }
+    public Integer getRequestedCfRating() { return requestedCfRating; }
+    public void setRequestedCfRating(Integer requestedCfRating) { this.requestedCfRating = requestedCfRating; }
+    public String getReviewRisk() { return reviewRisk; }
+    public void setReviewRisk(String reviewRisk) { this.reviewRisk = reviewRisk; }
+    public String getAgentMode() { return agentMode; }
+    public void setAgentMode(String agentMode) { this.agentMode = agentMode; }
+    public String getContentFingerprint() { return contentFingerprint; }
+    public void setContentFingerprint(String contentFingerprint) { this.contentFingerprint = contentFingerprint; }
+    public String getVerificationFingerprint() { return verificationFingerprint; }
+    public void setVerificationFingerprint(String verificationFingerprint) { this.verificationFingerprint = verificationFingerprint; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getStage() { return stage; }

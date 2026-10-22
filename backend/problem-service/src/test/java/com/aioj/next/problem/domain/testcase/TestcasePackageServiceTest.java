@@ -120,6 +120,40 @@ class TestcasePackageServiceTest {
     }
 
     @Test
+    void findActivatableRequiresReadyPackageOwnedByProblem() {
+        TestcasePackageEntity readyPackage = packageEntity(1L, 10L, TestcasePackageStatus.READY, "packages/a.zip");
+        when(problemCatalog.existsActive(10L)).thenReturn(true);
+        when(packageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(readyPackage);
+
+        assertSame(readyPackage, service.findActivatableOrThrow(10L, 1L));
+    }
+
+    @Test
+    void findActivatableRejectsPackageFromAnotherProblem() {
+        when(problemCatalog.existsActive(10L)).thenReturn(true);
+        when(packageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+
+        DomainException error = assertThrows(DomainException.class,
+                () -> service.findActivatableOrThrow(10L, 1L));
+
+        assertEquals(ErrorCode.NOT_FOUND, error.errorCode());
+    }
+
+    @Test
+    void findActivatableRejectsNonReadyOrArchivedPackage() {
+        when(problemCatalog.existsActive(10L)).thenReturn(true);
+        TestcasePackageEntity processing = packageEntity(1L, 10L, TestcasePackageStatus.PROCESSING, "packages/a.zip");
+        TestcasePackageEntity archived = packageEntity(2L, 10L, TestcasePackageStatus.READY, "packages/b.zip");
+        archived.setArchivedAt(Instant.parse("2026-06-01T00:00:00Z"));
+        when(packageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(processing, archived);
+
+        assertEquals(ErrorCode.BAD_REQUEST,
+                assertThrows(DomainException.class, () -> service.findActivatableOrThrow(10L, 1L)).errorCode());
+        assertEquals(ErrorCode.BAD_REQUEST,
+                assertThrows(DomainException.class, () -> service.findActivatableOrThrow(10L, 2L)).errorCode());
+    }
+
+    @Test
     void findDownloadableRejectsFailedPackage() {
         TestcasePackageEntity failedPackage = packageEntity(1L, 10L, TestcasePackageStatus.FAILED, "packages/a.zip");
         when(problemCatalog.existsActive(10L)).thenReturn(true);

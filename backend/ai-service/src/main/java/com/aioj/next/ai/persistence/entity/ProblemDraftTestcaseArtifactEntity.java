@@ -11,8 +11,15 @@ public class ProblemDraftTestcaseArtifactEntity {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long draftId;
+    private String workspaceId;
     private Long creatorUserId;
+    private String source;
     private String status;
+    private String formatStatus;
+    private String executionStatus;
+    private String verificationMode;
+    private String verificationFingerprint;
+    private Long agentRunId;
     private String fileName;
     private String storagePath;
     private Long fileSizeBytes;
@@ -22,6 +29,9 @@ public class ProblemDraftTestcaseArtifactEntity {
     private Long totalOutputBytes;
     private Long largestCaseBytes;
     private String packageSummaryJson;
+    private String failureSummary;
+    private LocalDateTime generatedAt;
+    private LocalDateTime validatedAt;
     private Long importedProblemId;
     private Long problemTestcasePackageId;
     private LocalDateTime createdAt;
@@ -31,10 +41,24 @@ public class ProblemDraftTestcaseArtifactEntity {
     public void setId(Long id) { this.id = id; }
     public Long getDraftId() { return draftId; }
     public void setDraftId(Long draftId) { this.draftId = draftId; }
+    public String getWorkspaceId() { return workspaceId; }
+    public void setWorkspaceId(String workspaceId) { this.workspaceId = workspaceId; }
     public Long getCreatorUserId() { return creatorUserId; }
     public void setCreatorUserId(Long creatorUserId) { this.creatorUserId = creatorUserId; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getFormatStatus() { return formatStatus; }
+    public void setFormatStatus(String formatStatus) { this.formatStatus = formatStatus; }
+    public String getExecutionStatus() { return executionStatus; }
+    public void setExecutionStatus(String executionStatus) { this.executionStatus = executionStatus; }
+    public String getVerificationMode() { return verificationMode; }
+    public void setVerificationMode(String verificationMode) { this.verificationMode = verificationMode; }
+    public String getVerificationFingerprint() { return verificationFingerprint; }
+    public void setVerificationFingerprint(String verificationFingerprint) { this.verificationFingerprint = verificationFingerprint; }
+    public Long getAgentRunId() { return agentRunId; }
+    public void setAgentRunId(Long agentRunId) { this.agentRunId = agentRunId; }
     public String getFileName() { return fileName; }
     public void setFileName(String fileName) { this.fileName = fileName; }
     public String getStoragePath() { return storagePath; }
@@ -53,6 +77,12 @@ public class ProblemDraftTestcaseArtifactEntity {
     public void setLargestCaseBytes(Long largestCaseBytes) { this.largestCaseBytes = largestCaseBytes; }
     public String getPackageSummaryJson() { return packageSummaryJson; }
     public void setPackageSummaryJson(String packageSummaryJson) { this.packageSummaryJson = packageSummaryJson; }
+    public String getFailureSummary() { return failureSummary; }
+    public void setFailureSummary(String failureSummary) { this.failureSummary = failureSummary; }
+    public LocalDateTime getGeneratedAt() { return generatedAt; }
+    public void setGeneratedAt(LocalDateTime generatedAt) { this.generatedAt = generatedAt; }
+    public LocalDateTime getValidatedAt() { return validatedAt; }
+    public void setValidatedAt(LocalDateTime validatedAt) { this.validatedAt = validatedAt; }
     public Long getImportedProblemId() { return importedProblemId; }
     public void setImportedProblemId(Long importedProblemId) { this.importedProblemId = importedProblemId; }
     public Long getProblemTestcasePackageId() { return problemTestcasePackageId; }
