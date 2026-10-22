@@ -52,7 +52,7 @@ services:
     cpus: "0.25"
 
   rabbitmq:
-    image: rabbitmq:3.13-management
+    image: rabbitmq:4.3-management
     profiles: ["core", "infra"]
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-aioj}
@@ -73,7 +73,7 @@ services:
     cpus: "0.50"
 
   prometheus:
-    image: prom/prometheus:v3.0.1
+    image: prom/prometheus:v3.13.5
     profiles: ["observability"]
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -85,7 +85,7 @@ services:
     cpus: "0.25"
 
   grafana:
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:12.4.13
     profiles: ["observability"]
     ports:
       - "127.0.0.1:3000:3000"

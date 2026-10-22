@@ -1,6 +1,6 @@
-FROM criyle/go-judge:v1.12.0@sha256:62a26cac4c70dc6f47e15d87eb19524901048e5e4450479d512f1778386896d8 AS go-judge
+FROM criyle/go-judge:v1.13.3@sha256:97bec66d054e4d844e0ad29dfdd5c79ef3d09efba25b06dd58643a6e99918dcd AS go-judge
 
-FROM eclipse-temurin:17-jdk-jammy@sha256:e8ab220ad4c1a9382a4e7e2a21bc6462796a1beaa94ed114de0d5cddd24c3585
+FROM eclipse-temurin:17-jdk-jammy@sha256:73ed442231ec66cfe48cae0b263ce619a75ab96d162ab325f38fc0a269ee3aab
 
 RUN apt-get update -o Acquire::Retries=3 \
     && apt-get install -y --no-install-recommends -o Acquire::Retries=3 \

@@ -14,7 +14,7 @@ x-backend-health: &backend-health
 
 services:
   mysql:
-    image: mysql:8.4@sha256:1d6b6a8fcee8ff758ff151d017f5203cd06792a0e698f0a593c9dfcb14609cf0
+    image: mysql:8.4@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
     restart: unless-stopped
     command: --innodb-buffer-pool-size=768M --max-connections=100
     environment:
@@ -38,7 +38,7 @@ services:
     logging: *bounded-logging
 
   redis:
-    image: redis:7.4-alpine@sha256:9702d01c1f10c3ea9f48211b4362e44f154ff02d063e6f7268eba804059f53bf
+    image: redis:7.4-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
     restart: unless-stopped
     command: sh -c 'redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}" --maxmemory 96mb --maxmemory-policy allkeys-lru'
     environment:
@@ -58,7 +58,7 @@ services:
     logging: *bounded-logging
 
   rabbitmq:
-    image: rabbitmq:3.13-management@sha256:9cfb7e92ae7d296aec4d1ae799e431209f7ed57d55f9c929d95667d0ccf1c920
+    image: rabbitmq:4.3-management@sha256:84352fa7b36f80b3669f5c40963cb2f0f4cf0ecc67d4cf77a5282c2b5934cffc
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER is required}
