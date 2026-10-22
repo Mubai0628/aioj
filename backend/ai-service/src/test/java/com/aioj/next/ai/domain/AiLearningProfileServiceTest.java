@@ -13,6 +13,7 @@ import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.contract.ai.AiLearningProfileUpdateRequest;
 import com.aioj.next.contract.ai.AiProblemContextResponse;
+import com.aioj.next.contract.ai.AiRecommendationProfileSignal;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
 import com.aioj.next.contract.submission.SubmissionStatus;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -106,6 +107,33 @@ class AiLearningProfileServiceTest {
         verify(retrievalService).indexChunk(eq(7L), eq("learning_profile"), eq("101"),
                 argThat(this::isRetrievalTextSafe),
                 any(AiRetrievalService.AiRetrievalChunkMetadata.class));
+    }
+
+    @Test
+    void recommendationSignalsKeepOnlyActiveWeaknessesAndClampTheLimit() {
+        AiLearningProfileMapper profileMapper = mock(AiLearningProfileMapper.class);
+        AiLearningProfileService service = service(profileMapper, mock(AiLearningProfileEvidenceMapper.class),
+                mock(AiSubmissionAnalysisMapper.class), mock(ProblemServiceClient.class), mock(AiRetrievalService.class));
+        AiLearningProfileEntity active = profile(10L, "binary_search", "ACTIVE");
+        active.label = "二分查找";
+        active.confidence = new BigDecimal("0.8100");
+        active.evidenceCount = 4;
+        AiLearningProfileEntity candidate = profile(11L, "dp", "CANDIDATE");
+        AiLearningProfileEntity disabled = profile(12L, "greedy", "ACTIVE");
+        disabled.disabledAt = LocalDateTime.now();
+        AiLearningProfileEntity noConfidence = profile(13L, "bfs", "ACTIVE");
+        when(profileMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(active, candidate, disabled, noConfidence));
+
+        var signals = service.recommendationSignals(7L, 500);
+
+        assertThat(signals).extracting(AiRecommendationProfileSignal::profileKey).containsExactly("binary_search", "bfs");
+        assertThat(signals.get(0).label()).isEqualTo("二分查找");
+        assertThat(signals.get(0).confidence()).isEqualTo(0.81);
+        assertThat(signals.get(0).evidenceCount()).isEqualTo(4);
+        assertThat(signals.get(1).confidence()).isZero();
+        verify(profileMapper).selectList(argThat((QueryWrapper<AiLearningProfileEntity> query) ->
+                query.getSqlSegment().endsWith("LIMIT 50")));
+        assertThat(service.recommendationSignals(null, 10)).isEmpty();
     }
 
     @Test

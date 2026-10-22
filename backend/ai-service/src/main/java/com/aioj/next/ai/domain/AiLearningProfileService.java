@@ -15,6 +15,7 @@ import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.contract.ai.AiLearningProfileEvidenceResponse;
 import com.aioj.next.contract.ai.AiLearningProfileResponse;
 import com.aioj.next.contract.ai.AiLearningProfileUpdateRequest;
+import com.aioj.next.contract.ai.AiRecommendationProfileSignal;
 import com.aioj.next.contract.ai.AiSubmissionContextRequest;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -141,6 +142,35 @@ public class AiLearningProfileService {
         return profileMapper.selectList(query).stream()
                 .filter(this::isListVisibleProfile)
                 .map(profile -> toResponse(profile, evidence(profile.id, 3)))
+                .toList();
+    }
+
+    /**
+     * Confirmed weaknesses for problem recommendations, strongest first. Only
+     * ACTIVE profiles count: candidates are unconfirmed and stay out of ranking.
+     */
+    public List<AiRecommendationProfileSignal> recommendationSignals(Long userId, Integer requestedLimit) {
+        if (userId == null) {
+            return List.of();
+        }
+        int limit = requestedLimit == null || requestedLimit <= 0 ? 20 : Math.min(requestedLimit, 50);
+        return profileMapper.selectList(new QueryWrapper<AiLearningProfileEntity>()
+                        .eq("user_id", userId)
+                        .eq("category", CATEGORY_WEAKNESS)
+                        .eq("state", STATE_ACTIVE)
+                        .isNull("deleted_at")
+                        .isNull("disabled_at")
+                        .orderByDesc("confidence")
+                        .orderByDesc("last_evidence_at")
+                        .last("LIMIT " + limit))
+                .stream()
+                .filter(profile -> STATE_ACTIVE.equalsIgnoreCase(profile.state) && isRecallableProfile(profile))
+                .filter(profile -> profile.profileKey != null && !profile.profileKey.isBlank())
+                .map(profile -> new AiRecommendationProfileSignal(
+                        profile.profileKey,
+                        profile.label,
+                        profile.confidence == null ? 0.0 : profile.confidence.doubleValue(),
+                        profile.evidenceCount == null ? 0 : profile.evidenceCount))
                 .toList();
     }
 

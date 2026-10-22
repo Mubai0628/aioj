@@ -4,8 +4,10 @@ import { AlertTriangle, Ban, CheckCircle2, ChevronDown, Download, Eye, EyeOff, P
 import { ApiError, api, type AiLearningProfileEvidenceResponse, type AiLearningProfileResponse, type AiMemoryCandidateActionPayload, type AiMemoryCandidateResponse, type AiMemoryCategory, type AiMemoryReviewDetailResponse, type AiMemoryReviewListItemResponse, type BinaryFileResponse, type EntityId } from "@aioj/api-client";
 import { Badge, Button, cn } from "@aioj/ui-react";
 import { ConfirmDialog, EmptyState, ErrorPanel, Field, LoadingPanel, PageSection, inputClass, textareaClass } from "../components/Common";
+import { SubmissionDetailDialog } from "../components/SubmissionDetailDialog";
 import { useAuth } from "../lib/auth";
 import { formatDateTime } from "../lib/format";
+import { displaySafeEvidence, evidenceStatusCounts, groupLearningEvidence, type LearningEvidenceEntry } from "../lib/learningEvidence";
 import { useI18n } from "../lib/i18n";
 
 const MEMORY_CATEGORY_VALUES = new Set<AiMemoryCategory>(["memory", "habit", "rule", "preference", "weakness", "teaching_style"]);
@@ -172,36 +174,6 @@ function profileStateTone(state: string): "blue" | "green" | "amber" | "red" | "
     default:
       return "neutral";
   }
-}
-
-function displaySafeEvidence(value?: string | null) {
-  if (!value) return "";
-  const withoutFences = value.replace(/```[\s\S]*?```/g, "");
-  const kept: string[] = [];
-  let skippingRawOutput = false;
-  for (const rawLine of withoutFences.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")) {
-    const line = rawLine.trim();
-    const lower = line.toLowerCase();
-    if (/^(stdout|stderr|stdoutexcerpt|stderrexcerpt)\s*[:=]/i.test(line)) {
-      skippingRawOutput = true;
-      continue;
-    }
-    if (skippingRawOutput) {
-      if (!line || /^[A-Za-z][A-Za-z0-9 _-]{0,40}:/.test(line)) {
-        skippingRawOutput = false;
-      } else {
-        continue;
-      }
-    }
-    if (/(sk-[a-z0-9_-]{4,}|bearer\s+[a-z0-9._-]{8,}|(token|secret|password|api[_-]?key)\s*[:=])/i.test(line)) {
-      continue;
-    }
-    if (/^(#include|using namespace|int main|public class|public static void main|def main|import sys|if __name__|cin >>|cout <<)/i.test(line)) {
-      continue;
-    }
-    if (line) kept.push(line);
-  }
-  return kept.join("\n");
 }
 
 export function ProfileView() {
@@ -1136,6 +1108,10 @@ function LearningProfileCard({
   onDelete: () => void;
 }) {
   const { t } = useI18n();
+  const [selectedSubmissionId, setSelectedSubmissionId] = React.useState<EntityId | null>(null);
+  const evidenceGroups = React.useMemo(() => groupLearningEvidence(evidence), [evidence]);
+  const linkedSubmissions = evidenceGroups.filter((group) => group.submissionId).length;
+  const statusCounts = React.useMemo(() => evidenceStatusCounts(evidenceGroups), [evidenceGroups]);
   const state = normalizedState(profile);
   const canSetActive = state === "CANDIDATE" || state === "RESOLVED" || state === "SUPERSEDED";
   const canMarkMastered = state !== "RESOLVED";
@@ -1209,17 +1185,40 @@ function LearningProfileCard({
           </div>
           {evidenceLoading ? <LoadingPanel label={t("profile.loading")} /> : null}
           {evidenceError ? <ErrorPanel title={t("profile.learningProfileEvidenceFailed")} /> : null}
-          {!evidenceLoading && !evidenceError && evidence.length ? (
+          {!evidenceLoading && !evidenceError && evidenceGroups.length ? (
             <div className="space-y-3">
-              {evidence.map((item) => (
-                <div key={item.id} className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-3">
+              {linkedSubmissions ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--oj-border-soft)] bg-white px-3 py-2">
+                  <span className="text-sm font-medium text-[var(--oj-ink)]">{t("profile.learningEvidenceLinkedSubmissions", { count: linkedSubmissions })}</span>
+                  {statusCounts.map(([status, count]) => (
+                    <Badge key={status} tone={status === "ACCEPTED" ? "green" : "amber"}>
+                      {t(`submissionStatus.${status}`, undefined, status)} ×{count}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+              {evidenceGroups.map((group) => (
+                <div key={group.key} className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone="neutral">{item.evidenceType}</Badge>
-                    <span className="text-xs text-[var(--oj-ink-muted)]">{item.sourceType}{item.sourceId ? ` #${item.sourceId}` : ""}</span>
-                    {item.confidence != null ? <span className="text-xs tabular-nums text-[var(--oj-ink-muted)]">{item.confidence.toFixed(2)}</span> : null}
-                    <span className="text-xs text-[var(--oj-ink-soft)]">{formatDateTime(item.createdAt)}</span>
+                    <Badge tone="neutral">{group.evidenceTypes.map((type) => t(`profile.learningEvidenceType.${type}`, undefined, type)).join(" / ")}</Badge>
+                    <span className="text-xs text-[var(--oj-ink-muted)]">
+                      {group.sourceTypes.map((type) => t(`profile.learningEvidenceSource.${type.toUpperCase()}`, undefined, type)).join(" / ")}
+                      {group.sourceId ? ` #${group.sourceId}` : ""}
+                    </span>
+                    {group.confidence != null ? <span className="text-xs tabular-nums text-[var(--oj-ink-muted)]">{group.confidence.toFixed(2)}</span> : null}
+                    <span className="text-xs text-[var(--oj-ink-soft)]">{formatDateTime(group.createdAt)}</span>
                   </div>
-                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--oj-ink-muted)]">{displaySafeEvidence(item.summary) || t("profile.learningProfileEvidenceRedacted")}</p>
+                  <div className="mt-2 space-y-3">
+                    {group.entries.length
+                      ? group.entries.map((entry) => <LearningEvidenceEntryView key={entry.text} entry={entry} />)
+                      : <p className="text-sm leading-6 text-[var(--oj-ink-muted)]">{t("profile.learningProfileEvidenceRedacted")}</p>}
+                  </div>
+                  {group.submissionId ? (
+                    <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setSelectedSubmissionId(group.submissionId)}>
+                      <Eye className="size-4" aria-hidden="true" />
+                      {t("profile.learningEvidenceViewSubmission")}
+                    </Button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -1229,7 +1228,47 @@ function LearningProfileCard({
           ) : null}
         </div>
       ) : null}
+      <SubmissionDetailDialog submissionId={selectedSubmissionId} onOpenChange={(open) => !open && setSelectedSubmissionId(null)} />
     </article>
+  );
+}
+
+function LearningEvidenceEntryView({ entry }: { entry: LearningEvidenceEntry }) {
+  const { t } = useI18n();
+  const { detail } = entry;
+  return (
+    <div className="space-y-2">
+      {detail.status || detail.language || detail.tags.length || entry.count > 1 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {detail.status ? <Badge tone={detail.status === "ACCEPTED" ? "green" : "amber"}>{t(`submissionStatus.${detail.status}`, undefined, detail.status)}</Badge> : null}
+          {detail.language ? <span className="text-xs text-[var(--oj-ink-muted)]">{t("profile.learningEvidenceLanguage", { value: detail.language })}</span> : null}
+          {detail.tags.map((tag) => <Badge key={tag} tone="neutral">{tag.replace(/_/g, " ")}</Badge>)}
+          {entry.count > 1 ? <span className="text-xs text-[var(--oj-ink-soft)]">{t("profile.learningEvidenceRepeated", { count: entry.count })}</span> : null}
+        </div>
+      ) : null}
+      {detail.judgement ? (
+        <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+          <p className="text-xs font-semibold text-amber-900">{t("profile.learningEvidenceJudgement")}</p>
+          <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-amber-950">{detail.judgement}</p>
+        </div>
+      ) : null}
+      {detail.nextSteps ? (
+        <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+          <p className="text-xs font-semibold text-blue-900">{t("profile.learningEvidenceNextSteps")}</p>
+          <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-blue-950">{detail.nextSteps}</p>
+        </div>
+      ) : null}
+      {detail.cases || detail.judgeMessage ? (
+        <details className="rounded-lg border border-[var(--oj-border-soft)] bg-white px-3 py-2">
+          <summary className="cursor-pointer text-xs font-medium text-[var(--oj-ink-muted)]">{t("profile.learningEvidenceBasis")}</summary>
+          {detail.cases ? <p className="mt-2 break-words text-sm leading-6 text-[var(--oj-ink-muted)]">{t("profile.learningEvidenceCases", { value: detail.cases })}</p> : null}
+          {detail.judgeMessage ? <p className="mt-1 break-words text-sm leading-6 text-[var(--oj-ink-muted)]">{t("profile.learningEvidenceJudgeMessage", { value: detail.judgeMessage })}</p> : null}
+        </details>
+      ) : null}
+      {!detail.judgement && !detail.nextSteps && detail.freeText ? (
+        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--oj-ink-muted)]">{detail.freeText}</p>
+      ) : null}
+    </div>
   );
 }
 

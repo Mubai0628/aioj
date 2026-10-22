@@ -1658,6 +1658,25 @@ export const messages = {
       learningProfileEvidenceFailed: '无法加载画像证据。',
       learningProfileEvidenceEmpty: '暂无可展示证据。',
       learningProfileEvidenceRedacted: '证据摘要已隐藏不适合展示的代码、原始输出或敏感内容。',
+      learningEvidenceLinkedSubmissions: '关联 {count} 次提交',
+      learningEvidenceType: {
+        SUBMISSION_ANALYSIS: '提交分析',
+        PROFILE_SIGNAL: '学习信号'
+      },
+      learningEvidenceSource: {
+        SUBMISSION: '提交',
+        JUDGED_SUBMISSION: '判题结果',
+        CHAT_TURN: 'AI 对话',
+        AI_CHAT_TURN: 'AI 对话'
+      },
+      learningEvidenceLanguage: '语言：{value}',
+      learningEvidenceRepeated: '重复 {count} 次',
+      learningEvidenceJudgement: '判断',
+      learningEvidenceNextSteps: '下一步',
+      learningEvidenceBasis: '判题依据',
+      learningEvidenceCases: '测试点：{value}',
+      learningEvidenceJudgeMessage: '判题信息：{value}',
+      learningEvidenceViewSubmission: '查看这次提交',
       learningProfileEdit: '编辑',
       learningProfileLabel: '画像标签',
       learningProfileLabelRequired: '画像标签不能为空。',
@@ -5030,6 +5049,25 @@ export const messages = {
       learningProfileEvidenceFailed: 'Unable to load profile evidence.',
       learningProfileEvidenceEmpty: 'No evidence to show.',
       learningProfileEvidenceRedacted: 'Code, raw output, or sensitive content was hidden from this evidence summary.',
+      learningEvidenceLinkedSubmissions: '{count} linked submissions',
+      learningEvidenceType: {
+        SUBMISSION_ANALYSIS: 'Submission analysis',
+        PROFILE_SIGNAL: 'Learning signal'
+      },
+      learningEvidenceSource: {
+        SUBMISSION: 'Submission',
+        JUDGED_SUBMISSION: 'Judge result',
+        CHAT_TURN: 'AI chat',
+        AI_CHAT_TURN: 'AI chat'
+      },
+      learningEvidenceLanguage: 'Language: {value}',
+      learningEvidenceRepeated: 'Repeated {count} times',
+      learningEvidenceJudgement: 'Assessment',
+      learningEvidenceNextSteps: 'Next steps',
+      learningEvidenceBasis: 'Judging details',
+      learningEvidenceCases: 'Test cases: {value}',
+      learningEvidenceJudgeMessage: 'Judge message: {value}',
+      learningEvidenceViewSubmission: 'View this submission',
       learningProfileEdit: 'Edit',
       learningProfileLabel: 'Profile label',
       learningProfileLabelRequired: 'Profile label is required.',
