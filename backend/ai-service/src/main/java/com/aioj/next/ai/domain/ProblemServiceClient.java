@@ -16,6 +16,10 @@ import com.aioj.next.contract.contest.ContestRunWindow;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
 import com.aioj.next.contract.problem.Difficulty;
+import com.aioj.next.contract.problem.AiProblemDraftImportCommitRequest;
+import com.aioj.next.contract.problem.AiProblemDraftImportCommitResponse;
+import com.aioj.next.contract.problem.AiProblemDraftImportPrepareRequest;
+import com.aioj.next.contract.problem.AiProblemDraftImportPrepareResponse;
 import com.aioj.next.contract.problem.ProblemCreateRequest;
 import com.aioj.next.contract.problem.ProblemUpdateRequest;
 import com.aioj.next.contract.problem.ProblemVisibility;
@@ -406,6 +410,26 @@ public class ProblemServiceClient {
 
     public Long uploadAndActivateTestcasePackage(Long problemId, ProblemDraftTestcaseArtifactEntity artifact,
                                                  Path packagePath, String authorization) {
+        Long packageId = uploadTestcasePackageReady(problemId, artifact, packagePath, authorization);
+        TestcasePackageResponse activated = postProblemService(
+                "/problems/{problemId}/testcase-packages/{packageId}/activate",
+                authorization,
+                null,
+                TestcasePackageResponse.class,
+                "Testcase package activation failed",
+                problemId,
+                packageId
+        );
+        return activated == null ? packageId : activated.id();
+    }
+
+    /**
+     * Uploads and validates an artifact without changing the active package. This
+     * is the package-ready step used by the recoverable AI draft import saga; the
+     * protected commit endpoint activates it atomically with the problem content.
+     */
+    public Long uploadTestcasePackageReady(Long problemId, ProblemDraftTestcaseArtifactEntity artifact,
+                                           Path packagePath, String authorization) {
         if (problemId == null) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Problem id is required to upload testcase package");
         }
@@ -438,16 +462,7 @@ public class ProblemServiceClient {
                 throw new DomainException(ErrorCode.INTERNAL_ERROR, "Problem-service did not return testcase upload id");
             }
             if (init.packageId() != null && "READY".equals(String.valueOf(init.status()))) {
-                TestcasePackageResponse activated = postProblemService(
-                        "/problems/{problemId}/testcase-packages/{packageId}/activate",
-                        authorization,
-                        null,
-                        TestcasePackageResponse.class,
-                        "Testcase package activation failed",
-                        problemId,
-                        init.packageId()
-                );
-                return activated == null ? init.packageId() : activated.id();
+                return init.packageId();
             }
             List<Integer> uploadedChunks = uploadChunks(problemId, init.uploadId(), packagePath, size, authorization);
             TestcasePackageResponse completed = postProblemService(
@@ -462,21 +477,66 @@ public class ProblemServiceClient {
             if (completed == null || completed.id() == null) {
                 throw new DomainException(ErrorCode.INTERNAL_ERROR, "Problem-service did not return testcase package id");
             }
-            TestcasePackageResponse activated = postProblemService(
-                    "/problems/{problemId}/testcase-packages/{packageId}/activate",
-                    authorization,
-                    null,
-                    TestcasePackageResponse.class,
-                    "Testcase package activation failed",
-                    problemId,
-                    completed.id()
-            );
-            return activated == null ? completed.id() : activated.id();
+            return completed.id();
         } catch (DomainException ex) {
             throw ex;
         } catch (Exception ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Testcase package upload failed: " + ex.getMessage());
         }
+    }
+
+    public AiProblemDraftImportPrepareResponse prepareAiProblemDraftImport(
+            String workspaceId, Long draftId, Long actorUserId, String reviewRisk,
+            String verificationMode, Long targetProblemId, ProblemDraftResponse draft
+    ) {
+        return postInternalProblemService(
+                "/api/v1/internal/ai-problem-drafts/import/prepare",
+                new AiProblemDraftImportPrepareRequest(workspaceId, draftId, actorUserId, reviewRisk,
+                        verificationMode, targetProblemId,
+                        problemCreateRequest(draft, ProblemVisibility.PRIVATE)),
+                AiProblemDraftImportPrepareResponse.class,
+                "AI problem draft import prepare failed"
+        );
+    }
+
+    public AiProblemDraftImportCommitResponse commitAiProblemDraftImport(
+            Long problemId, String workspaceId, Long draftId, Long actorUserId, Long testcasePackageId,
+            ProblemVisibility targetVisibility, String reviewRisk, String verificationMode,
+            ProblemDraftResponse draft
+    ) {
+        return postInternalProblemService(
+                "/api/v1/internal/ai-problem-drafts/import/{problemId}/commit",
+                new AiProblemDraftImportCommitRequest(workspaceId, draftId, actorUserId, testcasePackageId,
+                        targetVisibility, reviewRisk, verificationMode,
+                        problemUpdateRequest(draft, targetVisibility)),
+                AiProblemDraftImportCommitResponse.class,
+                "AI problem draft import commit failed",
+                problemId
+        );
+    }
+
+    private ProblemCreateRequest problemCreateRequest(ProblemDraftResponse draft, ProblemVisibility visibility) {
+        List<TestCaseDto> testCases = validateTestCases(draft);
+        return new ProblemCreateRequest(
+                draft.title(), parseDifficulty(draft.difficulty()), draft.statement(),
+                draft.tags() == null ? List.of() : draft.tags(), testCases,
+                limitOrDefault(draft.timeLimitMillis(), 1000),
+                limitOrDefault(draft.memoryLimitKb(), 262144), draft.notes(),
+                draft.standardSolutionLanguage(), draft.standardSolutionCode(), null, null,
+                draft.testcaseGeneratorPython(), visibility
+        );
+    }
+
+    private ProblemUpdateRequest problemUpdateRequest(ProblemDraftResponse draft, ProblemVisibility visibility) {
+        List<TestCaseDto> testCases = validateTestCases(draft);
+        return new ProblemUpdateRequest(
+                draft.title(), parseDifficulty(draft.difficulty()), draft.statement(),
+                draft.tags() == null ? List.of() : draft.tags(), testCases,
+                limitOrDefault(draft.timeLimitMillis(), 1000),
+                limitOrDefault(draft.memoryLimitKb(), 262144), draft.notes(),
+                draft.standardSolutionLanguage(), draft.standardSolutionCode(), null, null,
+                draft.testcaseGeneratorPython(), visibility
+        );
     }
 
     private List<TestCaseDto> validateTestCases(ProblemDraftResponse draft) {
@@ -653,6 +713,25 @@ public class ProblemServiceClient {
                 requestSpec = spec.contentType(MediaType.APPLICATION_JSON).body(body);
             }
             String response = requestSpec.retrieve().body(String.class);
+            return parseApiData(response, type, operation + " response could not be parsed");
+        } catch (RestClientResponseException ex) {
+            throw problemServiceException(operation, false, ex);
+        } catch (RestClientException ex) {
+            throw new DomainException(ErrorCode.INTERNAL_ERROR, operation + ": " + ex.getMessage());
+        }
+    }
+
+    private <T> T postInternalProblemService(String uriTemplate, Object body, Class<T> type,
+                                             String operation, Object... uriVariables) {
+        try {
+            String response = restClient.post()
+                    .uri(uriTemplate, uriVariables)
+                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(String.class);
             return parseApiData(response, type, operation + " response could not be parsed");
         } catch (RestClientResponseException ex) {
             throw problemServiceException(operation, false, ex);

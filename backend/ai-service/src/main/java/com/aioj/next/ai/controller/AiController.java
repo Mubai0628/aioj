@@ -12,6 +12,7 @@ import com.aioj.next.ai.domain.AiQuotaService;
 import com.aioj.next.ai.domain.AccountImportParseService;
 import com.aioj.next.ai.domain.ProblemDraftGenerationJobService;
 import com.aioj.next.ai.domain.ProblemDraftStore;
+import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
 import com.aioj.next.ai.domain.memory.AiMemoryCandidateService;
 import com.aioj.next.ai.domain.memory.AiMemoryDebugService;
 import com.aioj.next.ai.domain.memory.AiMemoryReviewService;
@@ -46,6 +47,9 @@ import com.aioj.next.contract.ai.AccountImportParseRequest;
 import com.aioj.next.contract.ai.AccountImportParseResponse;
 import com.aioj.next.contract.ai.DailyAiUsageStatsResponse;
 import com.aioj.next.contract.ai.ProblemDraftApprovalRequest;
+import com.aioj.next.contract.ai.ProblemDraftAgentRunResponse;
+import com.aioj.next.contract.ai.ProblemDraftAgentTurnRequest;
+import com.aioj.next.contract.ai.ProblemDraftAgentTurnResponse;
 import com.aioj.next.contract.ai.ProblemDraftGenerationJobResponse;
 import com.aioj.next.contract.ai.ProblemDraftRefineRequest;
 import com.aioj.next.ai.domain.ContestAiUsageService;
@@ -53,6 +57,9 @@ import com.aioj.next.ai.domain.ContestAiAssistanceStatisticsService;
 import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
 import com.aioj.next.contract.ai.ProblemDraftRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
+import com.aioj.next.contract.ai.ProblemDraftToolCallResponse;
+import com.aioj.next.contract.ai.ProblemDraftWorkspaceMessageResponse;
+import com.aioj.next.contract.ai.ProblemDraftWorkspaceResponse;
 import com.aioj.next.contract.ai.AdminContestAiConversationSummary;
 import com.aioj.next.contract.ai.AdminContestAiMessageResponse;
 import com.aioj.next.contract.ai.AdminContestAiUsageSummary;
@@ -114,6 +121,7 @@ public class AiController {
     private final ObjectMapper objectMapper;
     private final Executor problemDraftExecutor;
     private ProblemDraftGenerationJobService problemDraftGenerationJobService;
+    private ProblemDraftWorkspaceService problemDraftWorkspaceService;
     private ContestAiUsageService contestAiUsageService;
     private ContestAiAssistanceStatisticsService contestAiAssistanceStatisticsService;
     private com.aioj.next.ai.agent.runtime.PseudoStreamReplayer pseudoStreamReplayer;
@@ -178,6 +186,11 @@ public class AiController {
     @Autowired(required = false)
     public void setProblemDraftGenerationJobService(ProblemDraftGenerationJobService problemDraftGenerationJobService) {
         this.problemDraftGenerationJobService = problemDraftGenerationJobService;
+    }
+
+    @Autowired(required = false)
+    public void setProblemDraftWorkspaceService(ProblemDraftWorkspaceService problemDraftWorkspaceService) {
+        this.problemDraftWorkspaceService = problemDraftWorkspaceService;
     }
 
     @Autowired(required = false)
@@ -464,24 +477,34 @@ public class AiController {
 
     @PostMapping("/ai/problem-drafts/generate")
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    @Deprecated(forRemoval = true)
     public ApiResponse<ProblemDraftResponse> generateDraft(@RequestBody @Valid ProblemDraftRequest request) {
-        return ApiResponse.ok(problemDraftStore.generate(SecuritySupport.currentUserId(), request));
+        Long userId = SecuritySupport.currentUserId();
+        ProblemDraftGenerationJobService jobs = requireProblemDraftGenerationJobService();
+        ProblemDraftGenerationJobResponse job = jobs.create(userId, request);
+        return ApiResponse.ok(jobs.awaitCompatibilityResult(userId, job.id()));
     }
 
     @PostMapping(value = "/ai/problem-drafts/generate/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    @Deprecated(forRemoval = true)
     public ResponseEntity<StreamingResponseBody> generateDraftStream(@RequestBody @Valid ProblemDraftRequest request) {
         Long userId = SecuritySupport.currentUserId();
+        ProblemDraftGenerationJobService jobs = requireProblemDraftGenerationJobService();
+        ProblemDraftGenerationJobResponse queuedJob = jobs.create(userId, request);
         StreamingResponseBody body = output -> {
             long startedAt = System.currentTimeMillis();
             CompletableFuture<ProblemDraftResponse> draftFuture = null;
             try {
                 writeSseEvent(output, "meta", objectMapper.writeValueAsString(Map.of(
-                        "heartbeatIntervalMillis", DRAFT_STREAM_HEARTBEAT_INTERVAL_MILLIS
+                        "heartbeatIntervalMillis", DRAFT_STREAM_HEARTBEAT_INTERVAL_MILLIS,
+                        "deprecated", true,
+                        "generationJobId", queuedJob.id(),
+                        "workspaceId", queuedJob.workspaceId()
                 )));
                 try {
                     draftFuture = CompletableFuture.supplyAsync(
-                            () -> problemDraftStore.generate(userId, request),
+                            () -> jobs.awaitCompatibilityResult(userId, queuedJob.id()),
                             problemDraftExecutor
                     );
                 } catch (RejectedExecutionException ex) {
@@ -501,7 +524,6 @@ public class AiController {
                         )));
                     } catch (InterruptedException ex) {
                         Thread.currentThread().interrupt();
-                        draftFuture.cancel(true);
                         sendDraftStreamError(output, new DomainException(ErrorCode.INTERNAL_ERROR, "Problem draft generation was interrupted"), userId, startedAt);
                         return;
                     } catch (ExecutionException ex) {
@@ -515,9 +537,8 @@ public class AiController {
                     }
                 }
             } catch (IOException ex) {
-                if (draftFuture != null) {
-                    draftFuture.cancel(true);
-                }
+                // Client disconnects must not cancel the durable Agent job. It remains visible and
+                // resumable from the generation-jobs/workspace APIs.
             } catch (RuntimeException ex) {
                 sendDraftStreamError(output, providerFailure(ex), userId, startedAt);
             }
@@ -526,6 +547,8 @@ public class AiController {
                 .contentType(MediaType.TEXT_EVENT_STREAM)
                 .header(HttpHeaders.CACHE_CONTROL, "no-cache")
                 .header("X-Accel-Buffering", "no")
+                .header("Deprecation", "true")
+                .header(HttpHeaders.LINK, "</api/v1/ai/problem-drafts/generation-jobs>; rel=\"successor-version\"")
                 .body(body);
     }
 
@@ -564,6 +587,50 @@ public class AiController {
                 .createRegeneration(SecuritySupport.currentUserId(), id, request));
     }
 
+    @GetMapping("/ai/admin/problem-draft-workspaces/{workspaceId}")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ApiResponse<ProblemDraftWorkspaceResponse> problemDraftWorkspace(@PathVariable String workspaceId) {
+        return ApiResponse.ok(requireProblemDraftWorkspaceService().get(workspaceId));
+    }
+
+    @GetMapping("/ai/admin/problem-draft-workspaces/{workspaceId}/messages")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ApiResponse<PageResponse<ProblemDraftWorkspaceMessageResponse>> problemDraftWorkspaceMessages(
+            @PathVariable String workspaceId,
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "30") long pageSize
+    ) {
+        return ApiResponse.ok(requireProblemDraftWorkspaceService().messages(workspaceId, page, pageSize));
+    }
+
+    @GetMapping("/ai/admin/problem-draft-workspaces/{workspaceId}/agent-runs")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ApiResponse<List<ProblemDraftAgentRunResponse>> problemDraftWorkspaceAgentRuns(
+            @PathVariable String workspaceId,
+            @RequestParam(required = false) Long afterId
+    ) {
+        return ApiResponse.ok(requireProblemDraftWorkspaceService().agentRuns(workspaceId, afterId));
+    }
+
+    @GetMapping("/ai/admin/problem-draft-workspaces/{workspaceId}/tool-calls")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ApiResponse<List<ProblemDraftToolCallResponse>> problemDraftWorkspaceToolCalls(
+            @PathVariable String workspaceId,
+            @RequestParam(required = false) Long afterId
+    ) {
+        return ApiResponse.ok(requireProblemDraftWorkspaceService().toolCalls(workspaceId, afterId));
+    }
+
+    @PostMapping("/ai/admin/problem-draft-workspaces/{workspaceId}/turns")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ApiResponse<ProblemDraftAgentTurnResponse> continueProblemDraftAgent(
+            @PathVariable String workspaceId,
+            @RequestBody @Valid ProblemDraftAgentTurnRequest request
+    ) {
+        return ApiResponse.ok(requireProblemDraftGenerationJobService().continueOptimization(
+                SecuritySupport.currentUserId(), workspaceId, request));
+    }
+
     @GetMapping("/admin/problem-drafts")
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ApiResponse<PageResponse<ProblemDraftResponse>> listDrafts(
@@ -592,16 +659,30 @@ public class AiController {
             @RequestBody @Valid ProblemDraftRefineRequest request,
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization
     ) {
-        return ApiResponse.ok(problemDraftStore.refine(id, SecuritySupport.currentUserId(), request, authorization));
+        long userId = SecuritySupport.currentUserId();
+        ProblemDraftResponse current = problemDraftStore.get(id);
+        if (current.workspaceId() != null && !current.workspaceId().isBlank()) {
+            if (problemDraftWorkspaceService == null) {
+                throw new DomainException(ErrorCode.INTERNAL_ERROR,
+                        "Problem draft workspace editing is unavailable");
+            }
+            return ApiResponse.ok(problemDraftWorkspaceService.applyHumanEdit(
+                    current.workspaceId(), userId, current.id(), request));
+        }
+        return ApiResponse.ok(problemDraftStore.refine(id, userId, request, authorization));
     }
 
     @PostMapping("/admin/problem-drafts/{id}/regenerate")
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    @Deprecated(forRemoval = true)
     public ApiResponse<ProblemDraftResponse> regenerateDraft(
             @PathVariable Long id,
             @RequestBody @Valid ProblemDraftRegenerateRequest request
     ) {
-        return ApiResponse.ok(problemDraftStore.regenerate(id, SecuritySupport.currentUserId(), request));
+        Long userId = SecuritySupport.currentUserId();
+        ProblemDraftGenerationJobService jobs = requireProblemDraftGenerationJobService();
+        ProblemDraftGenerationJobResponse job = jobs.createRegeneration(userId, id, request);
+        return ApiResponse.ok(jobs.awaitCompatibilityResult(userId, job.id()));
     }
 
     @PostMapping("/admin/problem-drafts/{id}/approve")
@@ -736,6 +817,13 @@ public class AiController {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Problem draft generation jobs are unavailable");
         }
         return problemDraftGenerationJobService;
+    }
+
+    private ProblemDraftWorkspaceService requireProblemDraftWorkspaceService() {
+        if (problemDraftWorkspaceService == null) {
+            throw new DomainException(ErrorCode.INTERNAL_ERROR, "Problem draft Agent workspaces are unavailable");
+        }
+        return problemDraftWorkspaceService;
     }
 
     private DomainException providerFailure(RuntimeException ex) {

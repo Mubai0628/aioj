@@ -263,6 +263,17 @@ export function ProblemEditorPanel({
     >
       <div className="space-y-5">
         {error ? <ErrorPanel title={error} /> : null}
+        {currentProblem?.aiGenerated && currentProblem.aiTestcaseVerificationMode === "MANUAL_UNVERIFIED" ? (
+          <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm leading-6 text-red-900" role="alert">
+            <strong className="block">{t("problems.aiManualUnverifiedTitle")}</strong>
+            <span>{t("problems.aiManualUnverifiedWarning")}</span>
+          </div>
+        ) : currentProblem?.aiGenerated && currentProblem.aiReviewRisk === "HIGH_DIFFICULTY_AI" ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="status">
+            <strong className="block">{t("problems.aiHighDifficultyTitle")}</strong>
+            <span>{t("problems.aiHighDifficultyWarning")}</span>
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2 border-b border-[var(--oj-border-soft)] pb-3">
           <TabButton active={tab === "basic"} onClick={() => setTab("basic")}>{t("problems.editorBasic")}</TabButton>
           <TabButton active={tab === "statement"} onClick={() => setTab("statement")}>{t("problems.editorStatement")}</TabButton>

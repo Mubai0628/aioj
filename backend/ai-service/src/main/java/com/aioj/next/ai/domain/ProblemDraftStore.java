@@ -7,33 +7,30 @@ import com.aioj.next.ai.domain.problem.ComplexityReport;
 import com.aioj.next.ai.domain.problem.DraftSandboxClient;
 import com.aioj.next.ai.domain.problem.CrossCheckReport;
 import com.aioj.next.ai.domain.problem.DraftExecutionReport;
-import com.aioj.next.ai.domain.problem.ProblemDraftAuditContext;
-import com.aioj.next.ai.domain.problem.ProblemDraftDifficulty;
-import com.aioj.next.ai.domain.problem.ProblemDraftProgressListener;
-import com.aioj.next.ai.domain.problem.ProblemDraftRepairer;
 import com.aioj.next.ai.domain.problem.ProblemDraftStaticValidator;
-import com.aioj.next.ai.domain.problem.ProblemDraftStressGeneratorResult;
-import com.aioj.next.ai.domain.problem.ReferenceCheckPolicy;
 import com.aioj.next.ai.domain.problem.RepairTask;
 import com.aioj.next.ai.domain.problem.VerificationError;
 import com.aioj.next.ai.domain.problem.VerificationFailureClassifier;
 import com.aioj.next.ai.domain.problem.VerificationOptions;
 import com.aioj.next.ai.domain.problem.VerificationReport;
 import com.aioj.next.ai.domain.problem.VerificationWarning;
+import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkingState;
+import com.aioj.next.ai.domain.draftagent.ProblemDraftReviewRiskService;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.ai.ProblemDraftApprovalRequest;
 import com.aioj.next.contract.ai.ProblemDraftRefineRequest;
-import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
 import com.aioj.next.contract.ai.ProblemDraftRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
+import com.aioj.next.contract.ai.ProblemDraftImportReadiness;
+import com.aioj.next.contract.ai.ProblemDraftReviewRisk;
+import com.aioj.next.contract.ai.ProblemDraftTestcaseArtifactSummary;
 import com.aioj.next.contract.problem.ProblemVisibility;
 import com.aioj.next.contract.problem.TestCaseDto;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -49,7 +46,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -67,8 +63,6 @@ public class ProblemDraftStore {
     private static final int DEFAULT_MEMORY_LIMIT_KB = 262144;
 
     private final AiProvider aiProvider;
-    private final AiQuotaService aiQuotaService;
-    private final AiCapacityService aiCapacityService;
     private final ProblemDraftMapper problemDraftMapper;
     private final ProblemServiceClient problemServiceClient;
     private final ObjectMapper objectMapper;
@@ -76,27 +70,21 @@ public class ProblemDraftStore {
     private final OperationAuditWriter auditWriter;
     private final ProblemDraftStaticValidator problemDraftStaticValidator;
     private final DraftSandboxClient draftSandboxClient;
-    private final ProblemDraftRepairer problemDraftRepairer;
     private final VerificationFailureClassifier verificationFailureClassifier;
-    private ProblemDraftAuditSnapshotService auditSnapshotService;
     private ProblemDraftTestcaseArtifactService testcaseArtifactService;
+    private ProblemDraftReviewRiskService reviewRiskService;
 
     public ProblemDraftStore(
             AiProvider aiProvider,
-            AiQuotaService aiQuotaService,
-            AiCapacityService aiCapacityService,
             ProblemDraftMapper problemDraftMapper,
             ProblemServiceClient problemServiceClient,
             ObjectMapper objectMapper,
             TransactionTemplate transactionTemplate,
             OperationAuditWriter auditWriter,
             ProblemDraftStaticValidator problemDraftStaticValidator,
-            DraftSandboxClient draftSandboxClient,
-            ProblemDraftRepairer problemDraftRepairer
+            DraftSandboxClient draftSandboxClient
     ) {
         this.aiProvider = aiProvider;
-        this.aiQuotaService = aiQuotaService;
-        this.aiCapacityService = aiCapacityService;
         this.problemDraftMapper = problemDraftMapper;
         this.problemServiceClient = problemServiceClient;
         this.objectMapper = objectMapper;
@@ -104,13 +92,7 @@ public class ProblemDraftStore {
         this.auditWriter = auditWriter;
         this.problemDraftStaticValidator = problemDraftStaticValidator;
         this.draftSandboxClient = draftSandboxClient;
-        this.problemDraftRepairer = problemDraftRepairer;
         this.verificationFailureClassifier = new VerificationFailureClassifier(objectMapper);
-    }
-
-    @Autowired(required = false)
-    public void setProblemDraftAuditSnapshotService(ProblemDraftAuditSnapshotService auditSnapshotService) {
-        this.auditSnapshotService = auditSnapshotService;
     }
 
     @Autowired(required = false)
@@ -118,183 +100,9 @@ public class ProblemDraftStore {
         this.testcaseArtifactService = testcaseArtifactService;
     }
 
-    @Transactional
-    public ProblemDraftResponse generate(Long userId, ProblemDraftRequest request) {
-        return generate(userId, request, ProblemDraftProgressListener.NOOP);
-    }
-
-    @Transactional
-    public ProblemDraftResponse generate(Long userId, ProblemDraftRequest request, ProblemDraftProgressListener progressListener) {
-        return generate(userId, request, progressListener, ProblemDraftAuditContext.NONE);
-    }
-
-    @Transactional
-    public ProblemDraftResponse generate(Long userId, ProblemDraftRequest request, ProblemDraftProgressListener progressListener,
-                                         ProblemDraftAuditContext auditContext) {
-        ProblemDraftProgressListener progress = progressListener == null ? ProblemDraftProgressListener.NOOP : progressListener;
-        ProblemDraftAuditContext audit = auditContext == null ? ProblemDraftAuditContext.NONE : auditContext;
-        aiQuotaService.assertMonthlyAvailable(userId);
-        Long id = IdWorker.getId();
-        ProblemDraftResponse generated = null;
-        try {
-            recordRequirement(audit, userId, id, request);
-            progress.onProgress("GENERATING", 1, 7, "Generating problem draft");
-            generated = aiCapacityService.call(
-                    AiCapacityService.AiWorkload.PROBLEM_DRAFT,
-                    () -> aiProvider.generateProblemDraft(id, request)
-            );
-            ProblemDraftResponse raw = generated == null ? emptyDraft(id, request) : generated;
-            Integer rawTime = raw.timeLimitMillis();
-            Integer rawMem = raw.memoryLimitKb();
-            ProblemDraftResponse response = new ProblemDraftResponse(
-                    id,
-                    STATUS_PENDING_REVIEW,
-                    nonBlank(raw.title(), fallbackTitle(request)),
-                    nonBlank(raw.difficulty(), fallbackDifficulty(request)),
-                    raw.statement(),
-                    nonBlank(raw.notes(), fallbackNotes(nonBlank(raw.title(), fallbackTitle(request)))),
-                    nonBlank(raw.standardSolutionLanguage(), defaultSolutionLanguage(request.standardSolutionLanguage())),
-                    raw.standardSolutionCode(),
-                    defaultReferenceSolutionLanguage(raw.referenceSolutionLanguage(), raw.referenceSolutionCode(), raw.standardSolutionLanguage()),
-                    raw.referenceSolutionCode(),
-                    raw.testcaseGeneratorPython(),
-                    raw.stressTestcaseGeneratorPython(),
-                    nonBlank(raw.generationPlan(), fallbackGenerationPlan(request)),
-                    raw.tags() == null ? List.of() : raw.tags(),
-                    "VALID",
-                    List.of(),
-                    normalizeTestCases(raw.testCases()),
-                    limitOrDefault(rawTime, DEFAULT_TIME_LIMIT_MILLIS),
-                    limitOrDefault(rawMem, DEFAULT_MEMORY_LIMIT_KB),
-                    raw.importedProblemId(),
-                    nonBlank(raw.model(), aiProvider.model()),
-                    Math.max(0, raw.promptTokens()),
-                    Math.max(0, raw.completionTokens()),
-                    raw.createdAt() == null ? Instant.now() : raw.createdAt(),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    VERIFICATION_NOT_RUN,
-                    null,
-                    0,
-                    null
-            );
-            recordPlan(audit, userId, id, request, response);
-            recordDraft(audit, userId, id, response);
-            StressGeneratorOutcome stressGeneratorOutcome = generateStressGeneratorIfRequested(id, userId, request, response, progress, audit);
-            response = stressGeneratorOutcome.response();
-            progress.onProgress("STATIC_VERIFYING", 3, 7, "Running static validation");
-            VerificationOptions verificationOptions = VerificationOptions.fromRequest(request, List.of());
-            ProblemDraftResponse staticValidationTarget = referenceCheckEnabled(request) ? response : raw;
-            VerificationReport staticReport = staticReport(staticValidationTarget, verificationOptions, raw.validationErrors(), rawTime, rawMem,
-                    stressGeneratorOutcome.errors());
-            response = withValidation(response, staticReport.errorMessages().isEmpty() ? "VALID" : "INVALID",
-                    staticReport.errorMessages());
-            progress.onProgress("SANDBOX_VERIFYING", 4, 7, "Running sandbox verification");
-            VerificationOutcome verification = verifyFinalDraft(response, staticReport, verificationOptions);
-            recordVerification(audit, userId, id, response, staticReport, verification);
-            response = withVerification(response, verification);
-            response = repairIfRequested(request, response, verification, verificationOptions, progress, userId, audit);
-            progress.onProgress("PERSISTING", 6, 7, "Saving generated draft");
-            persist(userId, response);
-            aiQuotaService.record(
-                    userId,
-                    aiProvider.providerName(),
-                    response.model(),
-                    response.promptTokens(),
-                    response.completionTokens(),
-                    true
-            );
-            progress.onProgress("SUCCEEDED", 7, 7, "Problem draft generation completed");
-            return response;
-        } catch (RuntimeException ex) {
-            recordFailure(audit, userId, id, planGateFailure(ex) ? "PLAN" : "DRAFT", request, ex);
-            long promptTokens = generated == null ? 0 : generated.promptTokens();
-            long completionTokens = generated == null ? 0 : generated.completionTokens();
-            aiQuotaService.record(userId, aiProvider.providerName(), aiProvider.model(), promptTokens, completionTokens, false);
-            throw ex;
-        }
-    }
-
-    private StressGeneratorOutcome generateStressGeneratorIfRequested(Long id, Long userId, ProblemDraftRequest request,
-                                                                      ProblemDraftResponse response,
-                                                                      ProblemDraftProgressListener progress,
-                                                                      ProblemDraftAuditContext auditContext) {
-        if (!referenceCheckEnabled(request)) {
-            return new StressGeneratorOutcome(response, List.of());
-        }
-        return generateStressGenerator(id, userId, request, response, progress, auditContext);
-    }
-
-    private StressGeneratorOutcome generateStressGeneratorIfRequired(Long id, Long userId, ProblemDraftRequest request,
-                                                                     ProblemDraftResponse response,
-                                                                     ProblemDraftProgressListener progress,
-                                                                     ProblemDraftAuditContext auditContext) {
-        if (!referenceCheckRequired(response) || hasText(response.stressTestcaseGeneratorPython())) {
-            return new StressGeneratorOutcome(response, List.of());
-        }
-        return generateStressGenerator(id, userId, request, response, progress, auditContext);
-    }
-
-    private StressGeneratorOutcome generateStressGenerator(Long id, Long userId, ProblemDraftRequest request,
-                                                           ProblemDraftResponse response,
-                                                           ProblemDraftProgressListener progress,
-                                                           ProblemDraftAuditContext auditContext) {
-        progress.onProgress("STRESS_GENERATING", 2, 7, "Generating reference stress tests");
-        try {
-            ProblemDraftResponse draftForGenerator = response;
-            ProblemDraftStressGeneratorResult result = aiCapacityService.call(
-                    AiCapacityService.AiWorkload.PROBLEM_DRAFT,
-                    () -> aiProvider.generateProblemDraftStressGenerator(id, request, draftForGenerator)
-            );
-            if (result == null || result.stressTestcaseGeneratorPython() == null
-                    || result.stressTestcaseGeneratorPython().isBlank()) {
-                List<VerificationError> errors = List.of(new VerificationError(
-                        "REFERENCE_GENERATOR_REQUIRED",
-                        "stressTestcaseGeneratorPython was not generated for reference check",
-                        "stressTestcaseGeneratorPython"
-                ));
-                recordStressGenerator(auditContext, userId, id, response, errors);
-                return new StressGeneratorOutcome(response, errors);
-            }
-            ProblemDraftResponse withStress = withStressGenerator(response, result);
-            recordStressGenerator(auditContext, userId, id, withStress, List.of());
-            return new StressGeneratorOutcome(withStress, List.of());
-        } catch (RuntimeException ex) {
-            List<VerificationError> errors = List.of(new VerificationError(
-                    "REFERENCE_GENERATOR_FAILED",
-                    "stressTestcaseGeneratorPython generation failed: "
-                            + nonBlank(ex.getMessage(), ex.getClass().getSimpleName()),
-                    "stressTestcaseGeneratorPython"
-            ));
-            recordStressGenerator(auditContext, userId, id, response, errors);
-            return new StressGeneratorOutcome(response, errors);
-        }
-    }
-
-    private ProblemDraftResponse withStressGenerator(ProblemDraftResponse source,
-                                                     ProblemDraftStressGeneratorResult result) {
-        return new ProblemDraftResponse(source.id(), source.status(), source.title(), source.difficulty(), source.statement(),
-                source.notes(), source.standardSolutionLanguage(), source.standardSolutionCode(),
-                source.referenceSolutionLanguage(), source.referenceSolutionCode(),
-                source.testcaseGeneratorPython(), result.stressTestcaseGeneratorPython(), source.generationPlan(),
-                source.tags(), source.validationStatus(), source.validationErrors(), source.testCases(),
-                source.timeLimitMillis(), source.memoryLimitKb(), source.importedProblemId(),
-                nonBlank(result.model(), source.model()), source.promptTokens() + result.promptTokens(),
-                source.completionTokens() + result.completionTokens(), source.createdAt(), source.archivedAt(),
-                source.deletedAt(), source.deletedBy(), source.refinedFromDraftId(), source.refineNote(),
-                source.verificationStatus(), source.verificationReportJson(), source.repairAttemptCount(),
-                source.lastRepairReason());
-    }
-
-    private boolean referenceCheckEnabled(ProblemDraftRequest request) {
-        return ReferenceCheckPolicy.enabled(request);
-    }
-
-    private boolean referenceCheckRequired(ProblemDraftResponse draft) {
-        return draft != null && (hasText(draft.referenceSolutionCode()) || hasText(draft.stressTestcaseGeneratorPython()));
+    @Autowired(required = false)
+    public void setProblemDraftReviewRiskService(ProblemDraftReviewRiskService reviewRiskService) {
+        this.reviewRiskService = reviewRiskService;
     }
 
     public PageResponse<ProblemDraftResponse> list(
@@ -424,88 +232,177 @@ public class ProblemDraftStore {
         return toResponse(draft);
     }
 
-    public ProblemDraftResponse regenerate(Long parentId, Long userId, ProblemDraftRegenerateRequest request) {
-        return regenerate(parentId, userId, request, ProblemDraftProgressListener.NOOP, ProblemDraftAuditContext.NONE);
-    }
-
     ProblemDraftResponse regenerationSource(Long id) {
         return toResponse(requireMutableDraft(id));
     }
 
-    public ProblemDraftResponse regenerate(Long parentId, Long userId, ProblemDraftRegenerateRequest request,
-                                           ProblemDraftProgressListener progressListener,
-                                           ProblemDraftAuditContext auditContext) {
-        if (request == null) {
-            throw new DomainException(ErrorCode.BAD_REQUEST, "Regeneration request is required");
+    /**
+     * Final gate used exclusively by {@code draft.finalize}. The workspace keeps
+     * mutable state; this method creates one immutable PENDING_REVIEW version
+     * only after the coordinator has verified the current fingerprint.
+     */
+    @Transactional
+    public ProblemDraftResponse finalizeAgentWorkspace(
+            Long userId,
+            String workspaceId,
+            Long candidateDraftId,
+            long stateVersion,
+            Long agentRunId,
+            Integer requestedCfRating,
+            String reviewRisk,
+            String contentFingerprint,
+            String verificationFingerprint,
+            ProblemDraftWorkingState state,
+            VerificationReport staticReport,
+            String verificationReportJson,
+            String model,
+            long promptTokens,
+            long completionTokens
+    ) {
+        if (workspaceId == null || workspaceId.isBlank() || candidateDraftId == null || state == null) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "Problem draft workspace state is incomplete");
         }
-        ProblemDraftProgressListener progress = progressListener == null ? ProblemDraftProgressListener.NOOP : progressListener;
-        ProblemDraftAuditContext audit = auditContext == null ? ProblemDraftAuditContext.NONE : auditContext;
-        ProblemDraftEntity parent = requireMutableDraft(parentId);
-        ProblemDraftResponse parentDraft = toResponse(parent);
-        Long draftId = IdWorker.getId();
-        ProblemDraftRequest repairRequest = regenerationRepairRequest(parentDraft);
-        if (shouldOnlyReverify(parentDraft, request.feedback())) {
-            progress.onProgress("SANDBOX_VERIFYING", 2, 7, "Re-running draft verification without content changes");
-            ProblemDraftResponse verified = verifyAndPersistRegenerated(
-                    userId,
-                    copyForRegeneration(draftId, parentDraft, request.feedback()),
-                    repairRequest,
-                    progress,
-                    audit,
-                    false
-            );
-            return verified;
-        }
-        aiQuotaService.assertMonthlyAvailable(userId);
-        ProblemDraftResponse generated = null;
-        boolean providerCalled = false;
-        try {
-            ProblemDraftResponse draftToVerify;
-            if (shouldRepairFromCurrentReport(parentDraft, request.feedback())) {
-                progress.onProgress("REPAIRING", 2, 7, "Repairing draft from current verification report");
-                ProblemDraftResponse repairBase = copyForRegeneration(draftId, parentDraft, request.feedback());
-                int maxAttempts = maxAutoRepairAttempts();
-                providerCalled = true;
-                draftToVerify = aiCapacityService.call(
-                        AiCapacityService.AiWorkload.PROBLEM_DRAFT,
-                        () -> problemDraftRepairer.repair(repairBase, repairRequest,
-                                parentDraft.verificationReportJson(), 1, Math.max(1, maxAttempts))
-                );
-            } else {
-                progress.onProgress("REGENERATING", 1, 7, "Regenerating draft with scoped field merge");
-                providerCalled = true;
-                generated = aiCapacityService.call(
-                        AiCapacityService.AiWorkload.PROBLEM_DRAFT,
-                        () -> aiProvider.regenerateProblemDraft(draftId, parentDraft, request.feedback())
-                );
-                if (generated == null) {
-                    throw new DomainException(ErrorCode.INTERNAL_ERROR, "Provider returned no draft");
-                }
-                if (isInvalidRegeneratedDraft(generated)) {
-                    throw new DomainException(ErrorCode.INTERNAL_ERROR,
-                            "AI provider returned invalid regenerated draft JSON; rewrite was not applied");
-                }
-                draftToVerify = mergeRegeneratedDraft(draftId, parentDraft, generated, request.feedback());
+        ProblemDraftEntity existing = problemDraftMapper.selectById(candidateDraftId);
+        if (existing != null) {
+            if (!workspaceId.equals(existing.getWorkspaceId())
+                    || !verificationFingerprint.equals(existing.getVerificationFingerprint())) {
+                throw new DomainException(ErrorCode.CONFLICT, "Problem draft finalize id is already in use");
             }
-            ProblemDraftResponse verifiedDraft = verifyAndPersistRegenerated(userId, draftToVerify, repairRequest,
-                    progress, audit, true);
-            aiQuotaService.record(userId, aiProvider.providerName(), verifiedDraft.model(),
-                    verifiedDraft.promptTokens(), verifiedDraft.completionTokens(), true);
-            return verifiedDraft;
-        } catch (RuntimeException ex) {
-            recordFailure(audit, userId, draftId, "REGENERATE", repairRequest, ex);
-            if (providerCalled) {
-                long promptTokens = generated == null ? 0 : generated.promptTokens();
-                long completionTokens = generated == null ? 0 : generated.completionTokens();
-                aiQuotaService.record(userId, aiProvider.providerName(), aiProvider.model(), promptTokens, completionTokens, false);
-            }
-            throw ex;
         }
+        VerificationReport authoritativeStatic = staticReport == null
+                ? VerificationReport.of(List.of(new VerificationError("STATIC_NOT_RUN", "Static validation is required", null)), List.of())
+                : staticReport;
+        if (!authoritativeStatic.passed()) {
+            throw new DomainException(ErrorCode.VALIDATION_FAILED,
+                    "Problem draft cannot be finalized before static validation passes");
+        }
+        if (existing != null) {
+            existing.setStateVersion(stateVersion);
+            existing.setAgentRunId(agentRunId);
+            existing.setValidationStatus("VALID");
+            existing.setValidationErrors(toJson(authoritativeStatic.errorMessages()));
+            existing.setVerificationStatus(VERIFICATION_EXECUTION_VERIFIED);
+            existing.setVerificationReportJson(verificationReportJson);
+            problemDraftMapper.updateById(existing);
+            return toResponse(existing);
+        }
+        ProblemDraftResponse response = state.toResponse(candidateDraftId, nonBlank(model, aiProvider.model()),
+                Math.max(0, promptTokens), Math.max(0, completionTokens));
+        response = new ProblemDraftResponse(
+                response.id(), STATUS_PENDING_REVIEW, response.title(), response.difficulty(), response.statement(),
+                response.notes(), response.standardSolutionLanguage(), response.standardSolutionCode(),
+                response.referenceSolutionLanguage(), response.referenceSolutionCode(),
+                response.testcaseGeneratorPython(), response.stressTestcaseGeneratorPython(), response.generationPlan(),
+                response.tags(), "VALID", authoritativeStatic.errorMessages(), response.testCases(),
+                response.timeLimitMillis(), response.memoryLimitKb(), null, response.model(), response.promptTokens(),
+                response.completionTokens(), response.createdAt(), null, null, null, null, null,
+                VERIFICATION_EXECUTION_VERIFIED, verificationReportJson, 0, null
+        );
+        persist(userId, response);
+        ProblemDraftEntity entity = problemDraftMapper.selectById(candidateDraftId);
+        entity.setWorkspaceId(workspaceId);
+        entity.setStateVersion(stateVersion);
+        entity.setContentFingerprint(contentFingerprint);
+        entity.setVerificationFingerprint(verificationFingerprint);
+        entity.setRequestedCfRating(requestedCfRating);
+        entity.setReviewRisk(reviewRisk);
+        entity.setAgentRunId(agentRunId);
+        problemDraftMapper.updateById(entity);
+        return toResponse(entity);
+    }
+
+    /**
+     * Finalize runs cannot know aggregate model usage until the model returns after draft.finalize.
+     * Bind those totals to the immutable draft only when workspace, actor and Agent run all match.
+     */
+    @Transactional
+    public void updateFinalizedAgentUsage(Long userId, String workspaceId, Long draftId, Long agentRunId,
+                                          String model, long promptTokens, long completionTokens) {
+        ProblemDraftEntity entity = problemDraftMapper.selectById(draftId);
+        if (entity == null || !java.util.Objects.equals(entity.getCreatorUserId(), userId)
+                || !java.util.Objects.equals(entity.getWorkspaceId(), workspaceId)
+                || !java.util.Objects.equals(entity.getAgentRunId(), agentRunId)) {
+            throw new DomainException(ErrorCode.CONFLICT,
+                    "Finalized problem draft does not match the Agent run");
+        }
+        DraftPayload payload = readPayload(entity.getDraftJson());
+        entity.setDraftJson(toJson(new DraftPayload(
+                payload.statement(), payload.notes(), payload.standardSolutionLanguage(),
+                payload.standardSolutionCode(), payload.referenceSolutionLanguage(),
+                payload.referenceSolutionCode(), payload.testcaseGeneratorPython(),
+                payload.stressTestcaseGeneratorPython(), payload.generationPlan(), payload.tags(),
+                payload.testCases(), payload.timeLimitMillis(), payload.memoryLimitKb(),
+                Math.max(0, promptTokens), Math.max(0, completionTokens)
+        )));
+        entity.setModel(nonBlank(model, entity.getModel()));
+        problemDraftMapper.updateById(entity);
+    }
+
+    /**
+     * Persists a human edit as a new immutable workspace version. Execution
+     * evidence is deliberately reset; the workspace must run the Agent gates
+     * again before this version can be imported.
+     */
+    @Transactional
+    public ProblemDraftResponse createHumanWorkspaceVersion(
+            Long userId,
+            String workspaceId,
+            Long candidateDraftId,
+            long stateVersion,
+            Integer requestedCfRating,
+            String reviewRisk,
+            String contentFingerprint,
+            String verificationFingerprint,
+            ProblemDraftWorkingState state,
+            VerificationReport staticReport,
+            Long refinedFromDraftId,
+            String refineNote,
+            String model
+    ) {
+        if (workspaceId == null || workspaceId.isBlank() || candidateDraftId == null || state == null) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "Problem draft workspace edit is incomplete");
+        }
+        if (problemDraftMapper.selectById(candidateDraftId) != null) {
+            throw new DomainException(ErrorCode.CONFLICT, "Problem draft workspace version is already in use");
+        }
+        VerificationReport report = staticReport == null
+                ? VerificationReport.of(List.of(new VerificationError(
+                        "STATIC_NOT_RUN", "Static validation is required", null)), List.of())
+                : staticReport;
+        ProblemDraftResponse base = state.toResponse(candidateDraftId, nonBlank(model, aiProvider.model()), 0, 0);
+        ProblemDraftResponse response = new ProblemDraftResponse(
+                base.id(), STATUS_PENDING_REVIEW, base.title(), base.difficulty(), base.statement(), base.notes(),
+                base.standardSolutionLanguage(), base.standardSolutionCode(), base.referenceSolutionLanguage(),
+                base.referenceSolutionCode(), base.testcaseGeneratorPython(), base.stressTestcaseGeneratorPython(),
+                base.generationPlan(), base.tags(), report.passed() ? "VALID" : "INVALID", report.errorMessages(),
+                base.testCases(), base.timeLimitMillis(), base.memoryLimitKb(), null, base.model(), 0, 0,
+                base.createdAt(), null, null, null, refinedFromDraftId, refineNote, VERIFICATION_NOT_RUN,
+                toJson(Map.of(
+                        "status", "HUMAN_EDIT_REQUIRES_AGENT_VALIDATION",
+                        "verificationFingerprint", verificationFingerprint,
+                        "staticPassed", report.passed()
+                )), 0, null
+        );
+        persist(userId, response);
+        ProblemDraftEntity entity = problemDraftMapper.selectById(candidateDraftId);
+        entity.setWorkspaceId(workspaceId);
+        entity.setStateVersion(stateVersion);
+        entity.setContentFingerprint(contentFingerprint);
+        entity.setVerificationFingerprint(verificationFingerprint);
+        entity.setRequestedCfRating(requestedCfRating);
+        entity.setReviewRisk(reviewRisk);
+        entity.setAgentRunId(null);
+        problemDraftMapper.updateById(entity);
+        return toResponse(entity);
     }
 
     public ProblemDraftResponse approve(Long id, Long reviewerUserId, ProblemDraftApprovalRequest request, String authorization) {
         ProblemDraftEntity draft = requireMutableDraft(id);
         boolean importProblem = request != null && Boolean.TRUE.equals(request.importProblem());
+        if (importProblem && draft.getWorkspaceId() != null) {
+            throw new DomainException(ErrorCode.CONFLICT,
+                    "Agent workspace drafts must be approved first, then imported through the recoverable import workflow");
+        }
         if (importProblem && !STATUS_APPROVED.equals(draft.getStatus())) {
             throw new DomainException(ErrorCode.CONFLICT, "Problem draft must be approved before import");
         }
@@ -740,276 +637,6 @@ public class ProblemDraftStore {
         }
     }
 
-    private ProblemDraftResponse verifyAndPersistRegenerated(Long userId, ProblemDraftResponse draft,
-                                                             ProblemDraftRequest repairRequest,
-                                                             ProblemDraftProgressListener progress,
-                                                             ProblemDraftAuditContext auditContext,
-                                                             boolean requireVerified) {
-        StressGeneratorOutcome stressGeneratorOutcome = generateStressGeneratorIfRequired(draft.id(), userId, repairRequest,
-                draft, progress, auditContext);
-        if (!stressGeneratorOutcome.errors().isEmpty()) {
-            VerificationError error = stressGeneratorOutcome.errors().get(0);
-            throw new DomainException(ErrorCode.INTERNAL_ERROR,
-                    error.code() + ": " + nonBlank(error.message(), "stressTestcaseGeneratorPython was not generated"));
-        }
-        draft = stressGeneratorOutcome.response();
-        VerificationOptions verificationOptions = verificationOptionsForDraft(draft);
-        progress.onProgress("STATIC_VERIFYING", 3, 7, "Running static validation");
-        VerificationReport staticReport = staticReport(draft, verificationOptions, draft.validationErrors(),
-                draft.timeLimitMillis(), draft.memoryLimitKb(), List.of());
-        ProblemDraftResponse withValidation = withValidation(draft,
-                staticReport.errorMessages().isEmpty() ? "VALID" : "INVALID",
-                staticReport.errorMessages());
-        progress.onProgress("SANDBOX_VERIFYING", 4, 7, "Running sandbox verification");
-        VerificationOutcome verification = verifyFinalDraft(withValidation, staticReport, verificationOptions);
-        ProblemDraftResponse verified = withVerification(withValidation, verification);
-        recordVerification(auditContext, userId, verified.id(), verified, staticReport, verification);
-        if (requireVerified) {
-            verified = repairIfRequested(repairRequest, verified, verification, verificationOptions, progress, userId, auditContext);
-            if (!VERIFICATION_EXECUTION_VERIFIED.equals(verified.verificationStatus())) {
-                throw new DomainException(ErrorCode.VALIDATION_FAILED, rewriteVerificationFailedMessage(verified));
-            }
-        }
-        progress.onProgress("PERSISTING", 6, 7, "Saving rewritten draft");
-        persist(userId, verified);
-        progress.onProgress("SUCCEEDED", 7, 7, "Problem draft rewrite completed");
-        return verified;
-    }
-
-    private ProblemDraftResponse copyForRegeneration(Long id, ProblemDraftResponse parent, String feedback) {
-        return new ProblemDraftResponse(
-                id,
-                STATUS_PENDING_REVIEW,
-                parent.title(),
-                parent.difficulty(),
-                parent.statement(),
-                parent.notes(),
-                parent.standardSolutionLanguage(),
-                parent.standardSolutionCode(),
-                parent.referenceSolutionLanguage(),
-                parent.referenceSolutionCode(),
-                parent.testcaseGeneratorPython(),
-                parent.stressTestcaseGeneratorPython(),
-                regenerationPlan(parent.generationPlan(), feedback),
-                parent.tags(),
-                "VALID",
-                List.of(),
-                parent.testCases(),
-                parent.timeLimitMillis(),
-                parent.memoryLimitKb(),
-                null,
-                nonBlank(parent.model(), aiProvider.model()),
-                0,
-                0,
-                Instant.now(),
-                null,
-                null,
-                null,
-                parent.id(),
-                feedback,
-                VERIFICATION_NOT_RUN,
-                null,
-                0,
-                null
-        );
-    }
-
-    private ProblemDraftResponse mergeRegeneratedDraft(Long id, ProblemDraftResponse parent, ProblemDraftResponse raw,
-                                                       String feedback) {
-        FieldMergePolicy policy = fieldMergePolicy(feedback);
-        Integer rawTime = raw.timeLimitMillis();
-        Integer rawMem = raw.memoryLimitKb();
-        return new ProblemDraftResponse(
-                id,
-                STATUS_PENDING_REVIEW,
-                policy.title() ? nonBlank(raw.title(), parent.title()) : parent.title(),
-                policy.difficulty() ? nonBlank(raw.difficulty(), parent.difficulty()) : parent.difficulty(),
-                policy.statement() ? nonBlank(raw.statement(), parent.statement()) : parent.statement(),
-                policy.notes() ? nonBlank(raw.notes(), parent.notes()) : parent.notes(),
-                policy.standardSolution() ? nonBlank(raw.standardSolutionLanguage(), parent.standardSolutionLanguage()) : parent.standardSolutionLanguage(),
-                policy.standardSolution() ? nonBlank(raw.standardSolutionCode(), parent.standardSolutionCode()) : parent.standardSolutionCode(),
-                policy.referenceSolution() ? defaultReferenceSolutionLanguage(raw.referenceSolutionLanguage(), raw.referenceSolutionCode(),
-                        nonBlank(raw.standardSolutionLanguage(), parent.standardSolutionLanguage())) : parent.referenceSolutionLanguage(),
-                policy.referenceSolution() ? raw.referenceSolutionCode() : parent.referenceSolutionCode(),
-                policy.testcaseGenerator() ? nonBlank(raw.testcaseGeneratorPython(), parent.testcaseGeneratorPython()) : parent.testcaseGeneratorPython(),
-                policy.stressGenerator() ? raw.stressTestcaseGeneratorPython() : parent.stressTestcaseGeneratorPython(),
-                policy.generationPlan() ? nonBlank(raw.generationPlan(), regenerationPlan(parent.generationPlan(), feedback))
-                        : regenerationPlan(parent.generationPlan(), feedback),
-                policy.tags() ? (raw.tags() == null ? List.of() : raw.tags()) : parent.tags(),
-                "VALID",
-                raw.validationErrors() == null ? List.of() : raw.validationErrors(),
-                policy.testCases() ? normalizeTestCases(raw.testCases()) : parent.testCases(),
-                policy.limits() ? limitOrDefault(rawTime, DEFAULT_TIME_LIMIT_MILLIS) : parent.timeLimitMillis(),
-                policy.limits() ? limitOrDefault(rawMem, DEFAULT_MEMORY_LIMIT_KB) : parent.memoryLimitKb(),
-                null,
-                nonBlank(raw.model(), aiProvider.model()),
-                Math.max(0, raw.promptTokens()),
-                Math.max(0, raw.completionTokens()),
-                Instant.now(),
-                null,
-                null,
-                null,
-                parent.id(),
-                feedback,
-                VERIFICATION_NOT_RUN,
-                null,
-                0,
-                null
-        );
-    }
-
-    private ProblemDraftRequest regenerationRepairRequest(ProblemDraftResponse draft) {
-        return new ProblemDraftRequest(
-                nonBlank(draft.title(), "AI rewrite"),
-                draft.difficulty(),
-                null,
-                null,
-                null,
-                draft.tags(),
-                null,
-                null,
-                null,
-                null,
-                draft.standardSolutionLanguage(),
-                null,
-                null,
-                null,
-                draft.testcaseGeneratorPython() == null || draft.testcaseGeneratorPython().isBlank() ? null : 3,
-                null,
-                null,
-                true,
-                hasText(draft.referenceSolutionCode()) || hasText(draft.stressTestcaseGeneratorPython())
-        );
-    }
-
-    private boolean shouldOnlyReverify(ProblemDraftResponse parent, String feedback) {
-        if (hasVerificationCode(parent, "SANDBOX_UNAVAILABLE") && containsAnyNormalized(feedback,
-                "sandbox", "SANDBOX_UNAVAILABLE", "沙箱", "验证", "校验", "重跑", "重新")) {
-            return true;
-        }
-        return containsAnyNormalized(feedback, "重跑", "重新跑", "再跑", "只跑", "验证", "校验", "静态校验", "样例校验",
-                "官方隐藏点", "随机对拍", "复杂度审计")
-                && !containsThemeChange(feedback)
-                && !containsAnyNormalized(feedback, "修复", "改正", "解决", "处理")
-                && !containsAnyNormalized(feedback, "修复生成器", "修复题面", "修复标程", "修复样例", "修复数据范围");
-    }
-
-    private boolean shouldRepairFromCurrentReport(ProblemDraftResponse parent, String feedback) {
-        if (problemDraftRepairer == null || parent.verificationReportJson() == null || parent.verificationReportJson().isBlank()) {
-            return false;
-        }
-        if (hasVerificationCode(parent, "SANDBOX_UNAVAILABLE") || containsThemeChange(feedback)) {
-            return false;
-        }
-        RepairTask task = verificationFailureClassifier.classify(parent.verificationReportJson());
-        return !task.allowedFields().isEmpty()
-                && containsAnyNormalized(feedback, "修复", "改正", "处理", "解决", "完善验证", "修一下", "重新验证");
-    }
-
-    private int maxAutoRepairAttempts() {
-        return problemDraftRepairer == null ? 0 : problemDraftRepairer.maxRepairAttempts();
-    }
-
-    private String rewriteVerificationFailedMessage(ProblemDraftResponse draft) {
-        int attempts = repairAttemptCount(draft.repairAttemptCount());
-        RepairTask task = verificationFailureClassifier.classify(draft.verificationReportJson());
-        String evidence = task.evidence() == null || task.evidence().isEmpty()
-                ? nonBlank(draft.verificationStatus(), "verification failed")
-                : String.join("; ", task.evidence());
-        return "Problem draft rewrite did not pass verification after " + attempts
-                + " auto repair attempts: " + truncate(evidence, 500);
-    }
-
-    private FieldMergePolicy fieldMergePolicy(String feedback) {
-        boolean theme = containsThemeChange(feedback);
-        boolean statement = theme || containsAnyNormalized(feedback, "题面", "描述", "输入", "输出", "数据范围", "约束", "规格");
-        boolean samples = statement || containsAnyNormalized(feedback, "样例", "样例说明");
-        boolean officialGenerator = containsAnyNormalized(feedback, "隐藏点", "官方", "生成器", "测试点", "testcaseGeneratorPython");
-        boolean stress = containsAnyNormalized(feedback, "随机对拍", "对拍", "reference", "stress");
-        boolean solution = statement || officialGenerator || stress || containsAnyNormalized(feedback, "标程", "代码", "复杂度", "解法");
-        boolean limits = containsAnyNormalized(feedback, "时限", "内存", "复杂度", "数据范围", "约束");
-        boolean broad = theme || !(statement || samples || officialGenerator || stress || solution || limits);
-        return new FieldMergePolicy(
-                theme,
-                theme,
-                broad || statement,
-                broad || statement || samples,
-                broad || solution,
-                stress,
-                broad || officialGenerator,
-                stress,
-                broad || statement || officialGenerator || stress || solution,
-                theme,
-                broad || samples,
-                broad || limits
-        );
-    }
-
-    private boolean containsThemeChange(String feedback) {
-        if (feedback == null || feedback.isBlank()) {
-            return false;
-        }
-        if (containsAnyNormalized(feedback, "换题", "改成另一题")) {
-            return true;
-        }
-        if (containsProtectedThemeContext(feedback)
-                && !containsAnyNormalized(feedback, "改为", "改成", "换成", "调整为", "变更为")) {
-            return false;
-        }
-        return containsAnyNormalized(feedback,
-                "修改主题", "更改主题", "调整主题", "主题改",
-                "修改标签", "更改标签", "调整标签", "标签改",
-                "修改算法", "更改算法", "调整算法", "算法改",
-                "修改难度", "更改难度", "调整难度", "难度改",
-                "修改标题", "更改标题", "调整标题", "标题改",
-                "核心考点");
-    }
-
-    private boolean containsProtectedThemeContext(String feedback) {
-        return containsAnyNormalized(feedback, "不修改", "不要修改", "不得修改", "不能修改",
-                "不改", "不要改", "不得改", "不能改", "保持", "保留", "不改变", "不变")
-                && containsAnyNormalized(feedback, "主题", "标签", "算法", "难度", "标题", "核心考点");
-    }
-
-    private boolean isInvalidRegeneratedDraft(ProblemDraftResponse draft) {
-        if (draft == null || !"INVALID".equalsIgnoreCase(draft.validationStatus())) {
-            return false;
-        }
-        if (draft.validationErrors() == null || draft.validationErrors().isEmpty()) {
-            return true;
-        }
-        return draft.validationErrors().stream()
-                .anyMatch(error -> error != null
-                        && error.toLowerCase(Locale.ROOT).contains("invalid regenerated draft json"));
-    }
-
-    private boolean hasVerificationCode(ProblemDraftResponse draft, String code) {
-        return draft != null
-                && draft.verificationReportJson() != null
-                && draft.verificationReportJson().toUpperCase(Locale.ROOT).contains(code.toUpperCase(Locale.ROOT));
-    }
-
-    private boolean containsAnyNormalized(String value, String... needles) {
-        if (value == null || value.isBlank()) {
-            return false;
-        }
-        String normalized = value.toLowerCase(Locale.ROOT);
-        for (String needle : needles) {
-            if (needle != null && !needle.isBlank() && normalized.contains(needle.toLowerCase(Locale.ROOT))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String regenerationPlan(String currentPlan, String feedback) {
-        String note = "AI rewrite request: " + nonBlank(feedback, "no feedback");
-        if (currentPlan == null || currentPlan.isBlank()) {
-            return note;
-        }
-        return currentPlan + "\n\n" + note;
-    }
-
     private ProblemDraftResponse withValidation(ProblemDraftResponse source, String status, List<String> errors) {
         return new ProblemDraftResponse(source.id(), source.status(), source.title(), source.difficulty(), source.statement(),
                 source.notes(), source.standardSolutionLanguage(), source.standardSolutionCode(),
@@ -1034,137 +661,16 @@ public class ProblemDraftStore {
                 verification.reportJson(), source.repairAttemptCount(), source.lastRepairReason());
     }
 
-    private ProblemDraftResponse repairIfRequested(ProblemDraftRequest request, ProblemDraftResponse response,
-                                                   VerificationOutcome verification, VerificationOptions options) {
-        return repairIfRequested(request, response, verification, options, ProblemDraftProgressListener.NOOP);
-    }
-
-    private ProblemDraftResponse repairIfRequested(ProblemDraftRequest request, ProblemDraftResponse response,
-                                                   VerificationOutcome verification, VerificationOptions options,
-                                                   ProblemDraftProgressListener progress) {
-        return repairIfRequested(request, response, verification, options, progress, null, ProblemDraftAuditContext.NONE);
-    }
-
-    private ProblemDraftResponse repairIfRequested(ProblemDraftRequest request, ProblemDraftResponse response,
-                                                   VerificationOutcome verification, VerificationOptions options,
-                                                   ProblemDraftProgressListener progress, Long userId,
-                                                   ProblemDraftAuditContext auditContext) {
-        if (!Boolean.TRUE.equals(request.enableAutoRepair()) || verification.passed()) {
-            return response;
-        }
-        int maxAttempts = problemDraftRepairer == null ? 0 : problemDraftRepairer.maxRepairAttempts();
-        if (maxAttempts <= 0) {
-            return response;
-        }
-        ProblemDraftResponse current = response;
-        VerificationOutcome currentVerification = verification;
-        int attempts = repairAttemptCount(current.repairAttemptCount());
-        while (!currentVerification.passed() && attempts < maxAttempts) {
-            int attempt = attempts + 1;
-            ProblemDraftResponse draftToRepair = current;
-            String reportJson = currentVerification.reportJson();
-            try {
-                progress.onProgress("REPAIRING", 5, 7,
-                        "Running auto repair attempt " + attempt + " of " + maxAttempts);
-                ProblemDraftResponse repaired = aiCapacityService.call(
-                        AiCapacityService.AiWorkload.PROBLEM_DRAFT,
-                        () -> problemDraftRepairer.repair(draftToRepair, request, reportJson, attempt, maxAttempts)
-                );
-                VerificationReport staticReport = staticReport(repaired, request, null,
-                        repaired.timeLimitMillis(), repaired.memoryLimitKb());
-                repaired = withValidation(repaired, staticReport.errorMessages().isEmpty() ? "VALID" : "INVALID",
-                        staticReport.errorMessages());
-                progress.onProgress("SANDBOX_VERIFYING", 5, 7,
-                        "Verifying repaired draft attempt " + attempt);
-                currentVerification = verifyFinalDraft(repaired, staticReport, options);
-                current = withRepairMetadata(withVerification(repaired, currentVerification), attempt,
-                        repaired.lastRepairReason());
-                recordRepair(auditContext, userId, current.id(), attempt, current, currentVerification);
-                attempts = attempt;
-            } catch (RuntimeException ex) {
-                recordFailure(auditContext, userId, current.id(), "REPAIR", request, ex);
-                return withRepairMetadata(current, attempt,
-                        "Auto repair attempt " + attempt + " failed: " + nonBlank(ex.getMessage(), ex.getClass().getSimpleName()));
-            }
-        }
-        return current;
-    }
-
-    private void recordRequirement(ProblemDraftAuditContext auditContext, Long userId, Long draftId,
-                                   ProblemDraftRequest request) {
-        if (auditSnapshotService != null) {
-            auditSnapshotService.recordRequirement(auditContext, userId, draftId, request);
-        }
-    }
-
-    private void recordPlan(ProblemDraftAuditContext auditContext, Long userId, Long draftId,
-                            ProblemDraftRequest request, ProblemDraftResponse response) {
-        if (auditSnapshotService != null) {
-            auditSnapshotService.recordPlan(auditContext, userId, draftId, request, response);
-        }
-    }
-
-    private void recordDraft(ProblemDraftAuditContext auditContext, Long userId, Long draftId,
-                             ProblemDraftResponse response) {
-        if (auditSnapshotService != null) {
-            auditSnapshotService.recordDraft(auditContext, userId, draftId, response);
-        }
-    }
-
-    private void recordStressGenerator(ProblemDraftAuditContext auditContext, Long userId, Long draftId,
-                                       ProblemDraftResponse response, List<VerificationError> errors) {
-        if (auditSnapshotService != null) {
-            auditSnapshotService.recordStressGenerator(auditContext, userId, draftId, response, errors);
-        }
-    }
-
-    private void recordVerification(ProblemDraftAuditContext auditContext, Long userId, Long draftId,
-                                    ProblemDraftResponse response, VerificationReport staticReport,
-                                    VerificationOutcome verification) {
-        if (auditSnapshotService != null) {
-            auditSnapshotService.recordVerification(auditContext, userId, draftId, response, staticReport,
-                    verification == null ? null : verification.status(),
-                    verification == null ? null : verification.reportJson());
-        }
-    }
-
-    private void recordRepair(ProblemDraftAuditContext auditContext, Long userId, Long draftId, int attempt,
-                              ProblemDraftResponse response, VerificationOutcome verification) {
-        if (auditSnapshotService != null) {
-            auditSnapshotService.recordRepair(auditContext, userId, draftId, attempt, response,
-                    verification == null ? null : verification.status(),
-                    verification == null ? null : verification.reportJson());
-        }
-    }
-
-    private void recordFailure(ProblemDraftAuditContext auditContext, Long userId, Long draftId, String stage,
-                               ProblemDraftRequest request, RuntimeException error) {
-        if (auditSnapshotService != null) {
-            auditSnapshotService.recordFailure(auditContext, userId, draftId, stage, request, error);
-        }
-    }
-
-    private boolean planGateFailure(RuntimeException ex) {
-        return ex instanceof DomainException
-                && ex.getMessage() != null
-                && ex.getMessage().contains("Problem design plan gate failed");
-    }
-
-    private ProblemDraftResponse withRepairMetadata(ProblemDraftResponse source, int repairAttemptCount,
-                                                    String lastRepairReason) {
-        return new ProblemDraftResponse(source.id(), source.status(), source.title(), source.difficulty(), source.statement(),
-                source.notes(), source.standardSolutionLanguage(), source.standardSolutionCode(),
-                source.referenceSolutionLanguage(), source.referenceSolutionCode(),
-                source.testcaseGeneratorPython(), source.stressTestcaseGeneratorPython(), source.generationPlan(), source.tags(), source.validationStatus(),
-                source.validationErrors(), source.testCases(), source.timeLimitMillis(), source.memoryLimitKb(),
-                source.importedProblemId(), source.model(), source.promptTokens(), source.completionTokens(),
-                source.createdAt(), source.archivedAt(), source.deletedAt(), source.deletedBy(),
-                source.refinedFromDraftId(), source.refineNote(), source.verificationStatus(),
-                source.verificationReportJson(), repairAttemptCount(repairAttemptCount), truncate(lastRepairReason, 1000));
-    }
-
     private ProblemDraftResponse toResponse(ProblemDraftEntity entity) {
         DraftPayload payload = readPayload(entity.getDraftJson());
+        ProblemDraftTestcaseArtifactEntity artifact = testcaseArtifactService == null
+                ? null : testcaseArtifactService.latestReady(entity.getId());
+        ProblemDraftTestcaseArtifactSummary artifactSummary = testcaseArtifactSummary(
+                artifact, entity.getVerificationFingerprint());
+        ProblemDraftImportReadiness readiness = importReadiness(entity, artifact);
+        boolean manualUnverified = readiness != null && readiness.requiresUnverifiedAcknowledgement();
+        ProblemDraftReviewRisk risk = reviewRiskService == null ? null
+                : reviewRiskService.derive(entity.getDifficulty(), entity.getRequestedCfRating(), manualUnverified);
         return new ProblemDraftResponse(
                 entity.getId(),
                 entity.getStatus(),
@@ -1197,9 +703,67 @@ public class ProblemDraftStore {
                 entity.getRefineNote(),
                 nonBlank(entity.getVerificationStatus(), VERIFICATION_NOT_RUN),
                 entity.getVerificationReportJson(),
-                repairAttemptCount(entity.getRepairAttemptCount()),
-                entity.getLastRepairReason()
+                repairAttemptCount(entity.getRepairAttemptCount()), entity.getLastRepairReason(),
+                entity.getWorkspaceId(), entity.getStateVersion(), entity.getContentFingerprint(),
+                entity.getVerificationFingerprint(), entity.getRequestedCfRating(), risk,
+                artifactSummary, readiness
         );
+    }
+
+    private ProblemDraftTestcaseArtifactSummary testcaseArtifactSummary(
+            ProblemDraftTestcaseArtifactEntity artifact, String currentFingerprint
+    ) {
+        if (artifact == null) {
+            return null;
+        }
+        boolean stale = !java.util.Objects.equals(currentFingerprint, artifact.getVerificationFingerprint())
+                || "STALE".equals(artifact.getExecutionStatus());
+        return new ProblemDraftTestcaseArtifactSummary(
+                artifact.getId(), nonBlank(artifact.getSource(), "AGENT_GENERATED"), artifact.getStatus(),
+                nonBlank(artifact.getFormatStatus(), "READY"),
+                nonBlank(artifact.getExecutionStatus(), "NOT_RUN"), artifact.getVerificationMode(),
+                artifact.getVerificationFingerprint(), stale, artifact.getCaseCount(),
+                artifact.getFileSizeBytes(), artifact.getSha256(), artifact.getFailureSummary(),
+                artifact.getAgentRunId(), toInstant(artifact.getGeneratedAt()), toInstant(artifact.getValidatedAt()),
+                artifact.getImportedProblemId(), artifact.getProblemTestcasePackageId()
+        );
+    }
+
+    private ProblemDraftImportReadiness importReadiness(ProblemDraftEntity draft,
+                                                         ProblemDraftTestcaseArtifactEntity artifact) {
+        if (draft.getWorkspaceId() == null) {
+            return null;
+        }
+        List<String> blockers = new ArrayList<>();
+        List<String> actions = new ArrayList<>();
+        if (!STATUS_APPROVED.equals(draft.getStatus())) {
+            blockers.add("DRAFT_NOT_APPROVED");
+            actions.add("APPROVE_CONTENT");
+        }
+        if (!"VALID".equals(draft.getValidationStatus())) {
+            blockers.add("STATIC_CONTENT_INVALID");
+            actions.add("FIX_STATIC_VALIDATION");
+        }
+        if (artifact == null) {
+            blockers.add("TESTCASE_PACKAGE_MISSING");
+            actions.add("GENERATE_OR_UPLOAD_PACKAGE");
+        } else {
+            if (!STATUS_PENDING_REVIEW.equals(draft.getStatus()) && !STATUS_APPROVED.equals(draft.getStatus())) {
+                blockers.add("DRAFT_LIFECYCLE_BLOCKED");
+            }
+            if (!"READY".equals(artifact.getFormatStatus())) {
+                blockers.add("TESTCASE_FORMAT_NOT_READY");
+                actions.add("FIX_PACKAGE_FORMAT");
+            }
+            if (!java.util.Objects.equals(draft.getVerificationFingerprint(), artifact.getVerificationFingerprint())) {
+                blockers.add("TESTCASE_ARTIFACT_STALE");
+                actions.add("REGENERATE_OR_REUPLOAD_PACKAGE");
+            }
+        }
+        boolean verified = artifact != null && "PASSED".equals(artifact.getExecutionStatus());
+        boolean requiresAck = artifact != null && !verified;
+        String mode = verified ? "AGENT_VERIFIED" : requiresAck ? "MANUAL_UNVERIFIED" : null;
+        return new ProblemDraftImportReadiness(blockers.isEmpty(), requiresAck, mode, blockers, actions);
     }
 
     private ProblemDraftEntity requireVisibleDraft(Long id) {
@@ -1220,14 +784,6 @@ public class ProblemDraftStore {
 
     private Instant toInstant(LocalDateTime value) {
         return value == null ? null : value.atZone(ZONE).toInstant();
-    }
-
-    private VerificationReport staticReport(ProblemDraftResponse response, ProblemDraftRequest request,
-                                            List<String> providerErrors, Integer rawTime, Integer rawMem) {
-        VerificationOptions options = request == null
-                ? VerificationOptions.defaults(List.of())
-                : VerificationOptions.fromRequest(request, List.of());
-        return staticReport(response, options, providerErrors, rawTime, rawMem, List.of());
     }
 
     private VerificationReport staticReport(ProblemDraftResponse response, VerificationOptions options,
@@ -1368,57 +924,6 @@ public class ProblemDraftStore {
         }
     }
 
-    private String fallbackTitle(ProblemDraftRequest request) {
-        return request.topic() + " practice";
-    }
-
-    private String fallbackDifficulty(ProblemDraftRequest request) {
-        return ProblemDraftDifficulty.effective(request.difficulty(), request.cfRating());
-    }
-
-    private String fallbackNotes(String title) {
-        return "本题由 AI 生成，建议教师在导入前检查题面、样例和隐藏测试点覆盖。"
-                + "说明：重点关注 " + (title == null || title.isBlank() ? "本题" : title.trim()) + " 的边界情况、输入规模和输出格式。";
-    }
-
-    private ProblemDraftResponse emptyDraft(Long id, ProblemDraftRequest request) {
-        return new ProblemDraftResponse(
-                id,
-                STATUS_PENDING_REVIEW,
-                fallbackTitle(request),
-                fallbackDifficulty(request),
-                "",
-                fallbackNotes(fallbackTitle(request)),
-                defaultSolutionLanguage(request.standardSolutionLanguage()),
-                "",
-                null,
-                null,
-                "",
-                null,
-                fallbackGenerationPlan(request),
-                List.of(),
-                "INVALID",
-                List.of("Provider returned no draft"),
-                List.of(),
-                DEFAULT_TIME_LIMIT_MILLIS,
-                DEFAULT_MEMORY_LIMIT_KB,
-                null,
-                aiProvider.model(),
-                0,
-                0,
-                Instant.now(),
-                null,
-                null,
-                null,
-                null,
-                null,
-                VERIFICATION_NOT_RUN,
-                null,
-                0,
-                null
-        );
-    }
-
     private String nonBlank(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
     }
@@ -1463,11 +968,6 @@ public class ProblemDraftStore {
         return defaultSolutionLanguage(nonBlank(language, standardLanguage));
     }
 
-    private String fallbackGenerationPlan(ProblemDraftRequest request) {
-        return "生成流程：题目信息规划 -> 测试点与 Python 生成脚本 -> 标程 -> 题面、样例和说明合成。主题："
-                + (request.topic() == null ? "" : request.topic().trim());
-    }
-
     private record DraftPayload(
             String statement,
             String notes,
@@ -1505,25 +1005,4 @@ public class ProblemDraftStore {
     ) {
     }
 
-    private record StressGeneratorOutcome(
-            ProblemDraftResponse response,
-            List<VerificationError> errors
-    ) {
-    }
-
-    private record FieldMergePolicy(
-            boolean title,
-            boolean difficulty,
-            boolean statement,
-            boolean notes,
-            boolean standardSolution,
-            boolean referenceSolution,
-            boolean testcaseGenerator,
-            boolean stressGenerator,
-            boolean generationPlan,
-            boolean tags,
-            boolean testCases,
-            boolean limits
-    ) {
-    }
 }

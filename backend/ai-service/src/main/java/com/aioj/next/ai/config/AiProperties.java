@@ -524,6 +524,13 @@ public class AiProperties {
 
     public static class ProblemDraft {
         private int maxRepairAttempts = 5;
+        private int maxAgentSteps = 20;
+        private int maxToolCalls = 16;
+        private int maxSandboxCalls = 8;
+        private int maxTestcaseGenerations = 2;
+        private int maxTestcasePackageRuns = 2;
+        private int maxRunMinutes = 15;
+        private int jobLeaseMinutes = 0;
         private String testcaseArtifactStorageRoot = System.getProperty("user.home") + "/.ai-oj-next/ai-draft-testcase-artifacts";
         private long maxOfficialCaseBytes = 8L * 1024L * 1024L;
         private long maxOfficialPackageBytes = 50L * 1024L * 1024L;
@@ -561,6 +568,63 @@ public class AiProperties {
 
         public void setMaxRepairAttempts(int maxRepairAttempts) {
             this.maxRepairAttempts = Math.max(0, maxRepairAttempts);
+        }
+
+        public int getMaxAgentSteps() {
+            return maxAgentSteps;
+        }
+
+        public void setMaxAgentSteps(int maxAgentSteps) {
+            this.maxAgentSteps = Math.max(1, maxAgentSteps);
+        }
+
+        public int getMaxToolCalls() {
+            return maxToolCalls;
+        }
+
+        public void setMaxToolCalls(int maxToolCalls) {
+            this.maxToolCalls = Math.max(0, maxToolCalls);
+        }
+
+        public int getMaxSandboxCalls() {
+            return maxSandboxCalls;
+        }
+
+        public void setMaxSandboxCalls(int maxSandboxCalls) {
+            this.maxSandboxCalls = Math.max(0, maxSandboxCalls);
+        }
+
+        public int getMaxTestcaseGenerations() {
+            return maxTestcaseGenerations;
+        }
+
+        public void setMaxTestcaseGenerations(int maxTestcaseGenerations) {
+            this.maxTestcaseGenerations = Math.max(0, maxTestcaseGenerations);
+        }
+
+        public int getMaxTestcasePackageRuns() {
+            return maxTestcasePackageRuns;
+        }
+
+        public void setMaxTestcasePackageRuns(int maxTestcasePackageRuns) {
+            this.maxTestcasePackageRuns = Math.max(0, maxTestcasePackageRuns);
+        }
+
+        public int getMaxRunMinutes() {
+            return maxRunMinutes;
+        }
+
+        public void setMaxRunMinutes(int maxRunMinutes) {
+            this.maxRunMinutes = Math.max(1, maxRunMinutes);
+        }
+
+        /** 0 derives the generation-job lease from {@code maxRunMinutes} plus a grace margin. */
+        public int getJobLeaseMinutes() {
+            return jobLeaseMinutes;
+        }
+
+        public void setJobLeaseMinutes(int jobLeaseMinutes) {
+            this.jobLeaseMinutes = Math.max(0, jobLeaseMinutes);
         }
 
         public String getTestcaseArtifactStorageRoot() {
@@ -759,6 +823,12 @@ public class AiProperties {
         private int problemDraftConcurrency = 2;
         private int intentMemoryConcurrency = 4;
         private int batchReportConcurrency = 1;
+        private int modelCorePoolSize = 2;
+        private int modelMaxPoolSize = 8;
+        private int modelQueueCapacity = 32;
+        private int toolCorePoolSize = 4;
+        private int toolMaxPoolSize = 16;
+        private int toolQueueCapacity = 64;
 
         public int getChatCorePoolSize() {
             return chatCorePoolSize;
@@ -814,6 +884,54 @@ public class AiProperties {
 
         public void setBatchReportConcurrency(int batchReportConcurrency) {
             this.batchReportConcurrency = batchReportConcurrency;
+        }
+
+        public int getModelCorePoolSize() {
+            return modelCorePoolSize;
+        }
+
+        public void setModelCorePoolSize(int modelCorePoolSize) {
+            this.modelCorePoolSize = modelCorePoolSize;
+        }
+
+        public int getModelMaxPoolSize() {
+            return modelMaxPoolSize;
+        }
+
+        public void setModelMaxPoolSize(int modelMaxPoolSize) {
+            this.modelMaxPoolSize = modelMaxPoolSize;
+        }
+
+        public int getModelQueueCapacity() {
+            return modelQueueCapacity;
+        }
+
+        public void setModelQueueCapacity(int modelQueueCapacity) {
+            this.modelQueueCapacity = modelQueueCapacity;
+        }
+
+        public int getToolCorePoolSize() {
+            return toolCorePoolSize;
+        }
+
+        public void setToolCorePoolSize(int toolCorePoolSize) {
+            this.toolCorePoolSize = toolCorePoolSize;
+        }
+
+        public int getToolMaxPoolSize() {
+            return toolMaxPoolSize;
+        }
+
+        public void setToolMaxPoolSize(int toolMaxPoolSize) {
+            this.toolMaxPoolSize = toolMaxPoolSize;
+        }
+
+        public int getToolQueueCapacity() {
+            return toolQueueCapacity;
+        }
+
+        public void setToolQueueCapacity(int toolQueueCapacity) {
+            this.toolQueueCapacity = toolQueueCapacity;
         }
     }
 

@@ -11,6 +11,13 @@ public class ProblemDraftEntity {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long creatorUserId;
+    private String workspaceId;
+    private Long stateVersion;
+    private String contentFingerprint;
+    private String verificationFingerprint;
+    private Integer requestedCfRating;
+    private String reviewRisk;
+    private Long agentRunId;
     private String title;
     private String difficulty;
     private String draftJson;
@@ -47,6 +54,21 @@ public class ProblemDraftEntity {
     public void setCreatorUserId(Long creatorUserId) {
         this.creatorUserId = creatorUserId;
     }
+
+    public String getWorkspaceId() { return workspaceId; }
+    public void setWorkspaceId(String workspaceId) { this.workspaceId = workspaceId; }
+    public Long getStateVersion() { return stateVersion; }
+    public void setStateVersion(Long stateVersion) { this.stateVersion = stateVersion; }
+    public String getContentFingerprint() { return contentFingerprint; }
+    public void setContentFingerprint(String contentFingerprint) { this.contentFingerprint = contentFingerprint; }
+    public String getVerificationFingerprint() { return verificationFingerprint; }
+    public void setVerificationFingerprint(String verificationFingerprint) { this.verificationFingerprint = verificationFingerprint; }
+    public Integer getRequestedCfRating() { return requestedCfRating; }
+    public void setRequestedCfRating(Integer requestedCfRating) { this.requestedCfRating = requestedCfRating; }
+    public String getReviewRisk() { return reviewRisk; }
+    public void setReviewRisk(String reviewRisk) { this.reviewRisk = reviewRisk; }
+    public Long getAgentRunId() { return agentRunId; }
+    public void setAgentRunId(Long agentRunId) { this.agentRunId = agentRunId; }
 
     public String getTitle() {
         return title;

@@ -4,7 +4,7 @@
 
 ## Goal
 
-Agent Core V3 provides an auditable, constrained, and recoverable runtime for the student AI tutor. The model handles language understanding and bounded planning; the server owns identity, authorization, data scope, tool execution, contest policy, budgets, and final-output validation.
+Agent Core V3 provides one auditable, constrained, and recoverable runtime for both the student AI tutor and teacher-facing AI problem drafting. The model handles language understanding and bounded planning; the server owns identity, authorization, data scope, tool execution, contest policy, budgets, and final-output validation.
 
 The core assumption is: **the model is an untrusted planner; the server is the trusted control plane**. Model output cannot directly change permissions, read arbitrary data, execute arbitrary tools, or activate long-term memory.
 
@@ -49,6 +49,12 @@ The model sees only tools allowed for the current scenario. The server rechecks 
 
 Tool results use structured data with trusted provenance. Web content, statements, user text, and model text cannot become system instructions that expand tool authority.
 
+### AI problem-draft scenario
+
+The AI problem-draft path reuses the same `AgentRuntime` and `ToolBroker`; it no longer runs a fixed seven-stage model pipeline or duplicates the Agent loop. Each problem has an isolated durable workspace and dedicated `problem_draft_agent` conversation. The model uses nine draft tools to read and patch state, validate statically, execute code, run samples, generate and accept testcase packages, and request finalization, while the server binds resources and enforces every gate. Legacy synchronous, SSE, and regenerate entrypoints now delegate to durable Agent jobs. The real DeepSeek-plus-Docker path has completed local CF 800, 1400, and 1800 acceptance, each producing a `PENDING_REVIEW`, `AGENT_VERIFIED` draft; production remains `IMPLEMENTED_UNVERIFIED`. See [AI problem-draft Agent architecture](problem-draft-agent-architecture.md) for the complete design.
+
+DeepSeek thinking-mode `reasoning_content` is echoed completely in memory within the current tool loop only. It does not enter the database, logs, audit, or frontend. When thinking is unavailable, the draft scenario may explicitly fall back to the standard tool loop and records `STANDARD_TOOL_FALLBACK`.
+
 ## Memory and learning profile
 
 Long-term memory stores stable, reusable, evidenced preferences or facts. Learning profiles store ability state derived from submissions, postmortems, and behavioral signals. They remain separate so one-off problem knowledge or AI advice is not mistaken for a durable preference.
@@ -80,7 +86,7 @@ Client-supplied `problemId` or contest context supports attribution and experien
 
 ## Audit and usage
 
-Each turn retains the necessary model calls, token usage, tool calls, policy decisions, degraded state, and trace links. Audit stores safe summaries rather than secrets, hidden tests, complete internal errors, or unrelated personal data.
+Each turn retains the necessary model calls, token usage, tool calls, policy decisions, degraded state, and trace links. Audit stores safe summaries rather than secrets, hidden tests, complete internal errors, raw model reasoning, executable source, or unrelated personal data.
 
 Contest AI usage is attributed by trusted server-side run context and aggregates turns, input/output tokens, sessions, and interceptions. Observation does not alter the answer, quota, or agent plan.
 

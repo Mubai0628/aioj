@@ -45,6 +45,10 @@ Single-node deployment increases blast radius and single-point-of-failure impact
 - Prompts, tool results, and recalled content distinguish instruction authority from data provenance.
 - AI plagiarism and postmortem output is advisory evidence, not an automatic disciplinary decision or final grade.
 - Memory writes require a candidate, evidence, conflict checks, and user confirmation.
+- Problem-draft workspace, user, draft, execution, and artifact ownership are server-bound; model tool arguments cannot select or override these resources.
+- Raw DeepSeek `reasoning_content` exists only in memory for the current tool loop and never enters the database, logs, audit, or frontend.
+- Code, generators, and packages reach Sandbox only through judge-worker; hidden cases return aggregate results to the model, and general tool audit excludes raw source and process output.
+- Manual ZIPs require SHA, manifest, path, symlink, duplicate-entry, expanded-size, and compression-ratio checks; imports without full-package execution acceptance are explicitly `MANUAL_UNVERIFIED`.
 
 ## Secrets and delivery
 

@@ -48,16 +48,35 @@ public class ModelGateway {
     }
 
     public GatewayResponse call(AiModelEffectiveConfig config, GatewayRequest request) {
+        return call(config, request, false);
+    }
+
+    /**
+     * Controlled standard tool-call retry used only by runtimes that explicitly
+     * allow a thinking-mode fallback. It does not mutate the stored model config.
+     */
+    public GatewayResponse callWithoutThinking(AiModelEffectiveConfig config, GatewayRequest request) {
+        return call(config, request, true);
+    }
+
+    /** Whether this request would use provider thinking without an explicit fallback. */
+    public boolean usesThinking(AiModelEffectiveConfig config, CallProfile profile) {
+        return config.thinkingEnabled() && !profile.forceThinkingDisabled();
+    }
+
+    private GatewayResponse call(AiModelEffectiveConfig config, GatewayRequest request,
+                                 boolean forceThinkingDisabled) {
         ToolCallAdapter adapter = adapterFor(config);
         if (request.toolChoice() == ToolChoiceMode.REQUIRED && !adapter.capabilities().toolChoiceRequiredNative()) {
             throw new DomainException(ErrorCode.BAD_REQUEST,
                     "Provider " + adapter.provider() + " has no native tool_choice=required; Agent Runtime must simulate it");
         }
-        return adapter.execute(config, resolveSettings(config, request.profile()), request);
+        return adapter.execute(config, resolveSettings(config, request.profile(), forceThinkingDisabled), request);
     }
 
-    private CallSettings resolveSettings(AiModelEffectiveConfig config, CallProfile profile) {
-        boolean thinking = config.thinkingEnabled() && !profile.forceThinkingDisabled();
+    private CallSettings resolveSettings(AiModelEffectiveConfig config, CallProfile profile,
+                                         boolean forceThinkingDisabled) {
+        boolean thinking = usesThinking(config, profile) && !forceThinkingDisabled;
         int maxTokens = config.maxTokensOr(profile.defaultMaxTokens());
         if (thinking) {
             maxTokens = Math.max(maxTokens, CallProfile.MIN_MAX_TOKENS_WHEN_THINKING);
