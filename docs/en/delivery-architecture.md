@@ -36,6 +36,8 @@ Production Compose accepts complete `image@sha256:...` references rather than `l
 
 CI checks the backend, React applications, Compose, Markdown links, repository hygiene, and secret leakage. Image builds produce SBOM and provenance attestations. Third-party Actions are pinned to reviewed commit SHAs to reduce supply-chain drift.
 
+The backend tests include ai-service architecture tests (ArchUnit, test scope only): the model call package is used only through its `api` subpackage and depends on neither persistence nor the rest of ai-service; the three legacy model call paths are frozen in allowlists and take no new callers; the ai-service process starts no child processes. The allowlists only shrink.
+
 ## Production boundary
 
 - The production root stores image-only Compose, environment files, current/previous digest sets, and deployment history, but no Git worktree.

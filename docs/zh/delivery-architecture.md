@@ -36,6 +36,8 @@ AIOJ 使用 GitHub Actions、私有 GHCR、不可变镜像 digest 与受保护�
 
 CI 对后端、React、Compose、Markdown 链接、仓库卫生和秘密泄露执行自动检查。镜像构建产生 SBOM 与 provenance 证明；第三方 Actions 固定到审核过的 commit SHA，降低供应链漂移。
 
+后端测试包含 ai-service 的架构测试（ArchUnit，只在测试范围）：模型调用包只能经它的 `api` 子包使用，且不依赖持久层或 ai-service 的其他代码；现有的三条模型调用旧路径冻结在允许清单里，不接新调用方；ai-service 进程内不启动子进程。允许清单只减不增。
+
 ## 生产边界
 
 - 生产根目录保存 image-only Compose、环境文件、当前/上一版本 digest 与部署历史，不保存 Git 工作树。
