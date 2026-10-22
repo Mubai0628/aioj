@@ -3,6 +3,7 @@ package com.aioj.next.judge.domain;
 import com.aioj.next.contract.judge.JudgeTaskMessage;
 import com.aioj.next.contract.contest.ContestMode;
 import com.aioj.next.contract.problem.TestcaseCheckerType;
+import com.aioj.next.contract.submission.JudgePhase;
 import com.aioj.next.contract.submission.SubmissionStatus;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
 import com.aioj.next.judge.persistence.entity.SubmissionEntity;
@@ -41,6 +42,7 @@ public class SandboxClient {
     private static final int DEFAULT_STDERR_COLLECT_LIMIT_BYTES = 64 * 1024;
     private static final long DEFAULT_TIME_LIMIT_MILLIS = 1000L;
     private static final long DEFAULT_MEMORY_LIMIT_KB = 262144L;
+    private static final String SANDBOX_ACCEPTED = "Accepted";
     private static final ParameterizedTypeReference<List<SandboxRunResult>> RUN_RESULT_TYPE =
             new ParameterizedTypeReference<>() {
             };
@@ -81,14 +83,16 @@ public class SandboxClient {
     public JudgeResult judge(JudgeTaskMessage task) {
         if (!properties.getLanguageWhitelist().contains(task.language())) {
             return new JudgeResult(SubmissionStatus.COMPILE_ERROR, "Language is not enabled",
-                    0L, 0L, Instant.now(), null, null, null, null);
+                    0L, 0L, Instant.now(), null, null, null, null)
+                    .withDiagnostics(JudgePhase.COMPILE, null, null);
         }
         LangProfile lang;
         try {
             lang = LangProfile.of(task.language());
         } catch (IllegalArgumentException ex) {
             return new JudgeResult(SubmissionStatus.COMPILE_ERROR, ex.getMessage(),
-                    0L, 0L, Instant.now(), null, null, null, null);
+                    0L, 0L, Instant.now(), null, null, null, null)
+                    .withDiagnostics(JudgePhase.COMPILE, null, null);
         }
 
         try {
@@ -103,7 +107,8 @@ public class SandboxClient {
             if (sourceCode.getBytes(StandardCharsets.UTF_8).length > positiveOrDefault(
                     properties.getMaxSourceBytes(), 256 * 1024)) {
                 return new JudgeResult(SubmissionStatus.COMPILE_ERROR, "Submission source code exceeds the limit",
-                        0L, 0L, Instant.now(), null, null, null, null);
+                        0L, 0L, Instant.now(), null, null, null, null)
+                        .withDiagnostics(JudgePhase.COMPILE, null, null);
             }
 
             Optional<PreparedTestcasePackage> preparedPackage = testcaseCache.prepareActivePackage(task.problemId());
@@ -115,52 +120,62 @@ public class SandboxClient {
                 return JudgeResult.systemError("No testcase available");
             }
 
-            boolean collectCaseResults = task.contestMode() == ContestMode.IOI;
+            // Every submission keeps the results of the cases it ran. IOI scores all
+            // cases; ACM and practice still stop at the first failing case.
+            boolean scoreAllCases = task.contestMode() == ContestMode.IOI;
+            int caseTotal = testcasePackage.cases().size();
+            boolean equalWeight = hasNoCaseScores(testcasePackage.cases());
             long cpuLimitNs = millisToNanos(Math.min(
                     nonNullOrDefault(task.timeLimitMillis(), DEFAULT_TIME_LIMIT_MILLIS),
                     positiveOrDefault(properties.getMaxRunTimeLimitMillis(), 30_000)));
             long memoryLimitBytes = kbToBytes(Math.min(
                     nonNullOrDefault(task.memoryLimitKb(), DEFAULT_MEMORY_LIMIT_KB),
                     positiveOrDefault(properties.getMaxMemoryLimitKb(), 1_048_576)));
-            long compileCpuLimitNs = Math.min(safeMultiply(cpuLimitNs, 10),
-                    millisToNanos(positiveOrDefault(properties.getMaxScriptTimeLimitMillis(), 180_000)));
-            long compileMemoryLimitBytes = Math.min(safeMultiply(memoryLimitBytes, 2),
-                    kbToBytes(positiveOrDefault(properties.getMaxMemoryLimitKb(), 1_048_576)));
+            long compileCpuLimitNs = compileCpuLimitNs(cpuLimitNs);
+            long sourceCompileMemoryBytes = compileMemoryLimitBytes(memoryLimitBytes, compileMinMemoryKb(lang.language()));
+            long checkerCompileMemoryBytes = compileMemoryLimitBytes(memoryLimitBytes,
+                    properties.getCheckerCompileMinMemoryKb());
             String compiledFileId = null;
             String checkerFileId = null;
             try {
                 if (lang.requiresCompile()) {
                     CompileOutcome compile = compileSource(lang, sourceCode, compileCpuLimitNs,
-                            compileMemoryLimitBytes);
+                            sourceCompileMemoryBytes);
                     if (compile.failed()) {
-                        if (collectCaseResults) {
-                            List<JudgeCaseResult> caseResults = compileFailureCaseResults(testcasePackage, compile);
-                            BigDecimal maxScore = sumMaxScore(caseResults);
-                            return new JudgeResult(SubmissionStatus.COMPILE_ERROR, compile.message(),
+                        String message = compileFailureMessage(compile);
+                        if (scoreAllCases) {
+                            List<JudgeCaseResult> caseResults = compileFailureCaseResults(testcasePackage, compile,
+                                    SubmissionStatus.COMPILE_ERROR, message, JudgePhase.COMPILE, equalWeight);
+                            return new JudgeResult(SubmissionStatus.COMPILE_ERROR, message,
                                     compile.timeMillis(), compile.memoryKb(), Instant.now(),
                                     null, compile.stderr(), compile.exitStatus(), compile.runTimeMillis(),
-                                    BigDecimal.ZERO, maxScore, caseResults);
+                                    BigDecimal.ZERO, sumMaxScore(caseResults), caseResults)
+                                    .withDiagnostics(JudgePhase.COMPILE, compile.sandboxStatus(), caseTotal);
                         }
-                        return new JudgeResult(SubmissionStatus.COMPILE_ERROR, compile.message(),
+                        return new JudgeResult(SubmissionStatus.COMPILE_ERROR, message,
                                 compile.timeMillis(), compile.memoryKb(), Instant.now(),
-                                null, compile.stderr(), compile.exitStatus(), compile.runTimeMillis());
+                                null, compile.stderr(), compile.exitStatus(), compile.runTimeMillis())
+                                .withDiagnostics(JudgePhase.COMPILE, compile.sandboxStatus(), caseTotal);
                     }
                     compiledFileId = compile.fileId();
                 }
                 if (testcasePackage.checkerType() == TestcaseCheckerType.CUSTOM) {
                     CompileOutcome checkerCompile = compileChecker(testcasePackage, compileCpuLimitNs,
-                            compileMemoryLimitBytes);
+                            checkerCompileMemoryBytes);
                     if (checkerCompile.failed()) {
-                        if (collectCaseResults) {
+                        // A broken checker is the problem setter's fault, never the student's verdict.
+                        if (scoreAllCases) {
                             List<JudgeCaseResult> caseResults = compileFailureCaseResults(testcasePackage, checkerCompile,
-                                    SubmissionStatus.SYSTEM_ERROR);
-                            BigDecimal maxScore = sumMaxScore(caseResults);
+                                    SubmissionStatus.SYSTEM_ERROR, checkerCompile.message(), JudgePhase.CHECKER,
+                                    equalWeight);
                             return new JudgeResult(SubmissionStatus.SYSTEM_ERROR, checkerCompile.message(),
                                     checkerCompile.timeMillis(), checkerCompile.memoryKb(), Instant.now(),
                                     null, checkerCompile.stderr(), checkerCompile.exitStatus(), checkerCompile.runTimeMillis(),
-                                    BigDecimal.ZERO, maxScore, caseResults);
+                                    BigDecimal.ZERO, sumMaxScore(caseResults), caseResults)
+                                    .withDiagnostics(JudgePhase.CHECKER, checkerCompile.sandboxStatus(), caseTotal);
                         }
-                        return JudgeResult.systemError(checkerCompile.message());
+                        return JudgeResult.systemError(checkerCompile.message())
+                                .withDiagnostics(JudgePhase.CHECKER, checkerCompile.sandboxStatus(), caseTotal);
                     }
                     checkerFileId = checkerCompile.fileId();
                 }
@@ -168,63 +183,47 @@ public class SandboxClient {
                 long maxTimeMs = 0L;
                 long maxMemoryKb = 0L;
                 long maxRunTimeMs = 0L;
-                SubmissionStatus aggregateStatus = SubmissionStatus.ACCEPTED;
-                String aggregateMessage = "Accepted";
-                String aggregateStdout = null;
-                String aggregateStderr = null;
-                Integer aggregateExitStatus = null;
-                Long aggregateCaseTime = null;
-                Long aggregateCaseMemory = null;
-                Long aggregateCaseRunTime = null;
+                CaseRunOutcome firstFailure = null;
                 BigDecimal totalScore = BigDecimal.ZERO;
                 BigDecimal totalMaxScore = BigDecimal.ZERO;
-                List<JudgeCaseResult> caseResults = collectCaseResults ? new ArrayList<>() : List.of();
+                List<JudgeCaseResult> caseResults = new ArrayList<>();
                 int caseIndex = 0;
                 for (PreparedTestcaseCase testcase : testcasePackage.cases()) {
                     caseIndex++;
                     CaseRunOutcome outcome = runCase(lang, sourceCode, compiledFileId, checkerFileId, testcase, cpuLimitNs,
-                            memoryLimitBytes);
+                            memoryLimitBytes, equalWeight);
                     maxTimeMs = Math.max(maxTimeMs, nullToZero(outcome.timeMillis()));
                     maxMemoryKb = Math.max(maxMemoryKb, nullToZero(outcome.memoryKb()));
                     maxRunTimeMs = Math.max(maxRunTimeMs, nullToZero(outcome.runTimeMillis()));
-                    if (collectCaseResults) {
-                        BigDecimal maxScore = caseMaxScore(testcase);
-                        BigDecimal score = outcome.score() == null
-                                ? (outcome.terminalStatus() == SubmissionStatus.ACCEPTED ? maxScore : BigDecimal.ZERO)
-                                : clampScore(outcome.score(), maxScore);
-                        totalScore = totalScore.add(score);
-                        totalMaxScore = totalMaxScore.add(maxScore);
-                        caseResults.add(toCaseResult(testcasePackage, testcase, caseIndex, outcome, score, maxScore));
-                    }
+                    BigDecimal maxScore = caseMaxScore(testcase, equalWeight);
+                    BigDecimal score = outcome.score() == null
+                            ? (outcome.terminalStatus() == SubmissionStatus.ACCEPTED ? maxScore : BigDecimal.ZERO)
+                            : clampScore(outcome.score(), maxScore);
+                    totalScore = totalScore.add(score);
+                    totalMaxScore = totalMaxScore.add(maxScore);
+                    caseResults.add(toCaseResult(testcasePackage, testcase, caseIndex, outcome, score, maxScore));
                     if (outcome.terminalStatus() != SubmissionStatus.ACCEPTED) {
-                        if (collectCaseResults) {
-                            if (aggregateStatus == SubmissionStatus.ACCEPTED) {
-                                aggregateStatus = outcome.terminalStatus();
-                                aggregateMessage = outcome.message();
-                                aggregateStdout = outcome.stdout();
-                                aggregateStderr = outcome.stderr();
-                                aggregateExitStatus = outcome.exitStatus();
-                                aggregateCaseTime = outcome.timeMillis();
-                                aggregateCaseMemory = outcome.memoryKb();
-                                aggregateCaseRunTime = outcome.runTimeMillis();
-                            }
-                            continue;
+                        if (firstFailure == null) {
+                            firstFailure = outcome;
                         }
-                        return new JudgeResult(outcome.terminalStatus(), outcome.message(),
-                                outcome.timeMillis(), outcome.memoryKb(), Instant.now(),
-                                outcome.stdout(), outcome.stderr(), outcome.exitStatus(), outcome.runTimeMillis());
+                        if (!scoreAllCases) {
+                            break;
+                        }
                     }
                 }
-                if (collectCaseResults) {
-                    return new JudgeResult(aggregateStatus, aggregateMessage,
-                            aggregateStatus == SubmissionStatus.ACCEPTED ? maxTimeMs : aggregateCaseTime,
-                            aggregateStatus == SubmissionStatus.ACCEPTED ? maxMemoryKb : aggregateCaseMemory,
-                            Instant.now(), aggregateStdout, aggregateStderr, aggregateExitStatus,
-                            aggregateStatus == SubmissionStatus.ACCEPTED ? maxRunTimeMs : aggregateCaseRunTime,
-                            totalScore, totalMaxScore, caseResults);
+                BigDecimal score = scoreAllCases ? totalScore : null;
+                BigDecimal maxScore = scoreAllCases ? totalMaxScore : null;
+                if (firstFailure != null) {
+                    return new JudgeResult(firstFailure.terminalStatus(), firstFailure.message(),
+                            firstFailure.timeMillis(), firstFailure.memoryKb(), Instant.now(),
+                            firstFailure.stdout(), firstFailure.stderr(), firstFailure.exitStatus(),
+                            firstFailure.runTimeMillis(), score, maxScore, caseResults)
+                            .withDiagnostics(firstFailure.phase(), firstFailure.sandboxStatus(), caseTotal);
                 }
                 return new JudgeResult(SubmissionStatus.ACCEPTED, "Accepted",
-                        maxTimeMs, maxMemoryKb, Instant.now(), null, null, null, maxRunTimeMs);
+                        maxTimeMs, maxMemoryKb, Instant.now(), null, null, null, maxRunTimeMs,
+                        score, maxScore, caseResults)
+                        .withDiagnostics(JudgePhase.RUN, SANDBOX_ACCEPTED, caseTotal);
             } finally {
                 if (compiledFileId != null) {
                     try {
@@ -247,12 +246,58 @@ public class SandboxClient {
         }
     }
 
+    long compileCpuLimitNs(long runCpuLimitNs) {
+        long multiplier = properties.getCompileTimeMultiplier() > 0 ? properties.getCompileTimeMultiplier() : 10L;
+        long capMillis = positiveOrDefault(properties.getMaxScriptTimeLimitMillis(), 180_000);
+        if (properties.getCompileMaxTimeMillis() > 0) {
+            capMillis = Math.min(capMillis, properties.getCompileMaxTimeMillis());
+        }
+        return Math.min(safeMultiply(runCpuLimitNs, multiplier), millisToNanos(capMillis));
+    }
+
+    long compileMemoryLimitBytes(long runMemoryLimitBytes, long minimumKb) {
+        long multiplier = properties.getCompileMemoryMultiplier() > 0 ? properties.getCompileMemoryMultiplier() : 2L;
+        long wanted = Math.max(safeMultiply(runMemoryLimitBytes, multiplier), kbToBytes(Math.max(0L, minimumKb)));
+        return Math.min(wanted, kbToBytes(positiveOrDefault(properties.getMaxMemoryLimitKb(), 1_048_576)));
+    }
+
+    private long compileMinMemoryKb(String language) {
+        return switch (language) {
+            case "cpp" -> properties.getCppCompileMinMemoryKb();
+            case "java" -> properties.getJavaCompileMinMemoryKb();
+            default -> 0L;
+        };
+    }
+
+    /**
+     * A compiler that runs out of time or memory is still a compile error for the
+     * student; the message names the limit instead of reusing a run verdict.
+     */
+    static String compileFailureMessage(CompileOutcome compile) {
+        String status = compile.sandboxStatus();
+        if ("Time Limit Exceeded".equals(status)) {
+            return "Compilation exceeded the compile time limit";
+        }
+        if ("Memory Limit Exceeded".equals(status)) {
+            return "Compilation exceeded the compile memory limit";
+        }
+        if ("Output Limit Exceeded".equals(status)) {
+            return "Compiler output exceeded the limit";
+        }
+        return compile.message();
+    }
+
+    /** Legacy packages stored no per-case scores; weigh their cases equally instead of scoring all zero. */
+    static boolean hasNoCaseScores(List<PreparedTestcaseCase> cases) {
+        return cases.stream().noneMatch(testcase -> testcase.score() != null && testcase.score() > 0);
+    }
+
     private CompileOutcome compileSource(LangProfile lang, String sourceCode, long cpuLimitNs, long memoryLimitBytes) {
         SandboxExecutionClient.CompileOutcome outcome = sandboxExecutionClient.compileSource(
                 lang.language(), sourceCode, cpuLimitNs, memoryLimitBytes);
         if (outcome.failed()) {
-            return CompileOutcome.failed(outcome.message(), outcome.timeMillis(), outcome.memoryKb(),
-                    outcome.stderr(), outcome.exitStatus(), outcome.runTimeMillis());
+            return CompileOutcome.failed(outcome.sandboxStatus(), outcome.message(), outcome.timeMillis(),
+                    outcome.memoryKb(), outcome.stderr(), outcome.exitStatus(), outcome.runTimeMillis());
         }
         return CompileOutcome.success(outcome.fileId(), outcome.timeMillis(), outcome.memoryKb(),
                 outcome.stderr(), outcome.exitStatus(), outcome.runTimeMillis());
@@ -260,7 +305,7 @@ public class SandboxClient {
 
     private CompileOutcome compileChecker(PreparedTestcasePackage testcasePackage, long cpuLimitNs, long memoryLimitBytes) throws IOException {
         if (testcasePackage.checkerSourceFile() == null) {
-            return CompileOutcome.failed("Custom checker source file is missing", 0L, 0L, null, null, null);
+            return CompileOutcome.failed(null, "Custom checker source file is missing", 0L, 0L, null, null, null);
         }
         String checkerSource = Files.readString(testcasePackage.checkerSourceFile(), StandardCharsets.UTF_8);
         SandboxRunResult result = runSandbox(List.of(Map.of(
@@ -279,12 +324,14 @@ public class SandboxClient {
         Long runTimeMs = nanosToMillis(result.runTime());
         String stderr = fileContent(result, "stderr");
         if (!"Accepted".equals(result.status())) {
-            return CompileOutcome.failed("Custom checker compile failed: " + firstText(stderr, result.error(), result.status()),
+            return CompileOutcome.failed(rawStatus(result), "Custom checker compile failed: "
+                            + firstText(stderr, result.error(), result.status()),
                     timeMs, memoryKb, stderr, result.exitStatus(), runTimeMs);
         }
         String fileId = result.fileIds() == null ? null : result.fileIds().get("checker");
         if (!StringUtils.hasText(fileId)) {
-            return CompileOutcome.failed("Custom checker compile succeeded but sandbox did not return cached fileId",
+            return CompileOutcome.failed("Internal Error",
+                    "Custom checker compile succeeded but sandbox did not return cached fileId",
                     timeMs, memoryKb, stderr, result.exitStatus(), runTimeMs);
         }
         return CompileOutcome.success(fileId, timeMs, memoryKb, stderr, result.exitStatus(), runTimeMs);
@@ -296,7 +343,8 @@ public class SandboxClient {
                                    String checkerFileId,
                                    PreparedTestcaseCase testcase,
                                    long cpuLimitNs,
-                                   long memoryLimitBytes) throws IOException {
+                                   long memoryLimitBytes,
+                                   boolean equalWeight) throws IOException {
         String stdin = Files.readString(testcase.inputFile(), StandardCharsets.UTF_8);
         int stdoutCollectLimit = stdoutCollectLimitBytes(Files.size(testcase.expectedOutputFile()),
                 stdoutBaseCollectLimitBytes(), stdoutExtraCollectBytes(), stdoutMaxCollectLimitBytes());
@@ -325,22 +373,25 @@ public class SandboxClient {
         SubmissionStatus status = mapStatus(result.status(), result.fileError());
         if (status != SubmissionStatus.ACCEPTED) {
             return new CaseRunOutcome(status, firstText(result.error(), result.status()),
-                    timeMs, memoryKb, stdout, stderr, result.exitStatus(), runTimeMs, null);
+                    timeMs, memoryKb, stdout, stderr, result.exitStatus(), runTimeMs, null,
+                    JudgePhase.RUN, rawStatus(result));
         }
         if (StringUtils.hasText(checkerFileId)) {
             return runChecker(checkerFileId, testcase, stdout, stderr, result.exitStatus(), timeMs, memoryKb,
-                    runTimeMs, cpuLimitNs, memoryLimitBytes);
+                    runTimeMs, cpuLimitNs, memoryLimitBytes, equalWeight);
         }
         try (var expected = Files.newInputStream(testcase.expectedOutputFile());
              var actual = new ByteArrayInputStream(nullToEmpty(stdout).getBytes(StandardCharsets.UTF_8))) {
             OutputComparator.ComparisonResult comparison = outputComparator.compare(expected, actual);
             if (!comparison.accepted()) {
                 return new CaseRunOutcome(SubmissionStatus.WRONG_ANSWER, comparison.message(),
-                        timeMs, memoryKb, stdout, stderr, result.exitStatus(), runTimeMs, null);
+                        timeMs, memoryKb, stdout, stderr, result.exitStatus(), runTimeMs, null,
+                        JudgePhase.RUN, rawStatus(result));
             }
         }
         return new CaseRunOutcome(SubmissionStatus.ACCEPTED, "Accepted",
-                timeMs, memoryKb, stdout, stderr, result.exitStatus(), runTimeMs, null);
+                timeMs, memoryKb, stdout, stderr, result.exitStatus(), runTimeMs, null,
+                JudgePhase.RUN, rawStatus(result));
     }
 
     private CaseRunOutcome runChecker(String checkerFileId,
@@ -352,8 +403,9 @@ public class SandboxClient {
                                       Long programMemoryKb,
                                       Long programRunTimeMs,
                                       long cpuLimitNs,
-                                      long memoryLimitBytes) throws IOException {
-        BigDecimal maxScore = caseMaxScore(testcase);
+                                      long memoryLimitBytes,
+                                      boolean equalWeight) throws IOException {
+        BigDecimal maxScore = caseMaxScore(testcase, equalWeight);
         Map<String, Object> copyIn = new LinkedHashMap<>();
         copyIn.put("checker", Map.of("fileId", checkerFileId));
         copyIn.put("input.txt", Map.of("content", Files.readString(testcase.inputFile(), StandardCharsets.UTF_8)));
@@ -376,7 +428,7 @@ public class SandboxClient {
             return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR,
                     "Custom checker execution failed: " + firstText(result.error(), checkerStderr, result.status()),
                     programTimeMs, programMemoryKb, actualOutput, firstText(programStderr, checkerStderr),
-                    programExitStatus, programRunTimeMs, BigDecimal.ZERO);
+                    programExitStatus, programRunTimeMs, BigDecimal.ZERO, JudgePhase.CHECKER, rawStatus(result));
         }
         CheckerJsonResult checkerResult;
         try {
@@ -385,14 +437,14 @@ public class SandboxClient {
             return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR,
                     "Custom checker returned invalid JSON: " + safeMessage(ex),
                     programTimeMs, programMemoryKb, actualOutput, firstText(programStderr, checkerStderr),
-                    programExitStatus, programRunTimeMs, BigDecimal.ZERO);
+                    programExitStatus, programRunTimeMs, BigDecimal.ZERO, JudgePhase.CHECKER, rawStatus(result));
         }
         String checkerStatus = checkerResult.status();
         if (!"ACCEPTED".equals(checkerStatus) && !"WRONG_ANSWER".equals(checkerStatus)) {
             return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR,
                     "Custom checker returned unsupported status: " + firstText(checkerStatus),
                     programTimeMs, programMemoryKb, actualOutput, firstText(programStderr, checkerStderr),
-                    programExitStatus, programRunTimeMs, BigDecimal.ZERO);
+                    programExitStatus, programRunTimeMs, BigDecimal.ZERO, JudgePhase.CHECKER, rawStatus(result));
         }
         BigDecimal score = clampScore(checkerResult.score(), maxScore);
         SubmissionStatus terminalStatus = "ACCEPTED".equals(checkerStatus) && isFullScore(score, maxScore)
@@ -401,25 +453,25 @@ public class SandboxClient {
         String message = firstText(checkerResult.message(),
                 terminalStatus == SubmissionStatus.ACCEPTED ? "Accepted" : "Wrong Answer");
         return new CaseRunOutcome(terminalStatus, message, programTimeMs, programMemoryKb, actualOutput,
-                firstText(programStderr, checkerStderr), programExitStatus, programRunTimeMs, score);
-    }
-
-    private List<JudgeCaseResult> compileFailureCaseResults(PreparedTestcasePackage testcasePackage,
-                                                            CompileOutcome compile) {
-        return compileFailureCaseResults(testcasePackage, compile, SubmissionStatus.COMPILE_ERROR);
+                firstText(programStderr, checkerStderr), programExitStatus, programRunTimeMs, score,
+                JudgePhase.CHECKER, rawStatus(result));
     }
 
     private List<JudgeCaseResult> compileFailureCaseResults(PreparedTestcasePackage testcasePackage,
                                                             CompileOutcome compile,
-                                                            SubmissionStatus status) {
+                                                            SubmissionStatus status,
+                                                            String message,
+                                                            JudgePhase phase,
+                                                            boolean equalWeight) {
         List<JudgeCaseResult> results = new ArrayList<>();
         int caseIndex = 0;
         for (PreparedTestcaseCase testcase : testcasePackage.cases()) {
             caseIndex++;
-            BigDecimal maxScore = caseMaxScore(testcase);
+            BigDecimal maxScore = caseMaxScore(testcase, equalWeight);
             results.add(new JudgeCaseResult(testcasePackage.packageId(), testcase.id(), caseIndex, testcase.name(),
                     testcase.subtaskKey(), status, BigDecimal.ZERO, maxScore,
-                    compile.timeMillis(), compile.memoryKb(), compile.message()));
+                    compile.timeMillis(), compile.memoryKb(), message, phase, compile.sandboxStatus(),
+                    testcase.sample()));
         }
         return results;
     }
@@ -432,10 +484,13 @@ public class SandboxClient {
                                          BigDecimal maxScore) {
         return new JudgeCaseResult(testcasePackage.packageId(), testcase.id(), caseIndex, testcase.name(),
                 testcase.subtaskKey(), outcome.terminalStatus(), score, maxScore, outcome.timeMillis(),
-                outcome.memoryKb(), outcome.message());
+                outcome.memoryKb(), outcome.message(), outcome.phase(), outcome.sandboxStatus(), testcase.sample());
     }
 
-    private BigDecimal caseMaxScore(PreparedTestcaseCase testcase) {
+    static BigDecimal caseMaxScore(PreparedTestcaseCase testcase, boolean equalWeight) {
+        if (equalWeight) {
+            return BigDecimal.ONE;
+        }
         Integer score = testcase.score();
         if (score == null || score <= 0) {
             return BigDecimal.ZERO;
@@ -483,6 +538,18 @@ public class SandboxClient {
 
     private void deleteCachedFile(String fileId) {
         restClient.delete().uri("/file/{id}", fileId).retrieve().toBodilessEntity();
+    }
+
+    /** The go-judge status of a step; a collect-size file error is reported as the output limit it means. */
+    private static String rawStatus(SandboxRunResult result) {
+        if (result.fileError() != null) {
+            for (SandboxFileError error : result.fileError()) {
+                if ("CollectSizeExceeded".equals(error.type())) {
+                    return "Output Limit Exceeded";
+                }
+            }
+        }
+        return result.status();
     }
 
     private SubmissionStatus mapStatus(String goJudgeStatus, List<SandboxFileError> fileError) {
@@ -682,24 +749,25 @@ public class SandboxClient {
         }
     }
 
-    private record CompileOutcome(boolean failed,
-                                  String fileId,
-                                  String message,
-                                  Long timeMillis,
-                                  Long memoryKb,
-                                  String stderr,
-                                  Integer exitStatus,
-                                  Long runTimeMillis) {
+    record CompileOutcome(boolean failed,
+                          String fileId,
+                          String message,
+                          Long timeMillis,
+                          Long memoryKb,
+                          String stderr,
+                          Integer exitStatus,
+                          Long runTimeMillis,
+                          String sandboxStatus) {
         static CompileOutcome success(String fileId, Long timeMillis, Long memoryKb, String stderr,
                                       Integer exitStatus, Long runTimeMillis) {
             return new CompileOutcome(false, fileId, "Accepted", timeMillis, memoryKb, stderr,
-                    exitStatus, runTimeMillis);
+                    exitStatus, runTimeMillis, SANDBOX_ACCEPTED);
         }
 
-        static CompileOutcome failed(String message, Long timeMillis, Long memoryKb, String stderr,
-                                     Integer exitStatus, Long runTimeMillis) {
+        static CompileOutcome failed(String sandboxStatus, String message, Long timeMillis, Long memoryKb,
+                                     String stderr, Integer exitStatus, Long runTimeMillis) {
             return new CompileOutcome(true, null, message, timeMillis, memoryKb, stderr,
-                    exitStatus, runTimeMillis);
+                    exitStatus, runTimeMillis, sandboxStatus);
         }
     }
 
@@ -711,7 +779,9 @@ public class SandboxClient {
                                   String stderr,
                                   Integer exitStatus,
                                   Long runTimeMillis,
-                                  BigDecimal score) {
+                                  BigDecimal score,
+                                  JudgePhase phase,
+                                  String sandboxStatus) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

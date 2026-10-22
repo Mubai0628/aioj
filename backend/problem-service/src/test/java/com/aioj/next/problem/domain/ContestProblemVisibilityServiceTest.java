@@ -1,5 +1,8 @@
 package com.aioj.next.problem.domain;
 
+import com.aioj.next.problem.persistence.mapper.ContestMapper;
+import com.aioj.next.problem.persistence.entity.ContestEntity;
+import com.aioj.next.contract.contest.ContestMode;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.ContestParticipantStatus;
 import com.aioj.next.contract.contest.ContestRunStatus;
@@ -25,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -42,13 +46,58 @@ class ContestProblemVisibilityServiceTest {
     private ProblemMapper problemMapper;
     @Mock
     private ContestRunProblemSnapshotMapper runProblemSnapshotMapper;
+    @Mock
+    private ContestMapper contestMapper;
 
     private ContestProblemVisibilityService service;
 
     @BeforeEach
     void setUp() {
         service = new ContestProblemVisibilityService(runMapper, contestProblemMapper, participantMapper,
-                problemMapper, runProblemSnapshotMapper, new ContestProperties());
+                problemMapper, runProblemSnapshotMapper, contestMapper, new ContestProperties());
+    }
+
+    @Test
+    void acmRunHidesCaseResultsUntilItEnds() {
+        Instant now = Instant.parse("2026-10-22T10:00:00Z");
+        ContestRunEntity running = new ContestRunEntity();
+        running.setId(71L);
+        running.setContestId(7L);
+        running.setModeSnapshot(ContestMode.ACM);
+        running.setEndAt(now.plusSeconds(600));
+        ContestRunEntity ended = new ContestRunEntity();
+        ended.setId(72L);
+        ended.setContestId(7L);
+        ended.setModeSnapshot(ContestMode.ACM);
+        ended.setEndAt(now.minusSeconds(1));
+        when(runMapper.selectById(71L)).thenReturn(running);
+        when(runMapper.selectById(72L)).thenReturn(ended);
+
+        assertTrue(service.caseResultsHiddenDuringRun(7L, 71L, now));
+        assertFalse(service.caseResultsHiddenDuringRun(7L, 72L, now));
+        assertFalse(service.caseResultsHiddenDuringRun(null, null, now));
+    }
+
+    @Test
+    void ioiRunKeepsCaseResultsVisibleAndLegacyRunsFallBackToContestMode() {
+        Instant now = Instant.parse("2026-10-22T10:00:00Z");
+        ContestRunEntity ioi = new ContestRunEntity();
+        ioi.setId(81L);
+        ioi.setModeSnapshot(ContestMode.IOI);
+        ioi.setEndAt(now.plusSeconds(600));
+        ContestRunEntity legacy = new ContestRunEntity();
+        legacy.setId(82L);
+        legacy.setContestId(8L);
+        legacy.setEndAt(now.plusSeconds(600));
+        ContestEntity acmContest = new ContestEntity();
+        acmContest.setId(8L);
+        acmContest.setMode(ContestMode.ACM);
+        when(runMapper.selectById(81L)).thenReturn(ioi);
+        when(runMapper.selectById(82L)).thenReturn(legacy);
+        when(contestMapper.selectById(8L)).thenReturn(acmContest);
+
+        assertFalse(service.caseResultsHiddenDuringRun(8L, 81L, now));
+        assertTrue(service.caseResultsHiddenDuringRun(8L, 82L, now));
     }
 
     @Test

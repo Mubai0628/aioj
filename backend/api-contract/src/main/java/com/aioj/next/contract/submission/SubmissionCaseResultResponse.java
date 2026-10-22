@@ -24,6 +24,10 @@ public record SubmissionCaseResultResponse(
         @JsonInclude(JsonInclude.Include.NON_NULL)
         String subtaskKey,
         SubmissionStatus status,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        JudgePhase judgePhase,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        String sandboxStatus,
         BigDecimal score,
         BigDecimal maxScore,
         @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -32,6 +36,8 @@ public record SubmissionCaseResultResponse(
         Long memoryKb,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         String message,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        Boolean sample,
         Instant createdAt
 ) {
 }

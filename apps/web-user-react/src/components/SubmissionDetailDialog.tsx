@@ -107,8 +107,26 @@ export function SubmissionDetailDialog({
                   <Detail label={t("submissions.viewRunTimeLabel")} value={submission.runTimeMillis ? `${submission.runTimeMillis} ms` : "--"} />
                   <Detail label={t("submissions.viewExitStatusLabel")} value={submission.exitStatus ?? "--"} />
                   <Detail label={t("contests.maxScore")} value={formatScoreSummary(submission.score, submission.maxScore)} />
+                  {submission.judgePhase ? (
+                    <Detail
+                      label={t("submissions.judgePhaseLabel")}
+                      value={submission.sandboxStatus
+                        ? `${t(`judgePhase.${submission.judgePhase}`)} · ${submission.sandboxStatus}`
+                        : t(`judgePhase.${submission.judgePhase}`)}
+                    />
+                  ) : null}
                 </div>
-                {submission.caseResults?.length ? <SubmissionCaseResultsTable caseResults={submission.caseResults} /> : null}
+                {submission.caseResults?.length ? (
+                  <SubmissionCaseResultsTable
+                    caseResults={submission.caseResults}
+                    caseTotal={submission.caseTotal}
+                    accepted={submission.status === "ACCEPTED"}
+                  />
+                ) : submission.contestId && submission.caseTotal && submission.caseResults == null ? (
+                  <p className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-3 text-sm text-[var(--oj-ink-muted)]">
+                    {t("submissions.caseResultsHiddenDuringContest")}
+                  </p>
+                ) : null}
                 {submission.code ? (
                   <div className="overflow-hidden rounded-xl border border-[var(--oj-border-soft)] bg-white">
                     <div className="flex items-center justify-between gap-3 border-b border-[var(--oj-border-soft)] px-3 py-2">
@@ -233,14 +251,32 @@ function OutputBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SubmissionCaseResultsTable({ caseResults }: { caseResults: NonNullable<SubmissionResponse["caseResults"]> }) {
+function SubmissionCaseResultsTable({
+  caseResults,
+  caseTotal,
+  accepted
+}: {
+  caseResults: NonNullable<SubmissionResponse["caseResults"]>;
+  caseTotal?: number | null;
+  accepted: boolean;
+}) {
   const { t } = useI18n();
   const sorted = [...caseResults].sort((left, right) => left.caseIndex - right.caseIndex);
+  const total = caseTotal ?? sorted.length;
+  const stoppedEarly = !accepted && sorted.length < total;
   return (
     <section className="overflow-hidden rounded-xl border border-[var(--oj-border-soft)] bg-white">
-      <div className="border-b border-[var(--oj-border-soft)] px-3 py-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--oj-border-soft)] px-3 py-2">
         <h4 className="text-sm font-semibold text-[var(--oj-ink)]">{t("contests.caseResults")}</h4>
+        <span className="text-xs tabular-nums text-[var(--oj-ink-muted)]">
+          {t("submissions.caseProgress", { executed: sorted.length, total })}
+        </span>
       </div>
+      {stoppedEarly ? (
+        <p className="border-b border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] px-3 py-2 text-xs text-[var(--oj-ink-muted)]">
+          {t("submissions.caseStoppedEarly", { index: sorted[sorted.length - 1]?.caseIndex ?? sorted.length })}
+        </p>
+      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[620px] text-sm">
           <thead className="bg-[var(--oj-surface-muted)] text-xs font-semibold text-[var(--oj-ink-muted)]">
@@ -256,11 +292,25 @@ function SubmissionCaseResultsTable({ caseResults }: { caseResults: NonNullable<
             {sorted.map((item) => (
               <tr key={item.id}>
                 <td className="px-3 py-2">
-                  <div className="font-medium text-[var(--oj-ink)]">{item.caseName || `${t("contests.caseName")} ${item.caseIndex + 1}`}</div>
-                  <div className="mt-1 text-xs tabular-nums text-[var(--oj-ink-muted)]">#{item.caseIndex + 1}</div>
+                  <div className="flex items-center gap-2 font-medium text-[var(--oj-ink)]">
+                    {item.caseName || `${t("contests.caseName")} ${item.caseIndex}`}
+                    {item.sample ? (
+                      <span className="rounded-md bg-[var(--oj-surface-muted)] px-1.5 py-0.5 text-[11px] font-normal text-[var(--oj-ink-muted)]">
+                        {t("submissions.sampleCase")}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 text-xs tabular-nums text-[var(--oj-ink-muted)]">#{item.caseIndex}</div>
                 </td>
                 <td className="px-3 py-2">
                   <SubmissionStatusBadge status={item.status} label={t(`submissionStatus.${item.status}`)} />
+                  {item.judgePhase && item.status !== "ACCEPTED" ? (
+                    <div className="mt-1 text-xs text-[var(--oj-ink-muted)]">
+                      {item.sandboxStatus
+                        ? `${t(`judgePhase.${item.judgePhase}`)} · ${item.sandboxStatus}`
+                        : t(`judgePhase.${item.judgePhase}`)}
+                    </div>
+                  ) : null}
                 </td>
                 <td className="px-3 py-2 text-center tabular-nums text-[var(--oj-ink)]">{formatScoreSummary(item.score, item.maxScore)}</td>
                 <td className="px-3 py-2 text-center tabular-nums text-[var(--oj-ink-muted)]">{item.timeMillis == null ? "--" : `${item.timeMillis} ms`}</td>

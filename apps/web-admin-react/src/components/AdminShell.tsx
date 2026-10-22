@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bot, ClipboardList, Database, GraduationCap, LayoutDashboard, LogOut, ShieldCheck, SlidersHorizontal, Trophy, UserRound, Users } from "lucide-react";
+import { Activity, Bot, ClipboardList, Database, GraduationCap, LayoutDashboard, LogOut, ShieldCheck, SlidersHorizontal, Trophy, UserRound, Users } from "lucide-react";
 import type { Role } from "@aioj/api-client";
 import { Button, cn } from "@aioj/ui-react";
 import { useAuth } from "../lib/auth";
@@ -15,12 +15,13 @@ const navIcons = {
   contests: Trophy,
   drafts: Bot,
   aiConfig: SlidersHorizontal,
-  operations: ClipboardList
+  operations: ClipboardList,
+  judgeMetrics: Activity
 };
 
 const ADMIN_APP_ROLES: readonly Role[] = ["TEACHER", "ADMIN"];
 const ADMIN_ONLY_ROLES: readonly Role[] = ["ADMIN"];
-type AdminNavHref = "/dashboard" | "/users" | "/roles" | "/classes" | "/problems" | "/contests" | "/ai-drafts" | "/ai-model-configs" | "/operations";
+type AdminNavHref = "/dashboard" | "/users" | "/roles" | "/classes" | "/problems" | "/contests" | "/ai-drafts" | "/ai-model-configs" | "/operations" | "/judge-metrics";
 type AdminNavItem = {
   label: string;
   href: AdminNavHref;
@@ -47,7 +48,8 @@ export function AdminShell() {
     adminNavItem({ label: t("nav.contests"), href: "/contests", icon: "contests", roles: ADMIN_APP_ROLES }),
     adminNavItem({ label: t("nav.aiDrafts"), href: "/ai-drafts", icon: "drafts", roles: ADMIN_APP_ROLES }),
     adminNavItem({ label: t("nav.aiModelConfigs"), href: "/ai-model-configs", icon: "aiConfig", roles: ADMIN_ONLY_ROLES }),
-    adminNavItem({ label: t("nav.operations"), href: "/operations", icon: "operations", roles: ADMIN_APP_ROLES })
+    adminNavItem({ label: t("nav.operations"), href: "/operations", icon: "operations", roles: ADMIN_APP_ROLES }),
+    adminNavItem({ label: t("nav.judgeMetrics"), href: "/judge-metrics", icon: "judgeMetrics", roles: ADMIN_APP_ROLES })
   ].filter((item) => auth.hasAnyRole(item.roles));
   const userInitial = (auth.displayName || t("shell.adminFallback")).trim().slice(0, 1).toUpperCase();
   const roleLabel = auth.isAdmin ? t("role.ADMIN") : auth.isTeacher ? t("role.TEACHER") : t("role.STUDENT");

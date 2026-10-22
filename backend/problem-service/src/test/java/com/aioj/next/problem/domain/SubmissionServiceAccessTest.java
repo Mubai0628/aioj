@@ -47,6 +47,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -97,6 +98,44 @@ class SubmissionServiceAccessTest {
         assertEquals("int main(){}", result.code());
         assertEquals("stderr", result.stderrExcerpt());
         assertEquals(0, result.exitStatus());
+    }
+
+    @Test
+    void studentDoesNotSeeCaseResultsWhileAcmRunIsInProgress() {
+        authenticate(91L, Role.STUDENT);
+        when(submissionMapper.selectById(801L)).thenReturn(submission());
+        when(visibilityService.caseResultsHiddenDuringRun(any(), any(), any())).thenReturn(true);
+
+        var result = service.get(801L);
+
+        assertNull(result.caseResults());
+        verify(caseResultMapper, never()).selectList(any());
+    }
+
+    @Test
+    void staffStillSeesCaseResultsWhileAcmRunIsInProgress() {
+        authenticate(7L, Role.TEACHER);
+        when(submissionMapper.selectById(801L)).thenReturn(submission());
+        when(visibilityService.isStaffViewer()).thenReturn(true);
+        lenient().when(visibilityService.caseResultsHiddenDuringRun(any(), any(), any())).thenReturn(true);
+
+        var result = service.get(801L);
+
+        org.assertj.core.api.Assertions.assertThat(result.caseResults()).isNotNull();
+    }
+
+    @Test
+    void aiSubmissionContextOmitsCaseResultsWhileAcmRunIsInProgress() {
+        when(submissionMapper.selectById(801L)).thenReturn(submission());
+        when(contestAiPolicyService.check(any(ContestAiPolicyRequest.class))).thenReturn(ContestAiPolicyResponse.inactive());
+        when(problemCatalog.aiProblemContext(any(AiProblemContextRequest.class))).thenReturn(problemContext());
+        when(visibilityService.caseResultsHiddenDuringRun(any(), any(), any())).thenReturn(true);
+
+        var result = service.aiSubmissionContext(
+                new AiSubmissionContextRequest(91L, 801L, 1001L, 301L, 302L, 401L, "ANALYZE_FAILURE"));
+
+        org.assertj.core.api.Assertions.assertThat(result.caseResults()).isEmpty();
+        verify(caseResultMapper, never()).selectList(any());
     }
 
     @Test

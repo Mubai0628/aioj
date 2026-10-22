@@ -25,6 +25,10 @@ public record SubmissionResponse(
         @JsonInclude(JsonInclude.Include.NON_NULL)
         String code,
         SubmissionStatus status,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        JudgePhase judgePhase,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        String sandboxStatus,
         String judgeMessage,
         Long timeMillis,
         Long memoryKb,
@@ -40,6 +44,8 @@ public record SubmissionResponse(
         BigDecimal score,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         BigDecimal maxScore,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        Integer caseTotal,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         List<SubmissionCaseResultResponse> caseResults,
         Instant createdAt,

@@ -152,7 +152,11 @@ public class SubmissionService {
             throw new DomainException(ErrorCode.NOT_FOUND, "Submission not found");
         }
         assertCanRead(submission);
-        return toResponse(submission, submission.getUserId().equals(SecuritySupport.currentUserId()), true);
+        boolean caseResultsVisible = visibilityService.isStaffViewer()
+                || !visibilityService.caseResultsHiddenDuringRun(submission.getContestId(),
+                        submission.getContestRunId(), Instant.now());
+        return toResponse(submission, submission.getUserId().equals(SecuritySupport.currentUserId()),
+                caseResultsVisible);
     }
 
     public AiSubmissionContextResponse aiSubmissionContext(AiSubmissionContextRequest request) {
@@ -182,6 +186,9 @@ public class SubmissionService {
         ));
         boolean contestActive = policy != null && policy.activeContestProblem();
         boolean codeAllowed = !contestActive || policy.allowOwnSubmissionCodeToAi();
+        // The AI must not hand out per-testcase results the student cannot see during an ACM run.
+        boolean caseResultsHidden = visibilityService.caseResultsHiddenDuringRun(submission.getContestId(),
+                submission.getContestRunId(), Instant.now());
         AiProblemContextRequest problemRequest = new AiProblemContextRequest(
                 request.requestUserId(),
                 submission.getProblemId(),
@@ -212,7 +219,7 @@ public class SubmissionService {
                 codeAllowed,
                 codeAllowed ? submission.getCode() : null,
                 sha256Hex(submission.getCode()),
-                caseResults(submission.getId()).stream()
+                (caseResultsHidden ? List.<SubmissionCaseResultResponse>of() : caseResults(submission.getId())).stream()
                         .map(result -> new AiSubmissionCaseContext(
                                 result.caseIndex(),
                                 result.caseName(),
@@ -369,13 +376,14 @@ public class SubmissionService {
                 submission.getContestId(), submission.getContestRunId(), submission.getContestProblemId(), submission.getContestParticipantId(),
                 submission.getSubmittedAtContestMillis(), !Boolean.FALSE.equals(submission.getVisibleToParticipant()),
                 submission.getLanguage(), includeCode ? submission.getCode() : null,
-                submission.getStatus(), submission.getJudgeMessage(),
+                submission.getStatus(), submission.getJudgePhase(), submission.getSandboxStatus(),
+                submission.getJudgeMessage(),
                 submission.getTimeMillis(), submission.getMemoryKb(),
                 includeCode ? submission.getStdoutExcerpt() : null,
                 includeCode ? submission.getStderrExcerpt() : null,
                 includeCode ? submission.getExitStatus() : null,
                 includeCode ? submission.getRunTimeMillis() : null,
-                submission.getScore(), submission.getMaxScore(),
+                submission.getScore(), submission.getMaxScore(), submission.getCaseTotal(),
                 includeCaseResults ? caseResults(submission.getId()) : null,
                 submission.getCreatedAt(), submission.getJudgedAt());
     }
@@ -389,9 +397,9 @@ public class SubmissionService {
                 .map(result -> new SubmissionCaseResultResponse(result.getId(), result.getSubmissionId(),
                         result.getContestId(), result.getContestProblemId(), result.getContestParticipantId(),
                         result.getTestcasePackageId(), result.getCaseId(), result.getCaseIndex(),
-                        result.getCaseName(), result.getSubtaskKey(), result.getStatus(), result.getScore(),
-                        result.getMaxScore(), result.getTimeMillis(), result.getMemoryKb(), result.getMessage(),
-                        result.getCreatedAt()))
+                        result.getCaseName(), result.getSubtaskKey(), result.getStatus(), result.getJudgePhase(),
+                        result.getSandboxStatus(), result.getScore(), result.getMaxScore(), result.getTimeMillis(),
+                        result.getMemoryKb(), result.getMessage(), result.getSample(), result.getCreatedAt()))
                 .toList();
     }
 

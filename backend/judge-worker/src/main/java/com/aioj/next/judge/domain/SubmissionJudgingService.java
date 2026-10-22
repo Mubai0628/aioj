@@ -2,6 +2,7 @@ package com.aioj.next.judge.domain;
 
 import com.aioj.next.contract.judge.JudgeTaskMessage;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
+import com.aioj.next.contract.submission.JudgePhase;
 import com.aioj.next.contract.submission.SubmissionStatus;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
 import com.aioj.next.judge.persistence.entity.JudgeAuditLogEntity;
@@ -12,6 +13,7 @@ import com.aioj.next.judge.persistence.mapper.SubmissionCaseResultMapper;
 import com.aioj.next.judge.persistence.mapper.SubmissionMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,8 @@ import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 @Service
@@ -31,6 +35,7 @@ public class SubmissionJudgingService {
     private static final Logger log = LoggerFactory.getLogger(SubmissionJudgingService.class);
     private static final int MESSAGE_LIMIT = 512;
     private static final int OUTPUT_MAX_LENGTH = 8 * 1024;
+    private static final int STATUS_LIMIT = 64;
 
     private final SubmissionMapper submissionMapper;
     private final SubmissionCaseResultMapper caseResultMapper;
@@ -94,6 +99,9 @@ public class SubmissionJudgingService {
         update.setRunTimeMillis(result.runTimeMillis());
         update.setScore(result.score());
         update.setMaxScore(result.maxScore());
+        update.setJudgePhase(result.phase());
+        update.setSandboxStatus(truncateStatus(result.sandboxStatus()));
+        update.setCaseTotal(result.caseTotal());
         int updated = submissionMapper.update(update, new LambdaUpdateWrapper<SubmissionEntity>()
                 .eq(SubmissionEntity::getId, task.submissionId())
                 .eq(SubmissionEntity::getStatus, SubmissionStatus.RUNNING));
@@ -101,7 +109,8 @@ public class SubmissionJudgingService {
             rewriteCaseResults(task, result, judgedAt);
             Integer signalValue = status == SubmissionStatus.RUNTIME_ERROR
                     && "Signalled".equals(result.message()) ? result.exitStatus() : null;
-            audit(task.submissionId(), SubmissionStatus.RUNNING, status, result.message(), signalValue, null);
+            audit(task.submissionId(), SubmissionStatus.RUNNING, status, result.message(), signalValue, null,
+                    result.phase(), result.sandboxStatus());
             notifyJudgedAfterCommit(task, status, judgedAt);
             return true;
         }
@@ -151,11 +160,11 @@ public class SubmissionJudgingService {
     }
 
     private void audit(Long submissionId, SubmissionStatus fromStatus, SubmissionStatus toStatus, String message) {
-        audit(submissionId, fromStatus, toStatus, message, null, null);
+        audit(submissionId, fromStatus, toStatus, message, null, null, null, null);
     }
 
     private void audit(Long submissionId, SubmissionStatus fromStatus, SubmissionStatus toStatus, String message,
-                       Integer signalValue, String sandboxRunId) {
+                       Integer signalValue, String sandboxRunId, JudgePhase phase, String sandboxStatus) {
         try {
             JudgeAuditLogEntity audit = new JudgeAuditLogEntity();
             audit.setSubmissionId(submissionId);
@@ -165,6 +174,8 @@ public class SubmissionJudgingService {
             audit.setMessage(truncate(message));
             audit.setSignalValue(signalValue);
             audit.setSandboxRunId(sandboxRunId);
+            audit.setJudgePhase(phase);
+            audit.setSandboxStatus(truncateStatus(sandboxStatus));
             audit.setCreatedAt(Instant.now());
             auditLogMapper.insert(audit);
         } catch (RuntimeException ex) {
@@ -208,8 +219,10 @@ public class SubmissionJudgingService {
         if (result.caseResults() == null || result.caseResults().isEmpty()) {
             return;
         }
+        List<SubmissionCaseResultEntity> rows = new ArrayList<>(result.caseResults().size());
         for (JudgeCaseResult caseResult : result.caseResults()) {
             SubmissionCaseResultEntity entity = new SubmissionCaseResultEntity();
+            entity.setId(IdWorker.getId());
             entity.setSubmissionId(task.submissionId());
             entity.setContestId(task.contestId());
             entity.setContestProblemId(task.contestProblemId());
@@ -220,14 +233,25 @@ public class SubmissionJudgingService {
             entity.setCaseName(truncateCaseName(caseResult.caseName()));
             entity.setSubtaskKey(caseResult.subtaskKey());
             entity.setStatus(caseResult.status());
+            entity.setJudgePhase(caseResult.phase());
+            entity.setSandboxStatus(truncateStatus(caseResult.sandboxStatus()));
+            entity.setSample(caseResult.sample());
             entity.setScore(caseResult.score());
             entity.setMaxScore(caseResult.maxScore());
             entity.setTimeMillis(caseResult.timeMillis());
             entity.setMemoryKb(caseResult.memoryKb());
             entity.setMessage(truncate(caseResult.message()));
             entity.setCreatedAt(createdAt);
-            caseResultMapper.insert(entity);
+            rows.add(entity);
         }
+        caseResultMapper.insertBatch(rows);
+    }
+
+    private String truncateStatus(String value) {
+        if (value == null || value.length() <= STATUS_LIMIT) {
+            return value;
+        }
+        return value.substring(0, STATUS_LIMIT);
     }
 
     private String truncate(String message) {

@@ -2,9 +2,11 @@ package com.aioj.next.judge.domain;
 
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.contract.judge.JudgeTaskMessage;
+import com.aioj.next.contract.submission.JudgePhase;
 import com.aioj.next.contract.submission.SubmissionStatus;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
 import com.aioj.next.judge.persistence.entity.JudgeAuditLogEntity;
+import com.aioj.next.judge.persistence.entity.SubmissionCaseResultEntity;
 import com.aioj.next.judge.persistence.entity.SubmissionEntity;
 import com.aioj.next.judge.persistence.mapper.JudgeAuditLogMapper;
 import com.aioj.next.judge.persistence.mapper.SubmissionCaseResultMapper;
@@ -15,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -80,6 +83,39 @@ class SubmissionJudgingServiceTest {
         assertThat(captor.getValue().userId()).isEqualTo(7L);
         assertThat(captor.getValue().status()).isEqualTo(SubmissionStatus.WRONG_ANSWER);
         assertThat(captor.getValue().language()).isEqualTo("cpp");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void finishStoresDiagnosticsAndWritesCaseResultsInOneBatch() {
+        when(submissionMapper.update(any(SubmissionEntity.class), any())).thenReturn(1);
+        List<JudgeCaseResult> cases = List.of(
+                new JudgeCaseResult(5L, 50L, 1, "1", null, SubmissionStatus.ACCEPTED, BigDecimal.ONE, BigDecimal.ONE,
+                        3L, 512L, "Accepted", JudgePhase.RUN, "Accepted", true),
+                new JudgeCaseResult(5L, 51L, 2, "2", null, SubmissionStatus.TIME_LIMIT_EXCEEDED, BigDecimal.ZERO,
+                        BigDecimal.ONE, 1001L, 512L, "Time Limit Exceeded", JudgePhase.RUN, "Time Limit Exceeded", false));
+        JudgeResult result = new JudgeResult(SubmissionStatus.TIME_LIMIT_EXCEEDED, "Time Limit Exceeded", 1001L, 512L,
+                Instant.parse("2026-06-25T00:00:00Z"), null, null, null, 1001L, null, null, cases)
+                .withDiagnostics(JudgePhase.RUN, "Time Limit Exceeded", 4);
+
+        service.finish(task(), result);
+
+        ArgumentCaptor<SubmissionEntity> update = ArgumentCaptor.forClass(SubmissionEntity.class);
+        verify(submissionMapper).update(update.capture(), any());
+        assertThat(update.getValue().getJudgePhase()).isEqualTo(JudgePhase.RUN);
+        assertThat(update.getValue().getSandboxStatus()).isEqualTo("Time Limit Exceeded");
+        assertThat(update.getValue().getCaseTotal()).isEqualTo(4);
+        ArgumentCaptor<List<SubmissionCaseResultEntity>> rows = ArgumentCaptor.forClass(List.class);
+        verify(caseResultMapper).insertBatch(rows.capture());
+        verify(caseResultMapper, never()).insert(any(SubmissionCaseResultEntity.class));
+        assertThat(rows.getValue()).hasSize(2);
+        assertThat(rows.getValue()).allSatisfy(row -> assertThat(row.getId()).isNotNull());
+        assertThat(rows.getValue().get(0).getSample()).isTrue();
+        assertThat(rows.getValue().get(1).getJudgePhase()).isEqualTo(JudgePhase.RUN);
+        assertThat(rows.getValue().get(1).getSandboxStatus()).isEqualTo("Time Limit Exceeded");
+        ArgumentCaptor<JudgeAuditLogEntity> audit = ArgumentCaptor.forClass(JudgeAuditLogEntity.class);
+        verify(auditLogMapper).insert(audit.capture());
+        assertThat(audit.getValue().getJudgePhase()).isEqualTo(JudgePhase.RUN);
     }
 
     @Test

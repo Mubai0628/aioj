@@ -39,6 +39,7 @@ spring:
 aioj:
   internal:
     api-token: ${AIOJ_INTERNAL_API_TOKEN}
+    judge-worker-base-url: ${JUDGE_WORKER_BASE_URL:http://127.0.0.1:8203}
   plagiarism:
     ai-service-uri: ${AI_SERVICE_URI:http://localhost:8204}
     internal-api-token: ${AIOJ_INTERNAL_API_TOKEN}

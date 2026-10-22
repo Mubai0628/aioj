@@ -368,6 +368,11 @@ export const messages = {
       OUTPUT_LIMIT_EXCEEDED: '输出超限',
       SYSTEM_ERROR: '判题服务异常'
     },
+    judgePhase: {
+      COMPILE: '编译阶段',
+      RUN: '运行阶段',
+      CHECKER: '校验器阶段'
+    },
     packageStatus: {
       UPLOADING: '上传中',
       PROCESSING: '处理中',
@@ -411,7 +416,8 @@ export const messages = {
       aiDraftJobs: 'AI 生成任务',
       aiMemoryReview: 'AI 记忆审查',
       aiModelConfigs: 'AI 模型配置',
-      operations: '运维审计'
+      operations: '运维审计',
+      judgeMetrics: '判题监控'
     },
     aiModelConfig: {
       title: 'AI 模型配置',
@@ -585,6 +591,35 @@ export const messages = {
         generatedAt: '生成时间',
         recentFailure: '最近最终失败'
       }
+    },
+    judgeMetrics: {
+      eyebrow: '运行状态',
+      title: '判题监控',
+      description: '查看判题队列积压、判题节点的执行情况和最近的失败。数据每 30 秒自动刷新。',
+      refresh: '刷新',
+      refreshing: '刷新中…',
+      loading: '正在加载判题监控…',
+      loadFailed: '判题监控接口不可用',
+      retry: '重试',
+      workerSection: '判题节点',
+      queueSection: '判题队列',
+      workerReachable: '运行中',
+      workerUnreachable: '无法连接判题节点',
+      brokerUnavailable: '无法读取消息队列',
+      started: '已开始任务',
+      finished: '已完成任务',
+      failed: '异常任务',
+      systemErrors: '系统错误',
+      inFlight: '执行中',
+      averageQueueWait: '平均排队（毫秒）',
+      averageJudge: '平均判题耗时（毫秒）',
+      lastFinishedAt: '最近完成',
+      lastFailure: '最近异常',
+      queueReady: '排队中的任务',
+      queueConsumers: '消费者数量',
+      deadLetterReady: '死信队列积压',
+      collectedAt: '采集时间',
+      sinceStart: '计数从判题节点本次启动开始'
     },
     operations: {
       title: '运维审计',
@@ -1178,6 +1213,11 @@ export const messages = {
       deleted: '题目已删除'
     },
     submissions: {
+      judgePhaseLabel: '判定阶段',
+      caseProgress: '已执行 {executed} / {total} 个测试点',
+      caseStoppedEarly: '在第 {index} 个测试点停止，其余测试点未执行',
+      caseResultsHiddenDuringContest: '比赛进行中只显示总判定，测试点详情在比赛结束后可见',
+      sampleCase: '样例',
       eyebrow: '提交记录',
       title: '我的评测历史',
       description: '查看每次代码提交的评测结果、耗时和内存。',
@@ -3696,6 +3736,11 @@ export const messages = {
       OUTPUT_LIMIT_EXCEEDED: 'Output Limit Exceeded',
       SYSTEM_ERROR: 'Judge Service Error'
     },
+    judgePhase: {
+      COMPILE: 'Compile',
+      RUN: 'Run',
+      CHECKER: 'Checker'
+    },
     packageStatus: {
       UPLOADING: 'Uploading',
       PROCESSING: 'Processing',
@@ -3739,7 +3784,8 @@ export const messages = {
       aiDraftJobs: 'AI Jobs',
       aiMemoryReview: 'AI Memory Review',
       aiModelConfigs: 'AI Models',
-      operations: 'Operations'
+      operations: 'Operations',
+      judgeMetrics: 'Judge monitor'
     },
     aiModelConfig: {
       title: 'AI model configuration',
@@ -3913,6 +3959,35 @@ export const messages = {
         generatedAt: 'Generated at',
         recentFailure: 'Recent final failure'
       }
+    },
+    judgeMetrics: {
+      eyebrow: 'Runtime',
+      title: 'Judge monitor',
+      description: 'Judge queue backlog, judge worker activity and recent failures. Refreshes every 30 seconds.',
+      refresh: 'Refresh',
+      refreshing: 'Refreshing…',
+      loading: 'Loading the judge monitor…',
+      loadFailed: 'The judge monitor is unavailable',
+      retry: 'Retry',
+      workerSection: 'Judge worker',
+      queueSection: 'Judge queue',
+      workerReachable: 'Running',
+      workerUnreachable: 'Cannot reach the judge worker',
+      brokerUnavailable: 'Cannot read the message queue',
+      started: 'Tasks started',
+      finished: 'Tasks finished',
+      failed: 'Failed tasks',
+      systemErrors: 'System errors',
+      inFlight: 'In progress',
+      averageQueueWait: 'Avg. queue wait (ms)',
+      averageJudge: 'Avg. judge time (ms)',
+      lastFinishedAt: 'Last finished',
+      lastFailure: 'Last failure',
+      queueReady: 'Queued tasks',
+      queueConsumers: 'Consumers',
+      deadLetterReady: 'Dead-letter backlog',
+      collectedAt: 'Collected at',
+      sinceStart: 'Counters start from the current judge worker run'
     },
     operations: {
       title: 'Operations audit',
@@ -4506,6 +4581,11 @@ export const messages = {
       deleted: 'Problem deleted'
     },
     submissions: {
+      judgePhaseLabel: 'Judged in',
+      caseProgress: 'Ran {executed} of {total} testcases',
+      caseStoppedEarly: 'Stopped at testcase {index}; the remaining testcases were not run',
+      caseResultsHiddenDuringContest: 'During the contest only the overall verdict is shown; testcase details appear after it ends',
+      sampleCase: 'Sample',
       eyebrow: 'Submissions',
       title: 'My judge history',
       description: 'Review every code submission result, runtime, and memory usage.',

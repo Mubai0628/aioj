@@ -17,6 +17,8 @@ export type SubmissionStatus =
   | 'OUTPUT_LIMIT_EXCEEDED'
   | 'SYSTEM_ERROR';
 
+export type JudgePhase = 'COMPILE' | 'RUN' | 'CHECKER';
+
 export interface ApiResponse<T> {
   code: number;
   message: string;
@@ -1144,11 +1146,14 @@ export interface ContestSubmissionResponse {
   emailSnapshot?: string | null;
   language: string;
   status: SubmissionStatus;
+  judgePhase?: JudgePhase | null;
+  sandboxStatus?: string | null;
   judgeMessage: string;
   timeMillis?: number | null;
   memoryKb?: number | null;
   score?: number | null;
   maxScore?: number | null;
+  caseTotal?: number | null;
   caseResults?: SubmissionCaseResultResponse[] | null;
   submittedAtContestMillis?: number | null;
   createdAt: string;
@@ -1583,6 +1588,8 @@ export interface SubmissionResponse {
   language: string;
   code?: string | null;
   status: SubmissionStatus;
+  judgePhase?: JudgePhase | null;
+  sandboxStatus?: string | null;
   judgeMessage: string;
   timeMillis?: number;
   memoryKb?: number;
@@ -1592,6 +1599,8 @@ export interface SubmissionResponse {
   runTimeMillis?: number | null;
   score?: number | null;
   maxScore?: number | null;
+  /** Testcases in the package; can exceed caseResults when judging stopped at the first failure. */
+  caseTotal?: number | null;
   caseResults?: SubmissionCaseResultResponse[] | null;
   createdAt: string;
   judgedAt?: string;
@@ -1609,12 +1618,33 @@ export interface SubmissionCaseResultResponse {
   caseName?: string | null;
   subtaskKey?: string | null;
   status: SubmissionStatus;
+  judgePhase?: JudgePhase | null;
+  sandboxStatus?: string | null;
   score: number;
   maxScore: number;
   timeMillis?: number | null;
   memoryKb?: number | null;
   message?: string | null;
+  sample?: boolean | null;
   createdAt: string;
+}
+
+export interface JudgeMetricsResponse {
+  workerReachable: boolean;
+  started?: number | null;
+  finished?: number | null;
+  failed?: number | null;
+  systemErrors?: number | null;
+  inFlight?: number | null;
+  averageQueueWaitMillis?: number | null;
+  averageJudgeMillis?: number | null;
+  lastFinishedAt?: string | null;
+  lastFailureAt?: string | null;
+  lastFailureType?: string | null;
+  queueReady?: number | null;
+  queueConsumers?: number | null;
+  deadLetterReady?: number | null;
+  collectedAt: string;
 }
 
 export interface AiChatMessageResponse {
@@ -3338,6 +3368,9 @@ export const api = {
     }),
   userActivityAnalytics: (days = 14) =>
     request<DailyUserActivityResponse[]>(`/api/v1/admin/users/analytics/activity${queryString({ days })}`),
+
+  judgeMetrics: () =>
+    request<JudgeMetricsResponse>('/api/v1/admin/judge/metrics'),
 
   operationJobs: (params: { page?: number; pageSize?: number; status?: OperationJobStatus | ''; type?: OperationJobType | '' } = {}) =>
     request<PageResponse<OperationJobResponse>>(`/api/v1/admin/operation-jobs${queryString({ page: 1, pageSize: 20, ...params })}`),

@@ -676,8 +676,8 @@ public class ContestScoreboardService {
                 .orderByAsc(ProblemSubtaskEntity::getId));
     }
 
-    private Map<String, BigDecimal> scoreSubmissionSubtasks(List<ProblemSubtaskEntity> subtasks,
-                                                            List<SubmissionCaseResultEntity> caseResults) {
+    static Map<String, BigDecimal> scoreSubmissionSubtasks(List<ProblemSubtaskEntity> subtasks,
+                                                           List<SubmissionCaseResultEntity> caseResults) {
         Map<String, List<SubmissionCaseResultEntity>> casesBySubtask = caseResults.stream()
                 .filter(result -> result.getSubtaskKey() != null)
                 .collect(java.util.stream.Collectors.groupingBy(SubmissionCaseResultEntity::getSubtaskKey));
@@ -690,16 +690,18 @@ public class ContestScoreboardService {
             }
             BigDecimal minRatio = BigDecimal.ONE;
             for (SubmissionCaseResultEntity testcase : subtaskCases) {
-                BigDecimal caseScore = firstNonNull(testcase.getScore(), ZERO_SCORE);
-                BigDecimal caseMax = firstNonNull(testcase.getMaxScore(), ZERO_SCORE);
+                BigDecimal caseScore = testcase.getScore() == null ? ZERO_SCORE : testcase.getScore();
+                BigDecimal caseMax = testcase.getMaxScore() == null ? ZERO_SCORE : testcase.getMaxScore();
+                // A zero-point case (often a sample) gates its subtask on correctness
+                // instead of zeroing the whole subtask.
                 BigDecimal ratio = caseMax.compareTo(ZERO_SCORE) <= 0
-                        ? ZERO_SCORE
+                        ? (testcase.getStatus() == SubmissionStatus.ACCEPTED ? BigDecimal.ONE : ZERO_SCORE)
                         : caseScore.divide(caseMax, 8, RoundingMode.HALF_UP);
                 if (ratio.compareTo(minRatio) < 0) {
                     minRatio = ratio;
                 }
             }
-            scores.put(subtask.getSubtaskKey(), minRatio.multiply(firstNonNull(subtask.getScore(), ZERO_SCORE)));
+            scores.put(subtask.getSubtaskKey(), minRatio.multiply(subtask.getScore() == null ? ZERO_SCORE : subtask.getScore()));
         }
         return scores;
     }

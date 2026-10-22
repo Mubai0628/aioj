@@ -156,8 +156,8 @@ class ContestExportServiceTest {
 
     private ContestSubmissionResponse submission() {
         return new ContestSubmissionResponse(2060996478465212418L, 301L, null, 401L, 1001L, "A", "Warmup",
-                601L, 91L, "alice", "Alice", "alice@example.com", "cpp", SubmissionStatus.ACCEPTED,
-                "Accepted", 12L, 2048L, null, null, null, 1_800_000L, Instant.parse("2026-06-10T09:30:00Z"),
+                601L, 91L, "alice", "Alice", "alice@example.com", "cpp", SubmissionStatus.ACCEPTED, null, null,
+                "Accepted", 12L, 2048L, null, null, null, null, 1_800_000L, Instant.parse("2026-06-10T09:30:00Z"),
                 Instant.parse("2026-06-10T09:31:00Z"), false, null, null, null, null, null);
     }
 

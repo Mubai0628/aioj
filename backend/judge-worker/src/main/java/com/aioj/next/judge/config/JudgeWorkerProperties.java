@@ -33,6 +33,13 @@ public class JudgeWorkerProperties {
     private int maxDraftPackageEntries = 500;
     private int maxDraftPackageCases = 200;
     private long maxDraftPackageRunMillis = 540_000L;
+    private long compileTimeMultiplier = 10L;
+    /** Upper bound for compiler CPU time; 0 keeps the max script time limit as the bound. */
+    private long compileMaxTimeMillis = 0L;
+    private long compileMemoryMultiplier = 2L;
+    private long cppCompileMinMemoryKb = 262_144L;
+    private long javaCompileMinMemoryKb = 524_288L;
+    private long checkerCompileMinMemoryKb = 262_144L;
 
     public String getSandboxEndpoint() {
         return sandboxEndpoint;
@@ -240,5 +247,53 @@ public class JudgeWorkerProperties {
 
     public void setMaxDraftPackageRunMillis(long maxDraftPackageRunMillis) {
         this.maxDraftPackageRunMillis = maxDraftPackageRunMillis;
+    }
+
+    public long getCompileTimeMultiplier() {
+        return compileTimeMultiplier;
+    }
+
+    public void setCompileTimeMultiplier(long compileTimeMultiplier) {
+        this.compileTimeMultiplier = compileTimeMultiplier;
+    }
+
+    public long getCompileMaxTimeMillis() {
+        return compileMaxTimeMillis;
+    }
+
+    public void setCompileMaxTimeMillis(long compileMaxTimeMillis) {
+        this.compileMaxTimeMillis = compileMaxTimeMillis;
+    }
+
+    public long getCompileMemoryMultiplier() {
+        return compileMemoryMultiplier;
+    }
+
+    public void setCompileMemoryMultiplier(long compileMemoryMultiplier) {
+        this.compileMemoryMultiplier = compileMemoryMultiplier;
+    }
+
+    public long getCppCompileMinMemoryKb() {
+        return cppCompileMinMemoryKb;
+    }
+
+    public void setCppCompileMinMemoryKb(long cppCompileMinMemoryKb) {
+        this.cppCompileMinMemoryKb = cppCompileMinMemoryKb;
+    }
+
+    public long getJavaCompileMinMemoryKb() {
+        return javaCompileMinMemoryKb;
+    }
+
+    public void setJavaCompileMinMemoryKb(long javaCompileMinMemoryKb) {
+        this.javaCompileMinMemoryKb = javaCompileMinMemoryKb;
+    }
+
+    public long getCheckerCompileMinMemoryKb() {
+        return checkerCompileMinMemoryKb;
+    }
+
+    public void setCheckerCompileMinMemoryKb(long checkerCompileMinMemoryKb) {
+        this.checkerCompileMinMemoryKb = checkerCompileMinMemoryKb;
     }
 }

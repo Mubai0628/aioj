@@ -4963,8 +4963,8 @@ function SubmissionCaseResultsTable({ caseResults }: { caseResults: NonNullable<
             {sorted.map((item) => (
               <tr key={item.id}>
                 <td className="px-3 py-2">
-                  <div className="font-medium text-[var(--oj-ink)]">{item.caseName || `${t("contests.caseName")} ${item.caseIndex + 1}`}</div>
-                  <div className="mt-1 text-xs tabular-nums text-[var(--oj-ink-muted)]">#{item.caseIndex + 1}</div>
+                  <div className="font-medium text-[var(--oj-ink)]">{item.caseName || `${t("contests.caseName")} ${item.caseIndex}`}</div>
+                  <div className="mt-1 text-xs tabular-nums text-[var(--oj-ink-muted)]">#{item.caseIndex}</div>
                 </td>
                 <td className="px-3 py-2"><SubmissionStatusChip status={item.status} /></td>
                 <td className="px-3 py-2 text-center tabular-nums text-[var(--oj-ink)]">{formatScoreSummary(item.score, item.maxScore)}</td>

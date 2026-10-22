@@ -1,5 +1,8 @@
 package com.aioj.next.problem.domain;
 
+import com.aioj.next.problem.persistence.mapper.ContestMapper;
+import com.aioj.next.problem.persistence.entity.ContestEntity;
+import com.aioj.next.contract.contest.ContestMode;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.ContestParticipantStatus;
@@ -50,18 +53,44 @@ public class ContestProblemVisibilityService {
     private final ContestParticipantMapper participantMapper;
     private final ProblemMapper problemMapper;
     private final ContestRunProblemSnapshotMapper runProblemSnapshotMapper;
+    private final ContestMapper contestMapper;
     private final ContestProperties contestProperties;
 
     public ContestProblemVisibilityService(ContestRunMapper runMapper, ContestProblemMapper contestProblemMapper,
                                            ContestParticipantMapper participantMapper, ProblemMapper problemMapper,
                                            ContestRunProblemSnapshotMapper runProblemSnapshotMapper,
-                                           ContestProperties contestProperties) {
+                                           ContestMapper contestMapper, ContestProperties contestProperties) {
         this.runMapper = runMapper;
         this.contestProblemMapper = contestProblemMapper;
         this.participantMapper = participantMapper;
         this.problemMapper = problemMapper;
         this.runProblemSnapshotMapper = runProblemSnapshotMapper;
+        this.contestMapper = contestMapper;
         this.contestProperties = contestProperties;
+    }
+
+    /**
+     * ACM runs only reveal the verdict while they are in progress; per-testcase
+     * results (UI and AI context alike) open up once the run has ended. Practice
+     * and IOI keep them visible. Callers decide whether a staff viewer bypasses this.
+     */
+    public boolean caseResultsHiddenDuringRun(Long contestId, Long runId, Instant now) {
+        if (runId == null) {
+            return false;
+        }
+        ContestRunEntity run = runMapper.selectById(runId);
+        if (run == null) {
+            return false;
+        }
+        ContestMode mode = run.getModeSnapshot();
+        if (mode == null) {
+            ContestEntity contest = contestMapper.selectById(contestId == null ? run.getContestId() : contestId);
+            mode = contest == null ? null : contest.getMode();
+        }
+        if (mode != ContestMode.ACM) {
+            return false;
+        }
+        return run.getEndAt() == null || now.isBefore(run.getEndAt());
     }
 
     /** True when the caller holds a staff role; safe for anonymous callers. */

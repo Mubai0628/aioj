@@ -73,6 +73,7 @@ class GatewayRouteAndCorsTest {
         assertTrue(problem.contains("/api/v1/submissions/**"), problem);
         assertTrue(problem.contains("/api/v1/contests/**"), problem);
         assertTrue(problem.contains("/api/v1/notifications/**"), problem);
+        assertTrue(problem.contains("/api/v1/admin/judge/**"), problem);
         String ai = pathPatterns("ai-service");
         assertTrue(ai.contains("/api/v1/ai/**"), ai);
         assertTrue(ai.contains("/api/v1/admin/problem-drafts/**"), ai);

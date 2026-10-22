@@ -1,5 +1,6 @@
 package com.aioj.next.problem.persistence.entity;
 
+import com.aioj.next.contract.submission.JudgePhase;
 import com.aioj.next.contract.submission.SubmissionStatus;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -22,6 +23,9 @@ public class SubmissionCaseResultEntity {
     private String caseName;
     private String subtaskKey;
     private SubmissionStatus status;
+    private JudgePhase judgePhase;
+    private String sandboxStatus;
+    private Boolean sample;
     private BigDecimal score;
     private BigDecimal maxScore;
     private Long timeMillis;
@@ -163,5 +167,29 @@ public class SubmissionCaseResultEntity {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public JudgePhase getJudgePhase() {
+        return judgePhase;
+    }
+
+    public void setJudgePhase(JudgePhase judgePhase) {
+        this.judgePhase = judgePhase;
+    }
+
+    public String getSandboxStatus() {
+        return sandboxStatus;
+    }
+
+    public void setSandboxStatus(String sandboxStatus) {
+        this.sandboxStatus = sandboxStatus;
+    }
+
+    public Boolean getSample() {
+        return sample;
+    }
+
+    public void setSample(Boolean sample) {
+        this.sample = sample;
     }
 }

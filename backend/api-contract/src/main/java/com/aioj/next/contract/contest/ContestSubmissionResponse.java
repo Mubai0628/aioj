@@ -1,5 +1,6 @@
 package com.aioj.next.contract.contest;
 
+import com.aioj.next.contract.submission.JudgePhase;
 import com.aioj.next.contract.submission.SubmissionStatus;
 import com.aioj.next.contract.submission.SubmissionCaseResultResponse;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -27,6 +28,10 @@ public record ContestSubmissionResponse(
         String emailSnapshot,
         String language,
         SubmissionStatus status,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        JudgePhase judgePhase,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        String sandboxStatus,
         String judgeMessage,
         Long timeMillis,
         Long memoryKb,
@@ -34,6 +39,8 @@ public record ContestSubmissionResponse(
         BigDecimal score,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         BigDecimal maxScore,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        Integer caseTotal,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         List<SubmissionCaseResultResponse> caseResults,
         Long submittedAtContestMillis,

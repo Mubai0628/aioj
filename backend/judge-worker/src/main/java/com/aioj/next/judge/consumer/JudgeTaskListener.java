@@ -1,6 +1,7 @@
 package com.aioj.next.judge.consumer;
 
 import com.aioj.next.contract.judge.JudgeTaskMessage;
+import com.aioj.next.contract.submission.SubmissionStatus;
 import com.aioj.next.judge.config.JudgeQueueConfig;
 import com.aioj.next.judge.domain.JudgeResult;
 import com.aioj.next.judge.domain.NonRetryableJudgeTaskException;
@@ -8,6 +9,7 @@ import com.aioj.next.judge.domain.SandboxClient;
 import com.aioj.next.judge.domain.SubmissionJudgingService;
 import com.aioj.next.judge.domain.TestcasePackageCache;
 import com.aioj.next.judge.domain.TestcasePackageUnavailableException;
+import com.aioj.next.judge.monitor.JudgeRuntimeMetrics;
 import com.rabbitmq.client.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,12 +27,14 @@ public class JudgeTaskListener {
     private final SandboxClient sandboxClient;
     private final SubmissionJudgingService judgingService;
     private final TestcasePackageCache testcasePackageCache;
+    private final JudgeRuntimeMetrics metrics;
 
     public JudgeTaskListener(SandboxClient sandboxClient, SubmissionJudgingService judgingService,
-                             TestcasePackageCache testcasePackageCache) {
+                             TestcasePackageCache testcasePackageCache, JudgeRuntimeMetrics metrics) {
         this.sandboxClient = sandboxClient;
         this.judgingService = judgingService;
         this.testcasePackageCache = testcasePackageCache;
+        this.metrics = metrics;
     }
 
     @RabbitListener(queues = JudgeQueueConfig.JUDGE_QUEUE)
@@ -38,6 +42,7 @@ public class JudgeTaskListener {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
         long startedNanos = System.nanoTime();
         Long queueWaitMs = queueWaitMillis(message);
+        boolean started = false;
         try {
             if (!judgingService.startRunning(task)) {
                 log.info("Acking duplicate or already handled judge task submission={} queueWaitMs={}",
@@ -45,6 +50,8 @@ public class JudgeTaskListener {
                 channel.basicAck(deliveryTag, false);
                 return;
             }
+            started = true;
+            metrics.taskStarted(queueWaitMs);
             log.info("Judge task started submission={} problem={} queueWaitMs={}",
                     task.submissionId(), task.problemId(), queueWaitMs);
             try {
@@ -56,11 +63,13 @@ public class JudgeTaskListener {
                 log.warn("submission={} problem={} {} queueWaitMs={} judgeWallMs={}",
                         task.submissionId(), task.problemId(), messageText, queueWaitMs, elapsedMillis(startedNanos));
                 judgingService.finish(task, JudgeResult.systemError(messageText));
+                metrics.taskFinished(SubmissionStatus.SYSTEM_ERROR, elapsedMillis(startedNanos));
                 channel.basicAck(deliveryTag, false);
                 return;
             }
             var result = sandboxClient.judge(task);
             judgingService.finish(task, result);
+            metrics.taskFinished(result.status(), elapsedMillis(startedNanos));
             log.info("submission={} problem={} status={} time={}ms memory={}kb queueWaitMs={} judgeWallMs={}",
                     task.submissionId(), task.problemId(), result.status(), result.timeMillis(), result.memoryKb(),
                     queueWaitMs, elapsedMillis(startedNanos));
@@ -71,11 +80,13 @@ public class JudgeTaskListener {
             log.warn("Rejecting non-retryable judge task submission={} queueWaitMs={} judgeWallMs={}: {}",
                     submissionId, queueWaitMs, elapsedMillis(startedNanos), ex.getMessage());
             judgingService.markSystemError(submissionId, ex.getMessage());
+            metrics.taskFailed(ex, started);
             channel.basicNack(deliveryTag, false, false);
         } catch (Exception ex) {
             Long submissionId = task == null ? null : task.submissionId();
             log.error("Judge failed for submission={} queueWaitMs={} judgeWallMs={}; sending to DLQ",
                     submissionId, queueWaitMs, elapsedMillis(startedNanos), ex);
+            metrics.taskFailed(ex, started);
             channel.basicNack(deliveryTag, false, false);
         }
     }

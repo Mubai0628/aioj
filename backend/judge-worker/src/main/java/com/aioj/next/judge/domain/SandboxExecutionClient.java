@@ -72,15 +72,16 @@ public class SandboxExecutionClient {
         String stderr = fileContent(result, "stderr");
         if (!"Accepted".equals(result.status())) {
             return CompileOutcome.failed(firstText(stderr, result.error(), result.status()), timeMs, memoryKb,
-                    stderr, result.exitStatus(), runTimeMs, result.procPeak());
+                    stderr, result.exitStatus(), runTimeMs, result.procPeak()).withSandboxStatus(result.status());
         }
         String fileId = result.fileIds() == null ? null : result.fileIds().get(lang.executableName());
         if (!StringUtils.hasText(fileId)) {
             return CompileOutcome.failed("Compile succeeded but sandbox did not return cached fileId",
-                    timeMs, memoryKb, stderr, result.exitStatus(), runTimeMs, result.procPeak());
+                    timeMs, memoryKb, stderr, result.exitStatus(), runTimeMs, result.procPeak())
+                    .withSandboxStatus("Internal Error");
         }
         return CompileOutcome.success(fileId, timeMs, memoryKb, stderr, result.exitStatus(), runTimeMs,
-                result.procPeak());
+                result.procPeak()).withSandboxStatus(result.status());
     }
 
     public RunOutcome runSource(String language, String sourceCode, String compiledFileId, String stdin,
@@ -797,10 +798,21 @@ public class SandboxExecutionClient {
                                  String stderr,
                                  Integer exitStatus,
                                  Long runTimeMillis,
-                                 Integer procPeak) {
+                                 Integer procPeak,
+                                 String sandboxStatus) {
+        public CompileOutcome(boolean failed, String fileId, String message, Long timeMillis, Long memoryKb,
+                              String stderr, Integer exitStatus, Long runTimeMillis, Integer procPeak) {
+            this(failed, fileId, message, timeMillis, memoryKb, stderr, exitStatus, runTimeMillis, procPeak, null);
+        }
+
         public CompileOutcome(boolean failed, String fileId, String message, Long timeMillis, Long memoryKb,
                               String stderr, Integer exitStatus, Long runTimeMillis) {
             this(failed, fileId, message, timeMillis, memoryKb, stderr, exitStatus, runTimeMillis, null);
+        }
+
+        CompileOutcome withSandboxStatus(String status) {
+            return new CompileOutcome(failed, fileId, message, timeMillis, memoryKb, stderr, exitStatus,
+                    runTimeMillis, procPeak, status);
         }
 
         static CompileOutcome success(String fileId, Long timeMillis, Long memoryKb, String stderr,
