@@ -289,6 +289,40 @@ class DraftSandboxClientTest {
     }
 
     @Test
+    void verifyDraftDoesNotWarnWhenThePackageVerifiedEveryGeneratedInput() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        DraftSandboxClient client = new DraftSandboxClient(builder.build());
+
+        expectCompileAccepted(server);
+        expectRunAccepted(server, "3\n");
+        // Four generated inputs, all four verified in the package, although only three were asked for.
+        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+                .andExpect(jsonPath("$.targetCaseCount").value(3))
+                .andRespond(withSuccess("""
+                        {"code": 0, "message": "ok", "data": {"status": "ACCEPTED", "message": "Accepted",
+                          "officialPackage": {"status": "PASSED", "packageFileId": "pkg-file",
+                            "packageFileName": "official-hidden.zip", "packageFileSizeBytes": 1024,
+                            "packageSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "caseCount": 4, "generatedInputCount": 4, "generatedOutputCount": 4,
+                            "totalInputBytes": 16, "totalOutputBytes": 8, "totalBytes": 24, "largestCaseBytes": 4,
+                            "cases": [
+                              {"name":"001","inputPath":"testcases/001.in","outputPath":"testcases/001.out","inputBytes":4,"outputBytes":2,"status":"ACCEPTED","timeMillis":100,"memoryKb":128,"message":"Accepted"},
+                              {"name":"002","inputPath":"testcases/002.in","outputPath":"testcases/002.out","inputBytes":4,"outputBytes":2,"status":"ACCEPTED","timeMillis":110,"memoryKb":128,"message":"Accepted"},
+                              {"name":"003","inputPath":"testcases/003.in","outputPath":"testcases/003.out","inputBytes":4,"outputBytes":2,"status":"ACCEPTED","timeMillis":120,"memoryKb":128,"message":"Accepted"},
+                              {"name":"004","inputPath":"testcases/004.in","outputPath":"testcases/004.out","inputBytes":4,"outputBytes":2,"status":"ACCEPTED","timeMillis":130,"memoryKb":128,"message":"Accepted"}
+                            ]}}}
+                        """, MediaType.APPLICATION_JSON));
+        expectDeleteCompiled(server);
+
+        VerificationReport report = client.verifyDraft(draftWithGenerator(), VerificationOptions.defaults(List.of()));
+
+        assertThat(report.status()).isEqualTo("EXECUTION_VERIFIED");
+        assertThat(report.warningMessages()).noneMatch(message -> message.contains("generated hidden inputs"));
+        server.verify();
+    }
+
+    @Test
     void verifyDraftMaterializesOutputsWhenGeneratorOnlyCreatesInputs() {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

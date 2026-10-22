@@ -1,5 +1,15 @@
 package com.aioj.next.ai.controller;
 
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
+import org.springframework.util.StringUtils;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.ContentDisposition;
+import org.springframework.core.io.InputStreamResource;
+import com.aioj.next.contract.ai.ProblemDraftTestcaseArtifactPreviewResponse;
+import com.aioj.next.ai.persistence.entity.ProblemDraftTestcaseArtifactEntity;
+import com.aioj.next.ai.domain.ProblemDraftTestcaseArtifactService;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftImportService;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftTestcaseUploadService;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
@@ -43,15 +53,18 @@ public class ProblemDraftArtifactController {
     private final ProblemDraftImportService importService;
     private final ProblemDraftGenerationJobService generationJobService;
     private final ProblemDraftWorkspaceService workspaceService;
+    private final ProblemDraftTestcaseArtifactService artifactService;
 
     public ProblemDraftArtifactController(ProblemDraftTestcaseUploadService uploadService,
                                           ProblemDraftImportService importService,
                                           ProblemDraftGenerationJobService generationJobService,
-                                          ProblemDraftWorkspaceService workspaceService) {
+                                          ProblemDraftWorkspaceService workspaceService,
+                                          ProblemDraftTestcaseArtifactService artifactService) {
         this.uploadService = uploadService;
         this.importService = importService;
         this.generationJobService = generationJobService;
         this.workspaceService = workspaceService;
+        this.artifactService = artifactService;
     }
 
     @PostMapping("/testcase-uploads")
@@ -91,6 +104,48 @@ public class ProblemDraftArtifactController {
             @PathVariable String uploadId
     ) {
         return ApiResponse.ok(uploadService.status(workspaceId, uploadId, SecuritySupport.currentUserId()));
+    }
+
+    /** Names, sizes and the first 8 KB of the first 100 files of the workspace's current package. */
+    @GetMapping("/testcase-artifacts/{artifactId}/entries")
+    public ApiResponse<ProblemDraftTestcaseArtifactPreviewResponse> previewArtifact(
+            @PathVariable String workspaceId,
+            @PathVariable Long artifactId
+    ) {
+        return ApiResponse.ok(artifactService.preview(currentReadyArtifact(workspaceId, artifactId)));
+    }
+
+    @GetMapping("/testcase-artifacts/{artifactId}/download")
+    public ResponseEntity<InputStreamResource> downloadArtifact(
+            @PathVariable String workspaceId,
+            @PathVariable Long artifactId
+    ) {
+        ProblemDraftTestcaseArtifactEntity artifact = currentReadyArtifact(workspaceId, artifactId);
+        Path path = artifactService.resolvePath(artifact);
+        String fileName = StringUtils.hasText(artifact.getFileName()) ? artifact.getFileName() : "testcase-package.zip";
+        try {
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("application/zip"))
+                    .contentLength(Files.size(path))
+                    .header(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                            String.join(", ", HttpHeaders.CONTENT_DISPOSITION, HttpHeaders.CONTENT_LENGTH, HttpHeaders.CONTENT_TYPE))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                            .filename(fileName, StandardCharsets.UTF_8)
+                            .build()
+                            .toString())
+                    .body(new InputStreamResource(Files.newInputStream(path)));
+        } catch (IOException ex) {
+            throw new DomainException(ErrorCode.INTERNAL_ERROR, "Failed to open testcase package zip");
+        }
+    }
+
+    /** Only the workspace's current package, and only for its creator or an admin (workspaceService.get checks). */
+    private ProblemDraftTestcaseArtifactEntity currentReadyArtifact(String workspaceId, Long artifactId) {
+        ProblemDraftTestcaseArtifactSummary current = workspaceService.get(workspaceId).testcaseArtifact();
+        if (current == null || !Objects.equals(current.id(), artifactId)) {
+            throw new DomainException(ErrorCode.NOT_FOUND, "Problem draft testcase artifact not found");
+        }
+        return artifactService.requireReadyWorkspaceArtifact(artifactId, workspaceId);
     }
 
     @PostMapping("/testcase-artifacts/{artifactId}/agent-validation")

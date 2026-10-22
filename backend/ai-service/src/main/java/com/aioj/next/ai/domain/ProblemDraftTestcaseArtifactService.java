@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain;
 
+import com.aioj.next.contract.ai.ProblemDraftTestcaseArtifactPreviewResponse;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.config.InternalApiProperties;
 import com.aioj.next.ai.domain.problem.OfficialTestcasePackageReport;
@@ -182,6 +183,24 @@ public class ProblemDraftTestcaseArtifactService {
                 .eq(ProblemDraftTestcaseArtifactEntity::getStatus, STATUS_READY)
                 .orderByDesc(ProblemDraftTestcaseArtifactEntity::getCreatedAt)
                 .last("LIMIT 1"));
+    }
+
+    /** A READY artifact of the workspace; the caller has already checked the workspace is visible. */
+    public ProblemDraftTestcaseArtifactEntity requireReadyWorkspaceArtifact(Long artifactId, String workspaceId) {
+        ProblemDraftTestcaseArtifactEntity entity = artifactId == null ? null : mapper.selectOne(
+                new LambdaQueryWrapper<ProblemDraftTestcaseArtifactEntity>()
+                        .eq(ProblemDraftTestcaseArtifactEntity::getId, artifactId)
+                        .eq(ProblemDraftTestcaseArtifactEntity::getWorkspaceId, workspaceId)
+                        .eq(ProblemDraftTestcaseArtifactEntity::getStatus, STATUS_READY)
+                        .last("LIMIT 1"));
+        if (entity == null) {
+            throw new DomainException(ErrorCode.NOT_FOUND, "Problem draft testcase artifact not found");
+        }
+        return entity;
+    }
+
+    public ProblemDraftTestcaseArtifactPreviewResponse preview(ProblemDraftTestcaseArtifactEntity entity) {
+        return TestcaseArchivePreview.read(entity.getId(), entity.getFileName(), resolvePath(entity));
     }
 
     public Path resolvePath(ProblemDraftTestcaseArtifactEntity entity) {

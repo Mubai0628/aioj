@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, CheckCircle2, FileArchive, ShieldCheck, Upload } from "lucide-react";
+import { Bot, CheckCircle2, Download, Eye, EyeOff, FileArchive, ShieldCheck, Upload } from "lucide-react";
 import {
   activeQueryRefetchInterval,
   api,
@@ -181,7 +181,7 @@ export function AiDraftTestcasePanel({
         </div>
         <div className="mt-4">
           {generatedArtifact ? (
-            <ArtifactCard artifact={generatedArtifact} />
+            <ArtifactCard artifact={generatedArtifact} workspaceId={workspaceId} />
           ) : (
             <p className="rounded-lg border border-dashed border-[var(--oj-border)] p-4 text-sm leading-6 text-[var(--oj-ink-muted)]">{t("draftTestcase.agentArtifactEmpty")}</p>
           )}
@@ -234,7 +234,7 @@ export function AiDraftTestcasePanel({
                 {phase === "idle" ? t("draftTestcase.upload") : t(`draftTestcase.phase.${phase}`)}
               </Button>
             </div>
-            {manualArtifact ? <ArtifactCard artifact={manualArtifact} /> : null}
+            {manualArtifact ? <ArtifactCard artifact={manualArtifact} workspaceId={workspaceId} /> : null}
           </div>
         )}
       </section>
@@ -266,8 +266,31 @@ export function AiDraftTestcasePanel({
   );
 }
 
-function ArtifactCard({ artifact }: { artifact: ProblemDraftTestcaseArtifactResponse }) {
-  const { t } = useI18n();
+function ArtifactCard({ artifact, workspaceId }: { artifact: ProblemDraftTestcaseArtifactResponse; workspaceId?: string | null }) {
+  const { t, locale } = useI18n();
+  const toast = useToast();
+  const [showEntries, setShowEntries] = React.useState(false);
+  const [downloading, setDownloading] = React.useState(false);
+  const ready = (artifact.lifecycleStatus || artifact.status) === "READY" && Boolean(workspaceId);
+  const entriesQuery = useQuery({
+    queryKey: ["problem-draft-testcase-artifact-entries", workspaceId, artifact.id],
+    queryFn: () => api.problemDraftTestcaseArtifactEntries(String(workspaceId), artifact.id),
+    enabled: ready && showEntries,
+    staleTime: 60_000
+  });
+
+  async function download() {
+    setDownloading(true);
+    try {
+      const file = await api.downloadProblemDraftTestcaseArtifact(String(workspaceId), artifact.id);
+      saveDownloadedFile(file.blob, file.fileName || artifact.fileName || "testcase-package.zip");
+    } catch (caught) {
+      toast.error(readableCaughtError(caught, locale, t("draftTestcase.downloadFailed")));
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <article className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -293,8 +316,61 @@ function ArtifactCard({ artifact }: { artifact: ProblemDraftTestcaseArtifactResp
       </dl>
       {artifact.stale ? <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{t("draftTestcase.staleArtifact")}</p> : null}
       {artifact.failureSummary ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{artifact.failureSummary}</p> : null}
+      {ready ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => setShowEntries((value) => !value)}>
+            {showEntries ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+            {showEntries ? t("draftTestcase.hideEntries") : t("draftTestcase.showEntries")}
+          </Button>
+          <Button type="button" size="sm" variant="outline" disabled={downloading} onClick={() => void download()}>
+            <Download className="size-4" aria-hidden="true" />
+            {t("draftTestcase.downloadPackage")}
+          </Button>
+        </div>
+      ) : null}
+      {ready && showEntries ? (
+        entriesQuery.isLoading ? (
+          <p className="mt-3 text-sm text-[var(--oj-ink-muted)]">{t("draftTestcase.entriesLoading")}</p>
+        ) : entriesQuery.isError || !entriesQuery.data ? (
+          <ErrorPanel title={t("draftTestcase.entriesFailed")} />
+        ) : (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-[var(--oj-ink-muted)]">
+              {t("draftTestcase.entriesShown", { shown: entriesQuery.data.entries.length, total: entriesQuery.data.totalEntries })}
+            </p>
+            <div className="max-h-96 space-y-2 overflow-auto">
+              {entriesQuery.data.entries.map((entry) => (
+                <details key={entry.name} className="rounded-lg border border-[var(--oj-border-soft)] bg-white px-3 py-2">
+                  <summary className="cursor-pointer break-all text-xs text-[var(--oj-ink)]">
+                    {entry.name} <span className="tabular-nums text-[var(--oj-ink-muted)]">· {formatBytes(entry.sizeBytes)}</span>
+                  </summary>
+                  {entry.binary ? (
+                    <p className="mt-2 text-xs text-[var(--oj-ink-muted)]">{t("draftTestcase.entryBinary")}</p>
+                  ) : (
+                    <>
+                      <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-[var(--oj-surface-muted)] p-2 text-xs">{entry.preview}</pre>
+                      {entry.truncated ? <p className="mt-1 text-xs text-[var(--oj-ink-muted)]">{t("draftTestcase.entryTruncated")}</p> : null}
+                    </>
+                  )}
+                </details>
+              ))}
+            </div>
+          </div>
+        )
+      ) : null}
     </article>
   );
+}
+
+function saveDownloadedFile(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function UploadProgress({ status, phase }: { status: ProblemDraftTestcaseUploadStatusResponse; phase: UploadPhase }) {

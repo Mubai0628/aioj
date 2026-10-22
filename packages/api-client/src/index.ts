@@ -2489,6 +2489,22 @@ export interface ProblemDraftResourceMetrics {
   [key: string]: unknown;
 }
 
+export interface ProblemDraftTestcaseArtifactPreviewEntry {
+  name: string;
+  sizeBytes: number;
+  /** The first 8 KB as text; null for binary files. */
+  preview?: string | null;
+  truncated: boolean;
+  binary: boolean;
+}
+
+export interface ProblemDraftTestcaseArtifactPreviewResponse {
+  artifactId: EntityId;
+  fileName?: string | null;
+  totalEntries: number;
+  entries: ProblemDraftTestcaseArtifactPreviewEntry[];
+}
+
 export interface ProblemDraftTestcaseArtifactResponse {
   id: EntityId;
   source: ProblemDraftTestcaseArtifactSource;
@@ -4141,6 +4157,16 @@ export const api = {
     lifecycleStatus?: '' | 'ACTIVE' | 'ARCHIVED' | 'ALL';
   } = {}) =>
     request<PageResponse<ProblemDraftResponse>>(`/api/v1/admin/problem-drafts${queryString({ page: 1, pageSize: 20, ...params })}`),
+  problemDraftTestcaseArtifactEntries: (workspaceId: string, artifactId: EntityId) =>
+    request<ProblemDraftTestcaseArtifactPreviewResponse>(
+      `/api/v1/ai/admin/problem-draft-workspaces/${encodeURIComponent(workspaceId)}/testcase-artifacts/${artifactId}/entries`
+    ),
+  downloadProblemDraftTestcaseArtifact: (workspaceId: string, artifactId: EntityId) =>
+    requestBinary(
+      `/api/v1/ai/admin/problem-draft-workspaces/${encodeURIComponent(workspaceId)}/testcase-artifacts/${artifactId}/download`,
+      {},
+      'testcase-package.zip'
+    ),
   problemDraft: (id: EntityId) =>
     request<ProblemDraftResponse>(`/api/v1/admin/problem-drafts/${id}`),
   refineDraft: (id: EntityId, payload: ProblemDraftRefinePayload) =>

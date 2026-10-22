@@ -119,15 +119,17 @@ public class AiModelCatalogClient {
             );
         }
         if ("moonshot".equals(normalizedProvider) || "kimi".equals(normalizedProvider) || ownedBy.toLowerCase(Locale.ROOT).contains("moonshot")) {
-            boolean kimiThinking = supportsReasoning || model.startsWith("kimi-k2.5") || model.startsWith("kimi-k2.6");
+            // K3 always thinks and takes an effort level, so it only accepts temperature 1.
+            boolean k3 = model.startsWith("kimi-k3");
+            boolean kimiThinking = supportsReasoning || model.startsWith("kimi-k2.5") || model.startsWith("kimi-k2.6") || k3;
             return new AiModelListResponse.ModelOption(
                     id,
                     ownedBy,
                     true,
                     kimiThinking,
-                    List.of(),
+                    k3 ? List.of("high", "max") : List.of(),
                     null,
-                    kimiThinking ? 0.6 : null,
+                    k3 ? Double.valueOf(1.0) : kimiThinking ? Double.valueOf(0.6) : null,
                     contextLength,
                     false
             );

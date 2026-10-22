@@ -1,5 +1,5 @@
 import { ApiError, type SubmissionStatus } from "@aioj/api-client";
-import { resolveStoredErrorMessageForLocale, type Locale } from "@aioj/i18n/vanilla";
+import { resolveStoredErrorMessageForLocale, translate, type Locale } from "@aioj/i18n/vanilla";
 
 type StoredErrorSource = "ai" | "judge" | "operation" | "testcase";
 
@@ -37,5 +37,7 @@ export function readableJudgeMessage(
   if (!value?.trim()) {
     return fallbackStatus;
   }
-  return value;
+  // A bare sandbox status ("Signalled", "Nonzero Exit Status") reads as a sentence; other text stays as is.
+  const rawStatus = value.trim().toUpperCase().replace(/[^A-Z]+/g, "_");
+  return translate(locale, `judgeRawStatus.${rawStatus}`, undefined, value);
 }

@@ -252,6 +252,11 @@ public class AiModelCompletionClient {
             }
             return;
         }
+        if (isKimiK3(config)) {
+            // K3 always thinks; it takes an effort level instead of a thinking switch.
+            body.put("reasoning_effort", "max".equalsIgnoreCase(config.reasoningEffort()) ? "max" : "high");
+            return;
+        }
         if (isKimiThinkingModel(config)) {
             body.put("thinking", Map.of("type", config.thinkingEnabled() ? "enabled" : "disabled"));
         }
@@ -260,6 +265,9 @@ public class AiModelCompletionClient {
     private Double effectiveTemperature(AiModelEffectiveConfig config, double requestedTemperature) {
         if (isDeepSeekRequest(config) && config.thinkingEnabled()) {
             return null;
+        }
+        if (isKimiK3(config)) {
+            return 1.0;
         }
         if (isKimiThinkingModel(config)) {
             return config.thinkingEnabled() ? 1.0 : 0.6;
@@ -282,6 +290,11 @@ public class AiModelCompletionClient {
                 || containsIgnoreCase(config.baseUrl(), "api.deepseek.com");
     }
 
+    private boolean isKimiK3(AiModelEffectiveConfig config) {
+        return isMoonshotOrKimiRequest(config) && defaultString(config.model()).toLowerCase(Locale.ROOT).startsWith("kimi-k3");
+    }
+
+    /** Kimi models with a thinking switch; K3 has no switch and is handled by isKimiK3. */
     private boolean isKimiThinkingModel(AiModelEffectiveConfig config) {
         if (!isMoonshotOrKimiRequest(config)) {
             return false;

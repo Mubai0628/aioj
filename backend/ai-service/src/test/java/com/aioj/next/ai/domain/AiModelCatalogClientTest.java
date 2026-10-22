@@ -72,4 +72,15 @@ class AiModelCatalogClientTest {
         assertThat(models.get(0).contextLength()).isEqualTo(262144);
         assertThat(models.get(1).supportsThinking()).isFalse();
     }
+
+    @Test
+    void kimiK3IsThinkingOnlyWithEffortLevels() throws Exception {
+        var models = client.parseModels("moonshot", objectMapper.readTree("""
+                {"object": "list", "data": [{"id": "kimi-k3", "object": "model", "owned_by": "moonshot"}]}
+                """));
+
+        assertThat(models.get(0).supportsThinking()).isTrue();
+        assertThat(models.get(0).thinkingEffortModes()).containsExactly("high", "max");
+        assertThat(models.get(0).recommendedTemperature()).isEqualTo(1.0);
+    }
 }
