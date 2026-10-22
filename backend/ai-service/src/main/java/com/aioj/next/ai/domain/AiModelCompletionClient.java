@@ -3,8 +3,8 @@ package com.aioj.next.ai.domain;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.ai.config.AiProperties;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -228,15 +228,15 @@ public class AiModelCompletionClient {
     String visibleAssistantContent(JsonNode root) {
         JsonNode message = root.path("choices").path(0).path("message");
         JsonNode content = message.path("content");
-        if (content.isTextual()) {
-            return content.asText();
+        if (content.isString()) {
+            return content.asString("");
         }
         if (content.isArray()) {
             StringBuilder text = new StringBuilder();
             for (JsonNode item : content) {
                 JsonNode part = item.path("text");
-                if (part.isTextual()) {
-                    text.append(part.asText());
+                if (part.isString()) {
+                    text.append(part.asString(""));
                 }
             }
             return text.toString();

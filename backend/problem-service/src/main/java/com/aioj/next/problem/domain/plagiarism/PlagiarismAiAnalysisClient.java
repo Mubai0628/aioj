@@ -5,8 +5,8 @@ import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.PlagiarismAnalysisRequest;
 import com.aioj.next.contract.ai.PlagiarismAnalysisResponse;
 import com.aioj.next.problem.config.PlagiarismProperties;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -47,10 +47,10 @@ public class PlagiarismAiAnalysisClient {
     private PlagiarismAnalysisResponse parse(String response) {
         try {
             JsonNode root = objectMapper.readTree(response);
-            int code = root.has("code") ? root.get("code").asInt() : 0;
+            int code = root.has("code") ? root.get("code").asInt(0) : 0;
             if (code != 0) {
                 throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE,
-                        root.has("message") ? root.get("message").asText() : "AI plagiarism analysis rejected request");
+                        root.has("message") ? root.get("message").asString("") : "AI plagiarism analysis rejected request");
             }
             JsonNode data = root.has("data") ? root.get("data") : root;
             return objectMapper.treeToValue(data, PlagiarismAnalysisResponse.class);

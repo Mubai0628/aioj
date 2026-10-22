@@ -17,9 +17,9 @@ import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiRetrievalChunkMapper;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -100,7 +100,7 @@ public class ContextSearchDigestsTool implements AgentTool {
 
     @Override
     public ToolResult<Object> execute(ToolExecutionContext context, JsonNode input) {
-        String query = input.path("query").asText("").trim();
+        String query = input.path("query").asString("").trim();
         if (query.isEmpty()) {
             return ToolResult.failure(null, ToolStatus.SCHEMA_ERROR, "EMPTY_QUERY",
                     "query must be a non-blank string");
@@ -109,11 +109,11 @@ public class ContextSearchDigestsTool implements AgentTool {
             query = query.substring(0, MAX_QUERY_CHARS);
         }
         int topK = input.path("topK").isIntegralNumber()
-                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt()))
+                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt(0)))
                 : DEFAULT_TOP_K;
-        String timeHint = input.path("timeHint").asText("ANY");
-        String searchMode = input.path("searchMode").asText("KEYWORD");
-        boolean allConversations = "ALL_MY_CONVERSATIONS".equalsIgnoreCase(input.path("scope").asText(""));
+        String timeHint = input.path("timeHint").asString("ANY");
+        String searchMode = input.path("searchMode").asString("KEYWORD");
+        boolean allConversations = "ALL_MY_CONVERSATIONS".equalsIgnoreCase(input.path("scope").asString(""));
         List<String> warnings = new ArrayList<>();
         boolean semanticRequested = "SEMANTIC".equalsIgnoreCase(searchMode) || "HYBRID".equalsIgnoreCase(searchMode);
         if (!allConversations && (context.conversationId() == null || context.conversationId().isBlank())) {
@@ -131,8 +131,8 @@ public class ContextSearchDigestsTool implements AgentTool {
         List<String> terms = queryTerms(query);
         Set<String> entityTypeFilter = new LinkedHashSet<>();
         for (JsonNode type : input.path("entityTypes")) {
-            if (type.isTextual() && !type.asText().isBlank()) {
-                entityTypeFilter.add(type.asText());
+            if (type.isString() && !type.asString("").isBlank()) {
+                entityTypeFilter.add(type.asString(""));
             }
         }
         Map<Long, Double> semanticScores = Map.of();
@@ -274,7 +274,7 @@ public class ContextSearchDigestsTool implements AgentTool {
                     continue;
                 }
                 List<Double> values = new ArrayList<>(vector.size());
-                vector.forEach(item -> values.add(item.asDouble()));
+                vector.forEach(item -> values.add(item.asDouble(0.0)));
                 double similarity = cosine(queryVector, values);
                 if (!Double.isNaN(similarity)) {
                     scores.put(Long.valueOf(chunk.getOwnerId()), similarity);
@@ -403,7 +403,7 @@ public class ContextSearchDigestsTool implements AgentTool {
             JsonNode entities = objectMapper.readTree(structuredDigest == null ? "{}" : structuredDigest).path("entities");
             if (entities.isArray()) {
                 for (JsonNode entity : entities) {
-                    if (filter.contains(entity.path("type").asText(""))) {
+                    if (filter.contains(entity.path("type").asString(""))) {
                         return true;
                     }
                 }
@@ -422,8 +422,8 @@ public class ContextSearchDigestsTool implements AgentTool {
                     if (values.size() >= cap) {
                         break;
                     }
-                    if (item.isTextual() && !item.asText().isBlank()) {
-                        values.add(item.asText());
+                    if (item.isString() && !item.asString("").isBlank()) {
+                        values.add(item.asString(""));
                     }
                 }
             }
@@ -442,7 +442,7 @@ public class ContextSearchDigestsTool implements AgentTool {
                     if (values.size() >= cap) {
                         break;
                     }
-                    String name = entity.path("canonicalName").asText("");
+                    String name = entity.path("canonicalName").asString("");
                     if (!name.isBlank()) {
                         values.add(name);
                     }

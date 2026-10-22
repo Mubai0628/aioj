@@ -7,7 +7,7 @@ import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.aioj.next.contract.ai.AiChatRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

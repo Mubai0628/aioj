@@ -15,8 +15,8 @@ import com.aioj.next.ai.persistence.mapper.ProblemDraftWorkspaceMapper;
 import com.aioj.next.contract.ai.ProblemDraftRefineRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -101,7 +101,7 @@ class ProblemDraftWorkspaceServiceTest {
         assertThat(result.id()).isEqualTo(21L);
         ArgumentCaptor<JsonNode> patchCaptor = ArgumentCaptor.forClass(JsonNode.class);
         verify(service).patch(eq("ws-1"), eq(7L), eq(3L), patchCaptor.capture());
-        assertThat(patchCaptor.getValue().path("title").asText()).isEqualTo("Edited title");
+        assertThat(patchCaptor.getValue().path("title").asString()).isEqualTo("Edited title");
         verify(workspaceMapper).update(isNull(), any(UpdateWrapper.class));
     }
 

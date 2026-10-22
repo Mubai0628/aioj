@@ -32,7 +32,7 @@ import com.aioj.next.problem.persistence.mapper.ContestStudentPostmortemReportMa
 import com.aioj.next.problem.persistence.mapper.ContestStudentPostmortemWeaknessCandidateMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionCaseResultMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,7 +90,7 @@ class StudentPostmortemServiceTest {
                 .thenReturn(java.util.Set.of());
         service = new StudentPostmortemService(contestMapper, contestRunMapper, participantMapper,
                 problemSnapshotMapper, submissionMapper, caseResultMapper, reportMapper, candidateMapper,
-                aiClient, new ObjectMapper().findAndRegisterModules(), visibilityService);
+                aiClient, JsonMapper.builderWithJackson2Defaults().build(), visibilityService);
     }
 
     @AfterEach

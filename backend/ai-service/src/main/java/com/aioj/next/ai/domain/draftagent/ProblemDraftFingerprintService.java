@@ -1,7 +1,7 @@
 package com.aioj.next.ai.domain.draftagent;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -54,7 +54,7 @@ public class ProblemDraftFingerprintService {
         try {
             byte[] json = objectMapper.writeValueAsBytes(value);
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json));
-        } catch (JsonProcessingException | NoSuchAlgorithmException ex) {
+        } catch (JacksonException | NoSuchAlgorithmException ex) {
             throw new IllegalStateException("Cannot fingerprint problem draft state", ex);
         }
     }

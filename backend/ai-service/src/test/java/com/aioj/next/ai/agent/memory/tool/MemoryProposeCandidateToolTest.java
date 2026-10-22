@@ -11,7 +11,7 @@ import com.aioj.next.ai.domain.memory.AiMemoryMergeService;
 import com.aioj.next.ai.domain.memory.MemoryQualityGate;
 import com.aioj.next.ai.persistence.entity.AiMemoryCandidateEntity;
 import com.aioj.next.ai.persistence.mapper.AiMemoryCandidateMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -57,7 +57,7 @@ class MemoryProposeCandidateToolTest {
         assertThat(tool.descriptor().timeout()).isEqualTo(java.time.Duration.ofSeconds(5));
         assertThat(tool.descriptor().auditLevel().name()).isEqualTo("FULL");
         List<String> required = new ArrayList<>();
-        tool.descriptor().inputSchema().path("required").forEach(node -> required.add(node.asText()));
+        tool.descriptor().inputSchema().path("required").forEach(node -> required.add(node.asString()));
         assertThat(required).containsExactly("text", "category");
     }
 

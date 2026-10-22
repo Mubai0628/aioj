@@ -15,9 +15,9 @@ import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.judge.DraftTestcasePackageRunRequest;
 import com.aioj.next.contract.judge.DraftTestcasePackageRunResponse;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
@@ -59,7 +59,7 @@ public class DraftTestcaseRunPackageTool implements AgentTool {
         ProblemDraftWorkingState state = workspaceService.state(workspace);
         Long artifactId;
         try {
-            artifactId = Long.valueOf(input.path("artifactId").asText());
+            artifactId = Long.valueOf(input.path("artifactId").asString(""));
         } catch (NumberFormatException ex) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Invalid testcase artifact id");
         }

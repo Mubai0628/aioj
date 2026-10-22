@@ -14,7 +14,7 @@ import com.aioj.next.problem.domain.notification.UserNotificationService;
 import com.aioj.next.problem.persistence.entity.OperationJobEntity;
 import com.aioj.next.problem.persistence.mapper.OperationJobArtifactMapper;
 import com.aioj.next.problem.persistence.mapper.OperationJobMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

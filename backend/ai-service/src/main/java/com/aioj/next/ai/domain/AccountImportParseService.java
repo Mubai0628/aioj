@@ -5,8 +5,8 @@ import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.AccountImportParseRequest;
 import com.aioj.next.contract.ai.AccountImportParseResponse;
 import com.aioj.next.contract.ai.AccountImportParsedUser;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -109,7 +109,7 @@ public class AccountImportParseService {
                     }
                 }
             }
-            String note = trimTo(root.path("note").asText("AI 已解析账号候选。"), 300);
+            String note = trimTo(root.path("note").asString("AI 已解析账号候选。"), 300);
             return new AccountImportParseResponse(users, note);
         } catch (Exception ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "AI account import response could not be parsed");
@@ -117,21 +117,21 @@ public class AccountImportParseService {
     }
 
     private AccountImportParsedUser parsedUser(JsonNode item) {
-        String account = cleanToken(item.path("account").asText(""));
+        String account = cleanToken(item.path("account").asString(""));
         if (account == null) {
             return null;
         }
-        String displayName = cleanText(item.path("displayName").asText(""));
+        String displayName = cleanText(item.path("displayName").asString(""));
         if (displayName == null) {
-            displayName = cleanText(item.path("name").asText(""));
+            displayName = cleanText(item.path("name").asString(""));
         }
         if (displayName == null) {
             displayName = account;
         }
-        String email = cleanEmail(item.path("email").asText(""));
+        String email = cleanEmail(item.path("email").asString(""));
         double confidence = Math.max(0, Math.min(1, item.path("confidence").asDouble(0.8)));
         return new AccountImportParsedUser(account, displayName, email, confidence,
-                trimTo(item.path("sourceLine").asText(""), 300));
+                trimTo(item.path("sourceLine").asString(""), 300));
     }
 
     private List<AccountImportParsedUser> localParse(String text) {

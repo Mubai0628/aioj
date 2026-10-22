@@ -26,9 +26,9 @@ import com.aioj.next.contract.ai.AiMemoryMergeMaintenanceRequest;
 import com.aioj.next.contract.ai.AiMemoryMergeMaintenanceResponse;
 import com.aioj.next.contract.ai.AiMemoryResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -885,7 +885,7 @@ public class AiMemoryMergeService {
         }
         if (evidenceNode.isArray()) {
             for (JsonNode item : evidenceNode) {
-                String safe = safeText(item.asText(""));
+                String safe = safeText(item.asString(""));
                 if (!safe.isBlank() && !AiMemoryEventPayloadSanitizer.OMITTED.equals(safe)) {
                     evidence.add(safe);
                 }
@@ -1050,8 +1050,8 @@ public class AiMemoryMergeService {
         if (value.isMissingNode() || value.isNull()) {
             return "";
         }
-        if (value.isTextual() || value.isNumber() || value.isBoolean()) {
-            return normalize(value.asText(""));
+        if (value.isString() || value.isNumber() || value.isBoolean()) {
+            return normalize(value.asString(""));
         }
         return "";
     }
@@ -1062,9 +1062,9 @@ public class AiMemoryMergeService {
             return null;
         }
         if (value.isNumber()) {
-            return value.asLong();
+            return value.asLong(0L);
         }
-        return readLong(value.asText(""));
+        return readLong(value.asString(""));
     }
 
     private double jsonDouble(JsonNode root, double defaultValue, String... keys) {
@@ -1076,7 +1076,7 @@ public class AiMemoryMergeService {
             return value.asDouble(defaultValue);
         }
         try {
-            return Double.parseDouble(value.asText(""));
+            return Double.parseDouble(value.asString(""));
         } catch (RuntimeException ex) {
             return defaultValue;
         }
@@ -1091,7 +1091,7 @@ public class AiMemoryMergeService {
             return value.asInt(defaultValue);
         }
         try {
-            return Integer.parseInt(value.asText(""));
+            return Integer.parseInt(value.asString(""));
         } catch (RuntimeException ex) {
             return defaultValue;
         }

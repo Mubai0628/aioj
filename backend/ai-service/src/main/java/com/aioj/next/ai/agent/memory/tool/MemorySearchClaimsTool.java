@@ -13,9 +13,9 @@ import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.persistence.entity.AiMemoryClaimEntity;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -75,17 +75,17 @@ public class MemorySearchClaimsTool implements AgentTool {
 
     @Override
     public ToolResult<Object> execute(ToolExecutionContext context, JsonNode input) {
-        String query = input.path("query").isTextual() ? input.path("query").asText().trim() : "";
+        String query = input.path("query").isString() ? input.path("query").asString("").trim() : "";
         if (query.length() > MAX_QUERY_CHARS) {
             query = query.substring(0, MAX_QUERY_CHARS);
         }
-        String category = input.path("category").isTextual() ? input.path("category").asText().trim() : "";
+        String category = input.path("category").isString() ? input.path("category").asString("").trim() : "";
         if (!category.isEmpty() && !KNOWN_CATEGORIES.contains(category)) {
             return ToolResult.failure(null, ToolStatus.SCHEMA_ERROR, "INVALID_CATEGORY",
                     "category must be one of " + KNOWN_CATEGORIES);
         }
         int topK = input.path("topK").isIntegralNumber()
-                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt()))
+                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt(0)))
                 : DEFAULT_TOP_K;
 
         QueryWrapper<AiMemoryClaimEntity> wrapper = new QueryWrapper<AiMemoryClaimEntity>()

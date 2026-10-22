@@ -45,7 +45,7 @@ import com.aioj.next.problem.persistence.mapper.UserAccountMapper;
 import com.aioj.next.problem.domain.notification.ContestInvitationNotificationRequestedEvent;
 import com.aioj.next.problem.domain.notification.UserNotificationService;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

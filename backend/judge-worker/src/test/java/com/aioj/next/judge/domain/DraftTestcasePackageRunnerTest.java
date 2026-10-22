@@ -4,7 +4,7 @@ import com.aioj.next.common.error.DomainException;
 import com.aioj.next.contract.judge.DraftTestcasePackageRunRequest;
 import com.aioj.next.contract.judge.DraftTestcasePackageRunResponse;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.apache.commons.compress.archivers.zip.UnixStat;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;

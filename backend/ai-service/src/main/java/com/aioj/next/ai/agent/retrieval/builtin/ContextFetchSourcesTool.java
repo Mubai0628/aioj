@@ -16,9 +16,9 @@ import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiMessageMapper;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -96,7 +96,7 @@ public class ContextFetchSourcesTool implements AgentTool {
                     "hitIds must contain at least one dg-*/msg-* reference");
         }
         int maxTokens = input.path("maxTokens").isIntegralNumber()
-                ? Math.min(fetchBudgetTokens, Math.max(500, input.path("maxTokens").asInt()))
+                ? Math.min(fetchBudgetTokens, Math.max(500, input.path("maxTokens").asInt(0)))
                 : Math.min(fetchBudgetTokens, DEFAULT_MAX_TOKENS);
         boolean includeUser = includes(input, "USER_MESSAGE");
         boolean includeAssistant = includes(input, "ASSISTANT_MESSAGE");
@@ -207,13 +207,13 @@ public class ContextFetchSourcesTool implements AgentTool {
             JsonNode source = objectMapper.readTree(digest.getStructuredDigest() == null ? "{}" : digest.getStructuredDigest())
                     .path("source");
             if (includeUser) {
-                Long userMessageId = parseId(source.path("userMessageId").asText(""));
+                Long userMessageId = parseId(source.path("userMessageId").asString(""));
                 if (userMessageId != null) {
                     messageIds.add(userMessageId);
                 }
             }
             if (includeAssistant) {
-                Long assistantMessageId = parseId(source.path("assistantMessageId").asText(""));
+                Long assistantMessageId = parseId(source.path("assistantMessageId").asString(""));
                 if (assistantMessageId != null) {
                     messageIds.add(assistantMessageId);
                 }
@@ -248,7 +248,7 @@ public class ContextFetchSourcesTool implements AgentTool {
             return true; // default: everything
         }
         for (JsonNode item : include) {
-            if (value.equals(item.asText())) {
+            if (value.equals(item.asString(""))) {
                 return true;
             }
         }
@@ -265,8 +265,8 @@ public class ContextFetchSourcesTool implements AgentTool {
             if (hitIds.size() >= MAX_HIT_IDS) {
                 break;
             }
-            if (item.isTextual() && !item.asText().isBlank() && !hitIds.contains(item.asText().trim())) {
-                hitIds.add(item.asText().trim());
+            if (item.isString() && !item.asString("").isBlank() && !hitIds.contains(item.asString("").trim())) {
+                hitIds.add(item.asString("").trim());
             }
         }
         return hitIds;

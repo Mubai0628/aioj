@@ -9,7 +9,7 @@ import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiMessageMapper;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -150,7 +150,7 @@ class ContextFetchSourcesToolTest {
         return new ToolExecutionContext(7L, "c-1", "t-current", 5L, null, Set.of("AI_CHAT"), Instant.now(), "trace");
     }
 
-    private com.fasterxml.jackson.databind.JsonNode readTree(String json) {
+    private tools.jackson.databind.JsonNode readTree(String json) {
         try {
             return new ObjectMapper().readTree(json);
         } catch (Exception ex) {

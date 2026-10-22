@@ -2,7 +2,7 @@ package com.aioj.next.ai.domain.response;
 
 import com.aioj.next.ai.domain.AiCompletion;
 import com.aioj.next.ai.domain.clarification.ClarificationSchemaRepairer;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AiAssistantResponseNormalizerTest {
     private final AiAssistantResponseNormalizer normalizer = new AiAssistantResponseNormalizer(
-            new ObjectMapper().findAndRegisterModules(),
+            JsonMapper.builderWithJackson2Defaults().build(),
             new ClarificationSchemaRepairer()
     );
 

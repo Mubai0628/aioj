@@ -7,8 +7,8 @@ import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.common.error.DomainException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -47,7 +47,7 @@ class KimiToolCallAdapterTest {
                 new GatewayRequest(List.of(GatewayMessage.user("hi")), tools(), ToolChoiceMode.AUTO, CallProfile.CHAT_STREAM));
         JsonNode body = objectMapper.readTree(recordedBody.get());
         assertThat(body.path("tools").get(0).path("function").path("strict").asBoolean()).isTrue();
-        assertThat(body.path("tools").get(0).path("function").path("name").asText())
+        assertThat(body.path("tools").get(0).path("function").path("name").asString())
                 .isEqualTo("context__search_exact");
     }
 
@@ -57,8 +57,8 @@ class KimiToolCallAdapterTest {
         adapter.execute(config("kimi-k3-0905"), new CallSettings(false, "max", 0.6, 4096),
                 new GatewayRequest(List.of(GatewayMessage.user("hi")), tools(), ToolChoiceMode.REQUIRED, CallProfile.CHAT_STREAM));
         JsonNode body = objectMapper.readTree(recordedBody.get());
-        assertThat(body.path("reasoning_effort").asText()).isEqualTo("max");
-        assertThat(body.path("tool_choice").asText()).isEqualTo("required");
+        assertThat(body.path("reasoning_effort").asString()).isEqualTo("max");
+        assertThat(body.path("tool_choice").asString()).isEqualTo("required");
         assertThat(body.has("thinking")).isFalse();
         // k3 is thinking-only: only temperature=1 is accepted.
         assertThat(body.path("temperature").asDouble()).isEqualTo(1.0);
@@ -70,7 +70,7 @@ class KimiToolCallAdapterTest {
         adapter.execute(config("kimi-k2.5-0905"), new CallSettings(true, "high", 0.6, 4096),
                 new GatewayRequest(List.of(GatewayMessage.user("hi")), List.of(), ToolChoiceMode.AUTO, CallProfile.CHAT_STREAM));
         JsonNode body = objectMapper.readTree(recordedBody.get());
-        assertThat(body.path("thinking").path("type").asText()).isEqualTo("enabled");
+        assertThat(body.path("thinking").path("type").asString()).isEqualTo("enabled");
         assertThat(body.path("temperature").asDouble()).isEqualTo(1.0);
         assertThat(body.has("reasoning_effort")).isFalse();
     }

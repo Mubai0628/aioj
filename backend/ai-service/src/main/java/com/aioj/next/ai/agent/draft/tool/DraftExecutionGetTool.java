@@ -6,9 +6,9 @@ import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftExecutionService;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -35,8 +35,8 @@ public class DraftExecutionGetTool implements AgentTool {
     @Override public ToolDescriptor descriptor() { return descriptor; }
     @Override public ToolResult<Object> execute(ToolExecutionContext context, JsonNode input) {
         return DraftToolSupport.success(executionService.result(DraftToolSupport.workspaceId(context),
-                context.userId(), input.path("executionId").asText(),
-                input.has("offset") ? input.get("offset").asInt() : null,
-                input.has("limit") ? input.get("limit").asInt() : null));
+                context.userId(), input.path("executionId").asString(""),
+                input.has("offset") ? input.get("offset").asInt(0) : null,
+                input.has("limit") ? input.get("limit").asInt(0) : null));
     }
 }

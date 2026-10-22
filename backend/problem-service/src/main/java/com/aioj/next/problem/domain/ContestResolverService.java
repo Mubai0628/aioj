@@ -38,8 +38,8 @@ import com.aioj.next.problem.persistence.mapper.ContestResolverStepMapper;
 import com.aioj.next.problem.persistence.mapper.ContestRunMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -640,7 +640,7 @@ public class ContestResolverService {
     private ContestScoreboardResponse readScoreboard(String json) {
         try {
             return objectMapper.readValue(json, ContestScoreboardResponse.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Resolver scoreboard payload cannot be read");
         }
     }
@@ -648,7 +648,7 @@ public class ContestResolverService {
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Resolver payload cannot be written");
         }
     }

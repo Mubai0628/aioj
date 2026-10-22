@@ -7,8 +7,8 @@ import com.aioj.next.ai.domain.context.AiIntentAnalysis;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.AiChatRequest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -260,7 +260,7 @@ public class OpenAiCompatibleProvider implements AiProvider {
                 return Optional.empty();
             }
             List<Double> values = new ArrayList<>();
-            node.forEach(item -> values.add(item.asDouble()));
+            node.forEach(item -> values.add(item.asDouble(0.0)));
             return values.isEmpty() ? Optional.empty() : Optional.of(values);
         } catch (Exception ex) {
             AiFailureMetrics.incrementEmbeddingFailure();
@@ -346,9 +346,9 @@ public class OpenAiCompatibleProvider implements AiProvider {
                     result.model(),
                     result.promptTokens(),
                     result.completionTokens(),
-                    safeInline(root.path("teachingDecision").asText("HINT"), 32),
-                    safeInline(root.path("stuckLayer").asText("UNKNOWN"), 48),
-                    safeInline(root.path("studentLevel").asText("unknown"), 32),
+                    safeInline(root.path("teachingDecision").asString("HINT"), 32),
+                    safeInline(root.path("stuckLayer").asString("UNKNOWN"), 48),
+                    safeInline(root.path("studentLevel").asString("unknown"), 32),
                     clarification(root)
             );
         } catch (Exception ignored) {
@@ -453,10 +453,10 @@ public class OpenAiCompatibleProvider implements AiProvider {
 
     private AiIntentAnalysis parseIntentAnalysis(JsonNode root) {
         return new AiIntentAnalysis(
-                enumValue(AiIntentAnalysis.UserIntent.class, root.path("primaryIntent").asText("UNKNOWN"), AiIntentAnalysis.UserIntent.UNKNOWN),
+                enumValue(AiIntentAnalysis.UserIntent.class, root.path("primaryIntent").asString("UNKNOWN"), AiIntentAnalysis.UserIntent.UNKNOWN),
                 enumList(AiIntentAnalysis.UserIntent.class, root.path("secondaryIntents")),
-                enumValue(AiIntentAnalysis.AnswerStyle.class, root.path("answerStyle").asText("ADAPTIVE_ASSISTANCE"), AiIntentAnalysis.AnswerStyle.ADAPTIVE_ASSISTANCE),
-                enumValue(AiIntentAnalysis.ClarificationMode.class, root.path("clarificationMode").asText("ALLOW_BLOCKING_ONLY"), AiIntentAnalysis.ClarificationMode.ALLOW_BLOCKING_ONLY),
+                enumValue(AiIntentAnalysis.AnswerStyle.class, root.path("answerStyle").asString("ADAPTIVE_ASSISTANCE"), AiIntentAnalysis.AnswerStyle.ADAPTIVE_ASSISTANCE),
+                enumValue(AiIntentAnalysis.ClarificationMode.class, root.path("clarificationMode").asString("ALLOW_BLOCKING_ONLY"), AiIntentAnalysis.ClarificationMode.ALLOW_BLOCKING_ONLY),
                 root.path("wantsCode").asBoolean(false),
                 root.path("wantsCodeFirst").asBoolean(false),
                 root.path("wantsStepByStepCodeExplanation").asBoolean(false),
@@ -464,9 +464,9 @@ public class OpenAiCompatibleProvider implements AiProvider {
                 root.path("hasNewDemandAfterClarification").asBoolean(false),
                 root.path("shouldUseLongTermMemory").asBoolean(true),
                 root.path("shouldWriteLongTermMemory").asBoolean(false),
-                safeInline(root.path("latestUserDemand").asText(""), 300),
-                safeInline(root.path("memoryUsagePolicy").asText(""), 300),
-                safeInline(root.path("reason").asText(""), 300),
+                safeInline(root.path("latestUserDemand").asString(""), 300),
+                safeInline(root.path("memoryUsagePolicy").asString(""), 300),
+                safeInline(root.path("reason").asString(""), 300),
                 root.path("confidence").asDouble(0.5)
         );
     }
@@ -545,11 +545,11 @@ public class OpenAiCompatibleProvider implements AiProvider {
             if (signals.size() >= 5) {
                 break;
             }
-            String type = safeInline(item.path("type").asText(""), 48);
-            String content = safeInline(item.path("content").asText(""), 500);
+            String type = safeInline(item.path("type").asString(""), 48);
+            String content = safeInline(item.path("content").asString(""), 500);
             double confidence = item.path("confidence").asDouble(0);
-            String reason = safeInline(item.path("reason").asText(""), 200);
-            String evidenceType = safeInline(item.path("evidenceType").asText(""), 48);
+            String reason = safeInline(item.path("reason").asString(""), 200);
+            String evidenceType = safeInline(item.path("evidenceType").asString(""), 48);
             if (!type.isBlank() && !content.isBlank() && confidence >= 0.85) {
                 signals.add(new AiCompletion.MemorySignal(type, content, confidence, reason, evidenceType));
             }
@@ -562,14 +562,14 @@ public class OpenAiCompatibleProvider implements AiProvider {
         if (node != null && node.isObject()) {
             List<AiCompletion.ClarificationOption> options = clarificationOptions(node.get("options"));
             return clarificationSchemaRepairer.repair(new AiCompletion.Clarification(
-                    safeInline(node.path("id").asText(""), 96),
-                    safeInline(node.path("priority").asText("helpful"), 32),
-                    safeInline(node.path("title").asText(""), 40),
-                    safeInline(node.path("prompt").asText(""), 240),
+                    safeInline(node.path("id").asString(""), 96),
+                    safeInline(node.path("priority").asString("helpful"), 32),
+                    safeInline(node.path("title").asString(""), 40),
+                    safeInline(node.path("prompt").asString(""), 240),
                     clarificationInput(node.get("input"), options),
                     options,
-                    safeInline(node.path("defaultAction").asText(""), 32),
-                    safeBlock(node.path("assumption").asText(""), 240)
+                    safeInline(node.path("defaultAction").asString(""), 32),
+                    safeBlock(node.path("assumption").asString(""), 240)
             ));
         }
         return clarificationSchemaRepairer.repair(new AiCompletion.Clarification("", "", clarificationOptions(root.get("clarificationOptions"))));
@@ -580,12 +580,12 @@ public class OpenAiCompatibleProvider implements AiProvider {
             return AiCompletion.ClarificationInput.fromOptions(fallbackOptions);
         }
         return new AiCompletion.ClarificationInput(
-                safeInline(node.path("kind").asText(""), 32),
+                safeInline(node.path("kind").asString(""), 32),
                 node.path("required").asBoolean(false),
                 node.has("options") ? clarificationOptions(node.get("options")) : fallbackOptions,
                 node.path("allowCustom").asBoolean(false),
-                safeInline(node.path("customKind").asText(""), 32),
-                safeInline(node.path("placeholder").asText(""), 200)
+                safeInline(node.path("customKind").asString(""), 32),
+                safeInline(node.path("placeholder").asString(""), 200)
         );
     }
 
@@ -603,15 +603,15 @@ public class OpenAiCompatibleProvider implements AiProvider {
             String message;
             String placeholder = "";
             String messageTemplate = "";
-            if (item.isTextual()) {
-                message = safeInline(item.asText(), 200);
+            if (item.isString()) {
+                message = safeInline(item.asString(""), 200);
                 label = summarizeOptionLabel(message);
             } else {
-                type = clarificationOptionType(item.path("type").asText(""));
-                label = safeInline(item.path("label").asText(""), 40);
-                message = safeInline(item.path("message").asText(""), 200);
-                placeholder = safeInline(item.path("placeholder").asText(""), 200);
-                messageTemplate = safeBlock(item.path("messageTemplate").asText(""), 300);
+                type = clarificationOptionType(item.path("type").asString(""));
+                label = safeInline(item.path("label").asString(""), 40);
+                message = safeInline(item.path("message").asString(""), 200);
+                placeholder = safeInline(item.path("placeholder").asString(""), 200);
+                messageTemplate = safeBlock(item.path("messageTemplate").asString(""), 300);
                 if (message.isBlank()) {
                     message = label;
                 }
@@ -939,7 +939,7 @@ public class OpenAiCompatibleProvider implements AiProvider {
 
     private String text(JsonNode root, String field) {
         JsonNode value = root.get(field);
-        return value == null || value.isNull() ? null : value.asText();
+        return value == null || value.isNull() ? null : value.asString("");
     }
 
     private boolean containsAny(String value, String... needles) {
@@ -997,7 +997,7 @@ public class OpenAiCompatibleProvider implements AiProvider {
         }
         List<E> values = new ArrayList<>();
         for (JsonNode item : node) {
-            E value = enumValue(enumType, item.asText(""), null);
+            E value = enumValue(enumType, item.asString(""), null);
             if (value != null && !values.contains(value)) {
                 values.add(value);
             }

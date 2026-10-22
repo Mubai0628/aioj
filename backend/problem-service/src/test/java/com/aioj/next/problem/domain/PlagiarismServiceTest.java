@@ -36,7 +36,7 @@ import com.aioj.next.problem.persistence.mapper.PlagiarismJobMapper;
 import com.aioj.next.problem.persistence.mapper.PlagiarismJobSubmissionMapper;
 import com.aioj.next.problem.persistence.mapper.PlagiarismPairMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -109,7 +109,7 @@ class PlagiarismServiceTest {
         };
         service = new PlagiarismService(contestMapper, contestProblemMapper, contestParticipantMapper, contestRunMapper,
                 submissionMapper, jobMapper, jobSubmissionMapper, pairMapper, fragmentMapper, aiAnalysisMapper,
-                detector, aiAnalysisClient, properties, new ObjectMapper().findAndRegisterModules(), directExecutor);
+                detector, aiAnalysisClient, properties, JsonMapper.builderWithJackson2Defaults().build(), directExecutor);
 
         lenient().when(jobMapper.selectById(501L)).thenAnswer(invocation -> job);
         lenient().when(jobMapper.update(any(), any())).thenReturn(1);

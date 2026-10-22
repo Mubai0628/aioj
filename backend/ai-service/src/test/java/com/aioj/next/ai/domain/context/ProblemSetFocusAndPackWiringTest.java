@@ -10,7 +10,7 @@ import com.aioj.next.ai.persistence.mapper.AiConversationSummaryMapper;
 import com.aioj.next.ai.persistence.mapper.AiConversationTaskStateMapper;
 import com.aioj.next.ai.persistence.mapper.AiMessageMapper;
 import com.aioj.next.contract.ai.AiChatRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

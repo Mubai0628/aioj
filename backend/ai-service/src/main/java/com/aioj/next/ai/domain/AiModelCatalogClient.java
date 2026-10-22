@@ -2,8 +2,8 @@ package com.aioj.next.ai.domain;
 
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.contract.ai.AiModelListResponse;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -92,7 +92,7 @@ public class AiModelCatalogClient {
                 continue;
             }
             String ownedBy = text(item.path("owned_by"));
-            Integer contextLength = item.path("context_length").canConvertToInt() ? item.path("context_length").asInt() : null;
+            Integer contextLength = item.path("context_length").canConvertToInt() ? item.path("context_length").asInt(0) : null;
             boolean supportsReasoning = item.path("supports_reasoning").asBoolean(false);
             models.add(modelOption(provider, id, ownedBy, contextLength, supportsReasoning));
         }
@@ -187,7 +187,7 @@ public class AiModelCatalogClient {
     }
 
     private String text(JsonNode node) {
-        return node != null && node.isTextual() ? node.asText().trim() : "";
+        return node != null && node.isString() ? node.asString("").trim() : "";
     }
 
     private boolean containsIgnoreCase(String value, String needle) {

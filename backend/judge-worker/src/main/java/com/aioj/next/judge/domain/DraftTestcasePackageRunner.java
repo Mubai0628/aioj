@@ -5,7 +5,8 @@ import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.judge.DraftTestcasePackageRunRequest;
 import com.aioj.next.contract.judge.DraftTestcasePackageRunResponse;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
@@ -242,7 +243,7 @@ public class DraftTestcasePackageRunner {
         ManifestPayload manifest;
         try {
             manifest = objectMapper.readValue(manifestBytes, ManifestPayload.class);
-        } catch (IOException ex) {
+        } catch (JacksonException ex) {
             throw badRequest("Draft testcase package manifest.json is invalid");
         }
         if (!StringUtils.hasText(manifest.version())) {

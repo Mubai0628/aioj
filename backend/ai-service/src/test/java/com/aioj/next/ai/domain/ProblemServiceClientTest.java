@@ -4,7 +4,8 @@ import com.aioj.next.ai.config.InternalApiProperties;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
@@ -34,7 +35,7 @@ class ProblemServiceClientTest {
     private static final String STATEMENTS_URL =
             "http://localhost:8202/api/v1/internal/ai/users/7/running-contest-problem-statements";
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().build();
     private final OperationAuditWriter auditWriter = mock(OperationAuditWriter.class);
 
     private ProblemServiceClient client(RestClient.Builder builder, long cacheTtlMs) {

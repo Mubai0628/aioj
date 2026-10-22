@@ -27,7 +27,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.List;

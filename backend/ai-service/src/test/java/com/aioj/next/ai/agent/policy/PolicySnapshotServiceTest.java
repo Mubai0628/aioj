@@ -9,7 +9,7 @@ import com.aioj.next.contract.contest.RunningContestParticipation;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
 import com.aioj.next.contract.problem.ProblemVisibility;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -87,9 +87,9 @@ class PolicySnapshotServiceTest {
         assertThat(policy.get("allowFullSolutionCode").asBoolean()).isFalse();
         assertThat(policy.get("attributedContestRunId").asLong()).isEqualTo(7701L);
         assertThat(policy.get("problems")).hasSize(4);
-        assertThat(policy.get("problems").get(0).get("assistanceLevel").asText()).isEqualTo("HINT_ONLY");
-        assertThat(policy.get("problems").get(1).get("assistanceLevel").asText()).isEqualTo("DENY");
-        assertThat(policy.get("problems").get(2).get("assistanceLevel").asText()).isEqualTo("DENY");
+        assertThat(policy.get("problems").get(0).get("assistanceLevel").asString()).isEqualTo("HINT_ONLY");
+        assertThat(policy.get("problems").get(1).get("assistanceLevel").asString()).isEqualTo("DENY");
+        assertThat(policy.get("problems").get(2).get("assistanceLevel").asString()).isEqualTo("DENY");
 
         verify(recorder).record(eq("turn-2"), eq(7L), eq("conv-1"),
                 eq(GuardLayer.L2_POLICY_INJECT), eq(GuardDecision.CONSTRAIN),
@@ -180,7 +180,7 @@ class PolicySnapshotServiceTest {
                 eq(PolicySnapshotService.REASON_STATE_UNCHANGED),
                 argThat(detail -> detail.path("recheck").asBoolean()
                         && !detail.path("changed").asBoolean()
-                        && detail.path("participantStatusNow").asText().equals("PARTICIPANT_ACTIVE")
+                        && detail.path("participantStatusNow").asString().equals("PARTICIPANT_ACTIVE")
                         && detail.path("constrainedCountBefore").asInt() == 1
                         && detail.path("constrainedCountNow").asInt() == 1),
                 eq(false), any());
@@ -207,7 +207,7 @@ class PolicySnapshotServiceTest {
                 eq(PolicySnapshotService.REASON_STATE_CHANGED),
                 argThat(detail -> detail.path("recheck").asBoolean()
                         && detail.path("changed").asBoolean()
-                        && detail.path("participantStatusBefore").asText().equals("NON_PARTICIPANT")
+                        && detail.path("participantStatusBefore").asString().equals("NON_PARTICIPANT")
                         && detail.path("constrainedCountBefore").asInt() == 0
                         && detail.path("constrainedCountNow").asInt() == 1
                         && detail.path("addedConstrained").toString().contains("1001")),

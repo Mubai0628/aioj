@@ -18,7 +18,7 @@ import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
 import com.aioj.next.contract.ai.ProblemDraftRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,7 +73,7 @@ class ProblemDraftGenerationJobServiceTest {
         Executor directExecutor = Runnable::run;
         return new ProblemDraftGenerationJobService(jobMapper, problemDraftStore, coordinator,
                 workspaceService, new ProblemDraftReviewRiskService(),
-                new ObjectMapper().findAndRegisterModules(), auditWriter, directExecutor,
+                JsonMapper.builderWithJackson2Defaults().build(), auditWriter, directExecutor,
                 transactionManager(), properties);
     }
 

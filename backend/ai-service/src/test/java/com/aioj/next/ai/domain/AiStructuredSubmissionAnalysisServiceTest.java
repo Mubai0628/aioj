@@ -5,7 +5,7 @@ import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.ai.AiProblemContextResponse;
 import com.aioj.next.contract.ai.AiSubmissionCaseContext;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

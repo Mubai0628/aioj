@@ -4,8 +4,8 @@ import com.aioj.next.auth.entity.OperationAuditEventEntity;
 import com.aioj.next.auth.mapper.OperationAuditEventMapper;
 import com.aioj.next.common.api.TraceIds;
 import com.aioj.next.common.security.SecuritySupport;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -40,7 +40,7 @@ public class OperationAuditWriter {
         }
         try {
             return objectMapper.writeValueAsString(summary);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return "{\"error\":\"summary serialization failed\"}";
         }
     }

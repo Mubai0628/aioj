@@ -28,9 +28,9 @@ import com.aioj.next.problem.persistence.mapper.ProblemTestcaseGeneratorMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -728,7 +728,7 @@ public class ProblemCatalog {
     private String toJson(List<String> tags) {
         try {
             return objectMapper.writeValueAsString(tags);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Invalid problem tags");
         }
     }
@@ -739,7 +739,7 @@ public class ProblemCatalog {
         }
         try {
             return objectMapper.readValue(tags, STRING_LIST);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Problem tags are not valid JSON");
         }
     }

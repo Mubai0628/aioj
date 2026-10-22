@@ -1,7 +1,7 @@
 package com.aioj.next.ai.domain.draftagent;
 
 import com.aioj.next.contract.problem.TestCaseDto;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ProblemDraftFingerprintAndRiskServiceTest {
 
     private final ProblemDraftFingerprintService fingerprints =
-            new ProblemDraftFingerprintService(new ObjectMapper().findAndRegisterModules());
+            new ProblemDraftFingerprintService(JsonMapper.builderWithJackson2Defaults().build());
     private final ProblemDraftReviewRiskService risks = new ProblemDraftReviewRiskService();
 
     @Test

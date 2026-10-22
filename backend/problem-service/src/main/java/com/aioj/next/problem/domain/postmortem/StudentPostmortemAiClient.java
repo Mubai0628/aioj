@@ -7,8 +7,8 @@ import com.aioj.next.contract.ai.StudentPostmortemAnalysisResponse;
 import com.aioj.next.contract.ai.StudentPostmortemWeaknessConfirmRequest;
 import com.aioj.next.contract.ai.StudentPostmortemWeaknessConfirmResponse;
 import com.aioj.next.problem.config.PlagiarismProperties;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -65,7 +65,7 @@ public class StudentPostmortemAiClient {
     private <T> T parse(String response, Class<T> type, String label) {
         try {
             JsonNode root = objectMapper.readTree(response);
-            int code = root.has("code") ? root.get("code").asInt() : 0;
+            int code = root.has("code") ? root.get("code").asInt(0) : 0;
             if (code != 0) {
                 log.warn("{} returned application error code {}", label, code);
                 throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, label + " unavailable");

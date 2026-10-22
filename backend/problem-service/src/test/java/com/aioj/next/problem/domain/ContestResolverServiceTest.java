@@ -30,8 +30,7 @@ import com.aioj.next.problem.persistence.mapper.ContestResolverSessionMapper;
 import com.aioj.next.problem.persistence.mapper.ContestResolverStepMapper;
 import com.aioj.next.problem.persistence.mapper.ContestRunMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -81,7 +80,6 @@ class ContestResolverServiceTest {
     @BeforeEach
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
         service = new ContestResolverService(contestMapper, contestRunMapper, contestProblemMapper,
                 contestParticipantMapper, submissionMapper, sessionMapper, stepMapper, scoreboardService, objectMapper);
         lenient().doAnswer(invocation -> {

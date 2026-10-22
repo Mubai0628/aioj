@@ -3,7 +3,7 @@ package com.aioj.next.ai.domain;
 import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.ai.StudentPostmortemAnalysisRequest;
 import com.aioj.next.contract.ai.StudentPostmortemCodeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

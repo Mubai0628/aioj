@@ -15,7 +15,7 @@ import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

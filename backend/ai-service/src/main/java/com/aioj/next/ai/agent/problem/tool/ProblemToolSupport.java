@@ -10,8 +10,8 @@ import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
 import com.aioj.next.contract.problem.ProblemVisibility;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
 import java.util.List;

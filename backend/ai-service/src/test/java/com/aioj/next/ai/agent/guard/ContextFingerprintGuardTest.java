@@ -9,7 +9,7 @@ import com.aioj.next.ai.agent.policy.ParticipantStatus;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
 import com.aioj.next.contract.problem.ProblemVisibility;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

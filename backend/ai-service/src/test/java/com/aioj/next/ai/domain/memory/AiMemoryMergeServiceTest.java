@@ -22,7 +22,8 @@ import com.aioj.next.ai.persistence.mapper.AiMemoryVersionMapper;
 import com.aioj.next.ai.persistence.mapper.AiUserMemoryMapper;
 import com.aioj.next.contract.ai.AiMemoryCandidateActionRequest;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -79,7 +80,7 @@ class AiMemoryMergeServiceTest {
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper().findAndRegisterModules();
+        objectMapper = JsonMapper.builderWithJackson2Defaults().build();
         service = new AiMemoryMergeService(
                 candidateMapper,
                 evidenceMapper,

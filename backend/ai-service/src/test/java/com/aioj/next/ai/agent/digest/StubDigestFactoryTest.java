@@ -1,7 +1,7 @@
 package com.aioj.next.ai.agent.digest;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -29,29 +29,29 @@ class StubDigestFactoryTest {
         JsonNode root = new ObjectMapper().readTree(stub.structuredDigestJson());
 
         assertThat(root.get("schemaVersion").asInt()).isEqualTo(3);
-        assertThat(root.get("turnId").asText()).isEqualTo("t-1");
-        assertThat(root.get("entryPoint").asText()).isEqualTo("PROBLEM_PAGE");
+        assertThat(root.get("turnId").asString()).isEqualTo("t-1");
+        assertThat(root.get("entryPoint").asString()).isEqualTo("PROBLEM_PAGE");
 
         JsonNode codeRefs = root.get("codeRefs");
         assertThat(codeRefs).hasSize(2);
-        assertThat(codeRefs.get(0).get("language").asText()).isEqualTo("cpp");
-        assertThat(codeRefs.get(0).get("firstLine").asText()).contains("int main");
-        assertThat(codeRefs.get(1).get("language").asText()).isEqualTo("python");
+        assertThat(codeRefs.get(0).get("language").asString()).isEqualTo("cpp");
+        assertThat(codeRefs.get(0).get("firstLine").asString()).contains("int main");
+        assertThat(codeRefs.get(1).get("language").asString()).isEqualTo("python");
 
         assertThat(root.get("searchKeywords").toString()).contains("lower_bound");
 
         assertThat(root.get("problemRefs").toString()).contains("42", "43");
         JsonNode entities = root.get("entities");
         assertThat(entities).hasSize(2);
-        assertThat(entities.get(0).get("type").asText()).isEqualTo("PROBLEM");
+        assertThat(entities.get(0).get("type").asString()).isEqualTo("PROBLEM");
 
         JsonNode selection = root.get("explicitSelection");
-        assertThat(selection.get("text").asText()).contains("check(d)");
-        assertThat(selection.get("sourceMessageId").asText()).isEqualTo("88");
+        assertThat(selection.get("text").asString()).contains("check(d)");
+        assertThat(selection.get("sourceMessageId").asString()).isEqualTo("88");
 
-        assertThat(root.get("source").get("userMessageId").asText()).isEqualTo("100");
-        assertThat(root.get("source").get("assistantMessageId").asText()).isEqualTo("200");
-        assertThat(root.get("source").get("sourceHash").asText()).isEqualTo(stub.sourceHash());
+        assertThat(root.get("source").get("userMessageId").asString()).isEqualTo("100");
+        assertThat(root.get("source").get("assistantMessageId").asString()).isEqualTo("200");
+        assertThat(root.get("source").get("sourceHash").asString()).isEqualTo(stub.sourceHash());
 
         assertThat(stub.digestVersion()).isEqualTo(1);
         assertThat(stub.summary()).startsWith("用户：");

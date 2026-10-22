@@ -15,9 +15,9 @@ import com.aioj.next.ai.persistence.entity.AiProfileSignalEntity;
 import com.aioj.next.ai.persistence.mapper.AiLearningProfileMapper;
 import com.aioj.next.ai.persistence.mapper.AiProfileSignalMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -85,21 +85,21 @@ public class ProfileSearchTool implements AgentTool {
 
     @Override
     public ToolResult<Object> execute(ToolExecutionContext context, JsonNode input) {
-        String query = input.path("query").isTextual() ? input.path("query").asText().trim() : "";
+        String query = input.path("query").isString() ? input.path("query").asString("").trim() : "";
         if (query.length() > MAX_QUERY_CHARS) {
             query = query.substring(0, MAX_QUERY_CHARS);
         }
-        String category = input.path("category").isTextual() ? input.path("category").asText().trim() : "";
+        String category = input.path("category").isString() ? input.path("category").asString("").trim() : "";
         if (category.length() > MAX_CATEGORY_CHARS) {
             category = category.substring(0, MAX_CATEGORY_CHARS);
         }
         int topK = input.path("topK").isIntegralNumber()
-                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt()))
+                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt(0)))
                 : DEFAULT_TOP_K;
         boolean includeSignals = !input.path("includeSignals").isBoolean()
-                || input.path("includeSignals").asBoolean();
+                || input.path("includeSignals").asBoolean(false);
         int maxSignalsPerProfile = input.path("maxSignalsPerProfile").isIntegralNumber()
-                ? Math.min(MAX_SIGNALS_PER_PROFILE, Math.max(0, input.path("maxSignalsPerProfile").asInt()))
+                ? Math.min(MAX_SIGNALS_PER_PROFILE, Math.max(0, input.path("maxSignalsPerProfile").asInt(0)))
                 : DEFAULT_MAX_SIGNALS_PER_PROFILE;
 
         QueryWrapper<AiLearningProfileEntity> wrapper = new QueryWrapper<AiLearningProfileEntity>()
@@ -188,8 +188,8 @@ public class ProfileSearchTool implements AgentTool {
         if (payloadJson != null) {
             try {
                 JsonNode signal = objectMapper.readTree(payloadJson).path("signal");
-                if (signal.isTextual()) {
-                    snippet = signal.asText();
+                if (signal.isString()) {
+                    snippet = signal.asString("");
                 }
             } catch (Exception ignored) {
                 // Keep the raw payload as the snippet fallback.

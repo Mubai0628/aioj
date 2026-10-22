@@ -63,7 +63,7 @@ public class ToolRegistry {
             violations.add(who + ": description is required");
         }
         if (descriptor.inputSchema() == null || !descriptor.inputSchema().isObject()
-                || !"object".equals(descriptor.inputSchema().path("type").asText(null))) {
+                || !"object".equals(descriptor.inputSchema().path("type").asString(null))) {
             violations.add(who + ": inputSchema must be a JSON object schema");
         } else {
             if (!ToolInputSchemaValidator.isSupportedSubset(descriptor.inputSchema())) {
@@ -79,13 +79,13 @@ public class ToolRegistry {
         }
     }
 
-    private void collectForbiddenFields(com.fasterxml.jackson.databind.JsonNode schema, String path,
+    private void collectForbiddenFields(tools.jackson.databind.JsonNode schema, String path,
                                         List<String> violations, String who) {
-        com.fasterxml.jackson.databind.JsonNode properties = schema.path("properties");
+        tools.jackson.databind.JsonNode properties = schema.path("properties");
         if (properties.isObject()) {
-            java.util.Iterator<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> fields = properties.fields();
+            java.util.Iterator<Map.Entry<String, tools.jackson.databind.JsonNode>> fields = properties.properties().iterator();
             while (fields.hasNext()) {
-                Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> entry = fields.next();
+                Map.Entry<String, tools.jackson.databind.JsonNode> entry = fields.next();
                 if (FORBIDDEN_INPUT_FIELDS.contains(entry.getKey().toLowerCase(java.util.Locale.ROOT))) {
                     violations.add(who + ": input field " + path + "." + entry.getKey()
                             + " is an identity/permission field the model must never supply");
@@ -93,7 +93,7 @@ public class ToolRegistry {
                 collectForbiddenFields(entry.getValue(), path + "." + entry.getKey(), violations, who);
             }
         }
-        com.fasterxml.jackson.databind.JsonNode items = schema.path("items");
+        tools.jackson.databind.JsonNode items = schema.path("items");
         if (items.isObject()) {
             collectForbiddenFields(items, path + "[]", violations, who);
         }

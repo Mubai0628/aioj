@@ -1,7 +1,7 @@
 package com.aioj.next.ai.domain.problem;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -123,12 +123,12 @@ public class VerificationFailureClassifier {
             JsonNode code = node.get("code");
             JsonNode field = node.get("field");
             JsonNode message = node.get("message");
-            if (code != null && code.isTextual()) {
-                String normalized = code.asText("").trim().toUpperCase(Locale.ROOT);
+            if (code != null && code.isString()) {
+                String normalized = code.asString("").trim().toUpperCase(Locale.ROOT);
                 if (!normalized.isBlank()) {
                     codes.add(normalized);
-                    summary.add(normalized + (field != null && field.isTextual() ? "@" + field.asText() : "")
-                            + (message != null && message.isTextual() ? ": " + trim(message.asText(), 180) : ""));
+                    summary.add(normalized + (field != null && field.isString() ? "@" + field.asString("") : "")
+                            + (message != null && message.isString() ? ": " + trim(message.asString(""), 180) : ""));
                 }
             }
             Iterator<Map.Entry<String, JsonNode>> fields = node.properties().iterator();

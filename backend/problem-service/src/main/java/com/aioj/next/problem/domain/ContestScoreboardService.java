@@ -58,8 +58,8 @@ import com.aioj.next.problem.persistence.mapper.ProblemSubtaskMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionCaseResultMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -1333,7 +1333,7 @@ public class ContestScoreboardService {
     private String writePayload(SnapshotPayload payload) {
         try {
             return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Scoreboard snapshot serialization failed");
         }
     }
@@ -1341,7 +1341,7 @@ public class ContestScoreboardService {
     private SnapshotPayload readPayload(String json) {
         try {
             return objectMapper.readValue(json, SnapshotPayload.class);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Scoreboard snapshot payload is invalid");
         }
     }

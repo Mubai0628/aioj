@@ -98,9 +98,6 @@ node scripts/agent-eval/agent-recall-eval.mjs
 3. 对照非参赛账号（默认 `student`；注意 `k6stu001` 不在本地库）与 teacher/admin
    账号（默认 `admin`），密码全部走 env，不写入任何文件。
 4. 本机 MySQL 可连（同 ctxeval 的 `MYSQL_*` 约定）。
-5. 已知前提风险：gateway `application.yml` 的 ai-service `Path` 当前**未覆盖**
-   `/api/v1/admin/ai-guard-decisions/**`，E6-18 会 404 FAIL；若本地 Nacos 下发的
-   网关配置也未加该前缀，需要先补路由再跑 E6（或在 Nacos 配置里补）。
 
 ### 命令
 

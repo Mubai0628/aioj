@@ -15,9 +15,9 @@ import com.aioj.next.ai.persistence.entity.AiMemoryEvidenceEntity;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryEvidenceMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -80,9 +80,9 @@ public class MemoryFetchEvidenceTool implements AgentTool {
             return ToolResult.failure(null, ToolStatus.SCHEMA_ERROR, "MISSING_CLAIM_ID",
                     "claimId is required and must be an integer");
         }
-        long claimId = input.path("claimId").asLong();
+        long claimId = input.path("claimId").asLong(0L);
         int maxEvidence = input.path("maxEvidence").isIntegralNumber()
-                ? Math.min(MAX_MAX_EVIDENCE, Math.max(1, input.path("maxEvidence").asInt()))
+                ? Math.min(MAX_MAX_EVIDENCE, Math.max(1, input.path("maxEvidence").asInt(0)))
                 : DEFAULT_MAX_EVIDENCE;
 
         AiMemoryClaimEntity claim;

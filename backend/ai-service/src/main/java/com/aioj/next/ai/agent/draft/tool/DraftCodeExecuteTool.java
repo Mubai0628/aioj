@@ -12,10 +12,10 @@ import com.aioj.next.ai.persistence.entity.ProblemDraftExecutionEntity;
 import com.aioj.next.ai.persistence.entity.ProblemDraftWorkspaceEntity;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -60,7 +60,7 @@ public class DraftCodeExecuteTool implements AgentTool {
         String workspaceId = DraftToolSupport.workspaceId(context);
         ProblemDraftWorkspaceEntity workspace = workspaceService.requireForTool(workspaceId, context.userId());
         ProblemDraftWorkingState state = workspaceService.state(workspace);
-        String purpose = input.path("purpose").asText();
+        String purpose = input.path("purpose").asString("");
         String language;
         String code;
         switch (purpose) {
@@ -77,8 +77,8 @@ public class DraftCodeExecuteTool implements AgentTool {
                 }
             }
             case "PROBE" -> {
-                language = input.path("language").asText(null);
-                code = input.path("code").asText(null);
+                language = input.path("language").asString(null);
+                code = input.path("code").asString(null);
                 if (language == null || code == null || code.isBlank()) {
                     throw new DomainException(ErrorCode.BAD_REQUEST, "PROBE execution requires language and code");
                 }
@@ -87,7 +87,7 @@ public class DraftCodeExecuteTool implements AgentTool {
         }
         ProblemDraftExecutionEntity execution = executionService.execute(workspaceId, context.userId(),
                 DraftToolSupport.agentRunId(context), null, purpose, language, code,
-                input.path("stdin").asText(""), nullableInt(input, "timeLimitMillis", state.timeLimitMillis()),
+                input.path("stdin").asString(""), nullableInt(input, "timeLimitMillis", state.timeLimitMillis()),
                 nullableInt(input, "memoryLimitKb", state.memoryLimitKb()));
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("executionId", execution.getId());
@@ -103,6 +103,6 @@ public class DraftCodeExecuteTool implements AgentTool {
     }
 
     private Integer nullableInt(JsonNode input, String field, Integer fallback) {
-        return input.has(field) && input.get(field).isIntegralNumber() ? input.get(field).asInt() : fallback;
+        return input.has(field) && input.get(field).isIntegralNumber() ? input.get(field).asInt(0) : fallback;
     }
 }

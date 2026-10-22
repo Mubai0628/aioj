@@ -6,7 +6,7 @@ import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.contract.ai.AiMemoryReviewDetailResponse;
 import com.aioj.next.contract.ai.AiMemoryReviewListItemResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,7 +55,7 @@ class AiMemoryCandidateControllerTest {
                 reviewService,
                 null,
                 null,
-                new ObjectMapper().findAndRegisterModules()
+                JsonMapper.builderWithJackson2Defaults().build()
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         SecurityPrincipal principal = new SecurityPrincipal(7L, "student", Set.of(Role.STUDENT));

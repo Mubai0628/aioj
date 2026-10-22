@@ -5,8 +5,8 @@ import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
 import com.aioj.next.judge.domain.SandboxExecutionClient;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -372,14 +372,14 @@ public class InternalSandboxController {
                 return Optional.empty();
             }
             Map<String, String> files = new LinkedHashMap<>();
-            filesNode.fields().forEachRemaining(entry -> {
-                if (entry.getValue().isTextual()) {
-                    files.put(entry.getKey(), entry.getValue().asText());
+            filesNode.properties().forEach(entry -> {
+                if (entry.getValue().isString()) {
+                    files.put(entry.getKey(), entry.getValue().asString(""));
                 }
             });
             JsonNode generatedPairCountNode = rootNode.path("generatedPairCount");
             Integer generatedPairCount = generatedPairCountNode.canConvertToInt()
-                    ? generatedPairCountNode.asInt()
+                    ? generatedPairCountNode.asInt(0)
                     : null;
             return Optional.of(new GeneratedFilesPayload(
                     files,
@@ -459,15 +459,15 @@ public class InternalSandboxController {
     }
 
     private Integer integerOrNull(JsonNode node) {
-        return node != null && node.canConvertToInt() ? node.asInt() : null;
+        return node != null && node.canConvertToInt() ? node.asInt(0) : null;
     }
 
     private String textOrNull(JsonNode node) {
-        return node != null && node.isTextual() ? node.asText() : null;
+        return node != null && node.isString() ? node.asString("") : null;
     }
 
     private Long longOrNull(JsonNode node) {
-        return node != null && node.canConvertToLong() ? node.asLong() : null;
+        return node != null && node.canConvertToLong() ? node.asLong(0L) : null;
     }
 
     private Map<String, String> textMap(JsonNode node) {
@@ -475,9 +475,9 @@ public class InternalSandboxController {
             return Map.of();
         }
         Map<String, String> values = new LinkedHashMap<>();
-        node.fields().forEachRemaining(entry -> {
-            if (entry.getValue().isTextual()) {
-                values.put(entry.getKey(), entry.getValue().asText());
+        node.properties().forEach(entry -> {
+            if (entry.getValue().isString()) {
+                values.put(entry.getKey(), entry.getValue().asString(""));
             }
         });
         return values;

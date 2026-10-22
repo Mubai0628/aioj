@@ -4,8 +4,8 @@ import com.aioj.next.ai.domain.AiLearningProfileService;
 import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.contract.submission.SubmissionStatus;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -83,7 +83,7 @@ public class AiJudgedSubmissionAnalysisJobHandler implements AiMemoryJobHandler 
         if (value.isNumber()) {
             return value.longValue();
         }
-        String text = value.asText("");
+        String text = value.asString("");
         if (text.isBlank()) {
             return null;
         }
@@ -107,7 +107,7 @@ public class AiJudgedSubmissionAnalysisJobHandler implements AiMemoryJobHandler 
         if (value == null || value.isNull()) {
             return null;
         }
-        String text = value.asText("");
+        String text = value.asString("");
         return text.isBlank() ? null : text.strip();
     }
 

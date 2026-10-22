@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.tool;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -53,7 +53,7 @@ public final class ToolInputSchemaValidator {
         }
         JsonNode properties = schema.path("properties");
         if (properties.isObject()) {
-            Iterator<Map.Entry<String, JsonNode>> fields = properties.fields();
+            Iterator<Map.Entry<String, JsonNode>> fields = properties.properties().iterator();
             while (fields.hasNext()) {
                 Map.Entry<String, JsonNode> entry = fields.next();
                 collectUnsupported(entry.getValue(), path + "." + entry.getKey(), unsupported);
@@ -85,7 +85,7 @@ public final class ToolInputSchemaValidator {
                 return;
             }
         }
-        String type = schema.path("type").isTextual() ? schema.get("type").asText() : null;
+        String type = schema.path("type").isString() ? schema.get("type").asString("") : null;
         if (type == null) {
             return;
         }
@@ -93,14 +93,14 @@ public final class ToolInputSchemaValidator {
             case "object" -> validateObject(schema, value, path, errors);
             case "array" -> validateArray(schema, value, path, errors);
             case "string" -> {
-                if (!value.isTextual()) {
+                if (!value.isString()) {
                     errors.add(path + ": expected string");
                 } else {
-                    if (schema.has("minLength") && value.asText().length() < schema.get("minLength").asInt()) {
-                        errors.add(path + ": shorter than minLength " + schema.get("minLength").asInt());
+                    if (schema.has("minLength") && value.asString("").length() < schema.get("minLength").asInt(0)) {
+                        errors.add(path + ": shorter than minLength " + schema.get("minLength").asInt(0));
                     }
-                    if (schema.has("maxLength") && value.asText().length() > schema.get("maxLength").asInt()) {
-                        errors.add(path + ": longer than maxLength " + schema.get("maxLength").asInt());
+                    if (schema.has("maxLength") && value.asString("").length() > schema.get("maxLength").asInt(0)) {
+                        errors.add(path + ": longer than maxLength " + schema.get("maxLength").asInt(0));
                     }
                 }
             }
@@ -137,14 +137,14 @@ public final class ToolInputSchemaValidator {
         JsonNode required = schema.path("required");
         if (required.isArray()) {
             for (JsonNode field : required) {
-                if (field.isTextual() && !value.has(field.asText())) {
-                    errors.add(path + "." + field.asText() + ": is required");
+                if (field.isString() && !value.has(field.asString(""))) {
+                    errors.add(path + "." + field.asString("") + ": is required");
                 }
             }
         }
         JsonNode properties = schema.path("properties");
         boolean additionalAllowed = !schema.has("additionalProperties") || schema.get("additionalProperties").asBoolean(true);
-        Iterator<Map.Entry<String, JsonNode>> fields = value.fields();
+        Iterator<Map.Entry<String, JsonNode>> fields = value.properties().iterator();
         while (fields.hasNext()) {
             Map.Entry<String, JsonNode> entry = fields.next();
             JsonNode childSchema = properties.isObject() ? properties.get(entry.getKey()) : null;
@@ -161,11 +161,11 @@ public final class ToolInputSchemaValidator {
             errors.add(path + ": expected array");
             return;
         }
-        if (schema.has("minItems") && value.size() < schema.get("minItems").asInt()) {
-            errors.add(path + ": fewer than minItems " + schema.get("minItems").asInt());
+        if (schema.has("minItems") && value.size() < schema.get("minItems").asInt(0)) {
+            errors.add(path + ": fewer than minItems " + schema.get("minItems").asInt(0));
         }
-        if (schema.has("maxItems") && value.size() > schema.get("maxItems").asInt()) {
-            errors.add(path + ": more than maxItems " + schema.get("maxItems").asInt());
+        if (schema.has("maxItems") && value.size() > schema.get("maxItems").asInt(0)) {
+            errors.add(path + ": more than maxItems " + schema.get("maxItems").asInt(0));
         }
         JsonNode items = schema.path("items");
         if (!items.isObject()) {
@@ -179,10 +179,10 @@ public final class ToolInputSchemaValidator {
     private static void validateNumericBounds(JsonNode schema, JsonNode value, String path,
                                               List<String> errors) {
         if (schema.has("minimum") && value.decimalValue().compareTo(schema.get("minimum").decimalValue()) < 0) {
-            errors.add(path + ": less than minimum " + schema.get("minimum").asText());
+            errors.add(path + ": less than minimum " + schema.get("minimum").asString(""));
         }
         if (schema.has("maximum") && value.decimalValue().compareTo(schema.get("maximum").decimalValue()) > 0) {
-            errors.add(path + ": greater than maximum " + schema.get("maximum").asText());
+            errors.add(path + ": greater than maximum " + schema.get("maximum").asString(""));
         }
     }
 }

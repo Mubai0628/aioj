@@ -7,7 +7,7 @@ import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.persistence.entity.AiMemoryClaimEntity;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

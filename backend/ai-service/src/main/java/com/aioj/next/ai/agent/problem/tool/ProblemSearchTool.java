@@ -13,9 +13,9 @@ import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -107,12 +107,12 @@ public class ProblemSearchTool implements AgentTool {
             return ProblemToolSupport.deny(guardDecisionRecorder, objectMapper, context,
                     descriptor.name(), ProblemToolSupport.REASON_CONTEST_SEARCH_RATE_LIMITED, null, false);
         }
-        String query = input.path("query").isTextual() ? input.path("query").asText().trim() : "";
+        String query = input.path("query").isString() ? input.path("query").asString("").trim() : "";
         if (query.length() > MAX_QUERY_CHARS) {
             query = query.substring(0, MAX_QUERY_CHARS);
         }
         int topK = input.path("topK").isIntegralNumber()
-                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt()))
+                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt(0)))
                 : DEFAULT_TOP_K;
         ContestPolicyView policy = context.contestPolicy();
         List<ContestPolicyView.ContestProblemPolicy> searchable = policy == null

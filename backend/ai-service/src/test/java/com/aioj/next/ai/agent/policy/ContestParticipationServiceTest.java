@@ -3,7 +3,7 @@ package com.aioj.next.ai.agent.policy;
 import com.aioj.next.ai.domain.ProblemServiceClient;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.contract.contest.RunningContestParticipation;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

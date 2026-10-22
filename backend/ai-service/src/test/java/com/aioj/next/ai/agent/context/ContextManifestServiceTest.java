@@ -2,7 +2,7 @@ package com.aioj.next.ai.agent.context;
 
 import com.aioj.next.ai.persistence.entity.AiContextManifestEntity;
 import com.aioj.next.ai.persistence.mapper.AiContextManifestMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

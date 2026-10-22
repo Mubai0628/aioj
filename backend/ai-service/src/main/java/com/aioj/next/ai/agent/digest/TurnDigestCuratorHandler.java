@@ -19,10 +19,10 @@ import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -129,8 +129,8 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
     @Override
     public void handle(AiAsyncJobEntity job) throws Exception {
         JsonNode payload = objectMapper.readTree(job.getPayloadJson());
-        String turnId = payload.path("turnId").asText();
-        Long userId = payload.path("userId").isNumber() ? payload.path("userId").asLong() : null;
+        String turnId = payload.path("turnId").asString("");
+        Long userId = payload.path("userId").isNumber() ? payload.path("userId").asLong(0L) : null;
         if (turnId.isBlank() || userId == null) {
             throw new IllegalStateException("curate job payload missing turnId/userId");
         }
@@ -146,8 +146,8 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
 
         ObjectNode stubDigest = (ObjectNode) objectMapper.readTree(stub.getStructuredDigest());
         JsonNode source = stubDigest.path("source");
-        AiChatMessageResponse userMessage = fetchMessage(userId, source.path("userMessageId").asText());
-        AiChatMessageResponse assistantMessage = fetchMessage(userId, source.path("assistantMessageId").asText());
+        AiChatMessageResponse userMessage = fetchMessage(userId, source.path("userMessageId").asString(""));
+        AiChatMessageResponse assistantMessage = fetchMessage(userId, source.path("assistantMessageId").asString(""));
 
         GatewayResponse response = modelGateway.call(
                 modelGateway.configFor(AiModelScope.from(properties.getAgentCore().getCuratorScope())),
@@ -211,7 +211,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
                 log.debug("skip non-object memoryCandidate entry: {}", item);
                 continue;
             }
-            String text = item.path("text").asText("");
+            String text = item.path("text").asString("");
             if (text.isBlank()) {
                 log.debug("skip memoryCandidate without text: {}", item);
                 continue;
@@ -222,8 +222,8 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
                     text,
                     textOrNull(item, "category"),
                     textOrNull(item, "memoryKey"),
-                    confidence.isNumber() ? confidence.asDouble() : 0.5,
-                    longTerm.isBoolean() ? longTerm.asBoolean() : null,
+                    confidence.isNumber() ? confidence.asDouble(0.0) : 0.5,
+                    longTerm.isBoolean() ? longTerm.asBoolean(false) : null,
                     textOrNull(item, "evidenceType")));
         }
         return proposals;
@@ -242,7 +242,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
                 log.debug("skip non-object profileSignal entry: {}", item);
                 continue;
             }
-            String signal = item.path("signal").asText("");
+            String signal = item.path("signal").asString("");
             if (signal.isBlank()) {
                 log.debug("skip profileSignal without signal: {}", item);
                 continue;
@@ -253,14 +253,14 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
                     textOrNull(item, "signalType"),
                     textOrNull(item, "knowledgeNode"),
                     textOrNull(item, "polarity"),
-                    score.isNumber() ? score.asDouble() : 0.5));
+                    score.isNumber() ? score.asDouble(0.0) : 0.5));
         }
         return proposals;
     }
 
     private String textOrNull(JsonNode node, String field) {
         JsonNode value = node.path(field);
-        return value.isTextual() && !value.asText().isBlank() ? value.asText() : null;
+        return value.isString() && !value.asString("").isBlank() ? value.asString("") : null;
     }
 
     private AiTurnDigestEntity latestForTurn(String turnId) {
@@ -307,7 +307,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
                 throw new IllegalStateException("curator output is not a JSON object");
             }
             ObjectNode output = (ObjectNode) node;
-            String summary = output.path("summary").asText("");
+            String summary = output.path("summary").asString("");
             if (summary.isBlank()) {
                 throw new IllegalStateException("curator output missing summary");
             }
@@ -325,7 +325,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
         putTextIfPresent(merged, curated, "dialogueAct");
         copyArray(merged, curated, "userIntents", 8);
         copyArray(merged, curated, "topicPath", 6);
-        merged.put("summary", curated.path("summary").asText());
+        merged.put("summary", curated.path("summary").asString(""));
         merged.set("searchKeywords", unionTextArrays(stub.path("searchKeywords"), curated.path("searchKeywords"), 32));
         copyArray(merged, curated, "entities", 20);
         copyArray(merged, curated, "references", 12);
@@ -345,8 +345,8 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
 
     private void putTextIfPresent(ObjectNode target, ObjectNode source, String field) {
         JsonNode value = source.path(field);
-        if (value.isTextual() && !value.asText().isBlank()) {
-            target.put(field, value.asText());
+        if (value.isString() && !value.asString("").isBlank()) {
+            target.put(field, value.asString(""));
         }
     }
 
@@ -361,7 +361,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
             if (count++ >= cap) {
                 break;
             }
-            if (item.isTextual() && item.asText().isBlank()) {
+            if (item.isString() && item.asString("").isBlank()) {
                 continue;
             }
             copy.add(item);
@@ -382,10 +382,10 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
         if (!array.isArray()) {
             return;
         }
-        Iterator<JsonNode> iterator = array.elements();
+        Iterator<JsonNode> iterator = array.values().iterator();
         while (iterator.hasNext() && out.size() < cap) {
             JsonNode item = iterator.next();
-            String text = item.isTextual() ? item.asText() : item.toString();
+            String text = item.isString() ? item.asString("") : item.toString();
             if (!text.isBlank() && text.length() <= 60) {
                 out.add(text);
             }
@@ -397,7 +397,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
         ready.setTurnId(stub.getTurnId());
         ready.setConversationId(stub.getConversationId());
         ready.setUserId(stub.getUserId());
-        ready.setSummary(merged.path("summary").asText());
+        ready.setSummary(merged.path("summary").asString(""));
         ready.setStructuredDigest(objectMapper.writeValueAsString(merged));
         ready.setSearchText(rebuildSearchText(stub.getSearchText(), merged));
         ready.setSourceHash(stub.getSourceHash());
@@ -434,15 +434,15 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
 
     private String rebuildSearchText(String stubSearchText, ObjectNode merged) {
         StringBuilder builder = new StringBuilder(MAX_SEARCH_TEXT_CHARS);
-        append(builder, merged.path("summary").asText(""));
+        append(builder, merged.path("summary").asString(""));
         for (JsonNode keyword : merged.path("searchKeywords")) {
-            append(builder, keyword.asText(""));
+            append(builder, keyword.asString(""));
         }
         for (JsonNode entity : merged.path("entities")) {
-            append(builder, entity.path("canonicalName").asText(""));
+            append(builder, entity.path("canonicalName").asString(""));
         }
         for (JsonNode topic : merged.path("topicPath")) {
-            append(builder, topic.asText(""));
+            append(builder, topic.asString(""));
         }
         append(builder, stubSearchText);
         String text = builder.toString().trim();

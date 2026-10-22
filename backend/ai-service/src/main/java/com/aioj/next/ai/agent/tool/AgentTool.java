@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.tool;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 /**
  * Internal Agent tool SPI (design doc §4.1). Tools never see raw HTTP or the

@@ -65,7 +65,7 @@ import com.aioj.next.contract.ai.AdminContestAiMessageResponse;
 import com.aioj.next.contract.ai.AdminContestAiUsageSummary;
 import com.aioj.next.contract.ai.AdminContestAiAssistanceSummary;
 import com.aioj.next.contract.ai.ProblemDraftRejectRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

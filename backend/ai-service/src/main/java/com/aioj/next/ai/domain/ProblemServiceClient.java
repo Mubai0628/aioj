@@ -28,8 +28,8 @@ import com.aioj.next.contract.problem.TestcasePackageResponse;
 import com.aioj.next.contract.problem.TestcaseUploadCompleteRequest;
 import com.aioj.next.contract.problem.TestcaseUploadInitRequest;
 import com.aioj.next.contract.problem.TestcaseUploadInitResponse;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -184,7 +184,7 @@ public class ProblemServiceClient {
                     .retrieve()
                     .body(String.class);
             JsonNode root = objectMapper.readTree(response);
-            int code = root.has("code") ? root.get("code").asInt() : 0;
+            int code = root.has("code") ? root.get("code").asInt(0) : 0;
             if (code != 0) {
                 return List.of();
             }
@@ -275,7 +275,7 @@ public class ProblemServiceClient {
                     .retrieve()
                     .body(String.class);
             JsonNode root = objectMapper.readTree(response);
-            int code = root.has("code") ? root.get("code").asInt() : 0;
+            int code = root.has("code") ? root.get("code").asInt(0) : 0;
             if (code != 0) {
                 throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "Contest participant profiles unavailable");
             }
@@ -312,7 +312,7 @@ public class ProblemServiceClient {
                     .retrieve()
                     .body(String.class);
             JsonNode root = objectMapper.readTree(response);
-            int code = root.has("code") ? root.get("code").asInt() : 0;
+            int code = root.has("code") ? root.get("code").asInt(0) : 0;
             if (code != 0) {
                 return List.of();
             }
@@ -563,9 +563,9 @@ public class ProblemServiceClient {
     private Long parseProblemId(String response, boolean updatingImportedProblem) {
         try {
             JsonNode root = objectMapper.readTree(response);
-            int code = root.has("code") ? root.get("code").asInt() : 0;
+            int code = root.has("code") ? root.get("code").asInt(0) : 0;
             if (code != 0) {
-                String message = root.has("message") ? root.get("message").asText() : "problem-service rejected request";
+                String message = root.has("message") ? root.get("message").asString("") : "problem-service rejected request";
                 if (updatingImportedProblem && isProblemNotFound(code, message)) {
                     throw new DomainException(ErrorCode.NOT_FOUND, "Imported problem has been deleted");
                 }
@@ -576,7 +576,7 @@ public class ProblemServiceClient {
             if (id == null || !id.canConvertToLong()) {
                 throw new DomainException(ErrorCode.INTERNAL_ERROR, "Problem import response did not include problem id");
             }
-            return id.asLong();
+            return id.asLong(0L);
         } catch (DomainException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -592,7 +592,7 @@ public class ProblemServiceClient {
                 .retrieve()
                 .body(String.class);
         JsonNode root = objectMapper.readTree(response);
-        int code = root.has("code") ? root.get("code").asInt() : 0;
+        int code = root.has("code") ? root.get("code").asInt(0) : 0;
         if (code != 0) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR,
                     "problem-service returned code " + code + " for " + uriTemplate);
@@ -684,9 +684,9 @@ public class ProblemServiceClient {
     private <T> T parseApiData(String response, Class<T> type, String parseErrorMessage) {
         try {
             JsonNode root = objectMapper.readTree(response);
-            int code = root.has("code") ? root.get("code").asInt() : 0;
+            int code = root.has("code") ? root.get("code").asInt(0) : 0;
             if (code != 0) {
-                String message = root.has("message") ? root.get("message").asText() : "problem-service rejected request";
+                String message = root.has("message") ? root.get("message").asString("") : "problem-service rejected request";
                 throw new DomainException(resolveProblemServiceCode(code), message);
             }
             JsonNode data = root.has("data") ? root.get("data") : root;
@@ -803,9 +803,9 @@ public class ProblemServiceClient {
         }
         try {
             JsonNode root = objectMapper.readTree(body);
-            Integer code = root.has("code") && root.get("code").canConvertToInt() ? root.get("code").asInt() : null;
+            Integer code = root.has("code") && root.get("code").canConvertToInt() ? root.get("code").asInt(0) : null;
             String message = root.has("message") && !root.get("message").isNull()
-                    ? root.get("message").asText()
+                    ? root.get("message").asString("")
                     : summarize(body);
             return new ProblemServiceError(code, message, body);
         } catch (Exception ignored) {

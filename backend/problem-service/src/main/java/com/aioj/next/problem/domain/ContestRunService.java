@@ -68,9 +68,9 @@ import com.aioj.next.problem.domain.notification.UserNotificationService;
 import com.aioj.next.problem.domain.notification.ContestInvitationNotificationRequestedEvent;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -1436,7 +1436,7 @@ public class ContestRunService {
                     .map(String::trim)
                     .distinct()
                     .toList();
-        } catch (JsonProcessingException ignored) {
+        } catch (JacksonException ignored) {
             return Arrays.stream(tags.split(","))
                     .map(String::trim)
                     .filter(StringUtils::hasText)

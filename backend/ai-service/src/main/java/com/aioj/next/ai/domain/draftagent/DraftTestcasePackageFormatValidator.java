@@ -1,7 +1,8 @@
 package com.aioj.next.ai.domain.draftagent;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.springframework.stereotype.Service;
@@ -166,7 +167,7 @@ public class DraftTestcasePackageFormatValidator {
             return manifest;
         } catch (ValidationException ex) {
             throw ex;
-        } catch (IOException ex) {
+        } catch (JacksonException ex) {
             throw invalid("manifest.json is not valid JSON");
         }
     }

@@ -1,11 +1,12 @@
 package com.aioj.next.judge.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.aioj.next.contract.judge.JudgeTaskMessage;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -47,7 +48,8 @@ public class JudgeQueueConfig {
     }
 
     @Bean
-    Jackson2JsonMessageConverter jackson2JsonMessageConverter(ObjectMapper objectMapper) {
-        return new Jackson2JsonMessageConverter(objectMapper);
+    JacksonJsonMessageConverter jacksonJsonMessageConverter(JsonMapper jsonMapper) {
+        // Spring AMQP 4 trusts no type-id packages by default; allow only the judge message contract.
+        return new JacksonJsonMessageConverter(jsonMapper, JudgeTaskMessage.class.getPackageName());
     }
 }

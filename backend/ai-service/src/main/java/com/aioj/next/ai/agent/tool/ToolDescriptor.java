@@ -1,7 +1,7 @@
 package com.aioj.next.ai.agent.tool;
 
 import com.aioj.next.ai.agent.context.DataClassification;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 import java.time.Duration;
 import java.util.Set;

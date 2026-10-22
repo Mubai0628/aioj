@@ -8,7 +8,7 @@ import com.aioj.next.ai.agent.policy.ParticipantStatus;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
 import com.aioj.next.contract.problem.ProblemVisibility;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -68,8 +68,8 @@ class ContestOutputGuardTest {
         assertThat(audit.reasonCode()).isEqualTo(ContestOutputGuard.REASON_FULL_CODE);
         assertThat(audit.degraded()).isFalse();
         // First hit wins: later checks are not run.
-        assertThat(audit.detail().get("checksRun").asText()).isEqualTo("full_code");
-        assertThat(audit.detail().get("fullCodeFeatures").asText()).contains("ENTRY_POINT");
+        assertThat(audit.detail().get("checksRun").asString()).isEqualTo("full_code");
+        assertThat(audit.detail().get("fullCodeFeatures").asString()).contains("ENTRY_POINT");
         assertThat(audit.detail().get("contentChars").asInt()).isEqualTo(draft.length());
         assertThat(audit.detail().get("regenerated").asBoolean()).isFalse();
         // The violating text itself is never stored.
@@ -88,7 +88,7 @@ class ContestOutputGuardTest {
         assertThat(audit.decision()).isEqualTo(GuardDecision.PASS);
         assertThat(audit.reasonCode()).isEqualTo("no_violation");
         // No L3 PRIVATE hit: the private-statement check is skipped entirely.
-        assertThat(audit.detail().get("checksRun").asText()).isEqualTo("full_code,hidden_test");
+        assertThat(audit.detail().get("checksRun").asString()).isEqualTo("full_code,hidden_test");
     }
 
     @Test
@@ -103,7 +103,7 @@ class ContestOutputGuardTest {
         assertThat(verdict.intercepted()).isTrue();
         assertThat(verdict.reasonCode()).isEqualTo(ContestOutputGuard.REASON_PRIVATE_STATEMENT);
         AuditRecord audit = captureAudit();
-        assertThat(audit.detail().get("checksRun").asText()).isEqualTo("full_code,private_statement");
+        assertThat(audit.detail().get("checksRun").asString()).isEqualTo("full_code,private_statement");
         assertThat(audit.detail().get("regenerated").asBoolean()).isTrue();
         assertThat(audit.matchedProblems()).hasSize(1);
         assertThat(audit.matchedProblems().get(0).problemId()).isEqualTo(1001L);
@@ -122,7 +122,7 @@ class ContestOutputGuardTest {
 
         assertThat(verdict.intercepted()).isFalse();
         AuditRecord audit = captureAudit();
-        assertThat(audit.detail().get("checksRun").asText()).isEqualTo("full_code,hidden_test");
+        assertThat(audit.detail().get("checksRun").asString()).isEqualTo("full_code,hidden_test");
     }
 
     @Test
@@ -135,7 +135,7 @@ class ContestOutputGuardTest {
         assertThat(verdict.intercepted()).isTrue();
         assertThat(verdict.reasonCode()).isEqualTo(ContestOutputGuard.REASON_HIDDEN_TEST);
         AuditRecord audit = captureAudit();
-        assertThat(audit.detail().get("checksRun").asText()).isEqualTo("full_code,hidden_test");
+        assertThat(audit.detail().get("checksRun").asString()).isEqualTo("full_code,hidden_test");
     }
 
     @Test
@@ -155,7 +155,7 @@ class ContestOutputGuardTest {
         assertThat(verdict.reasonCode()).isEqualTo(ContestOutputGuard.REASON_DENY_MATCH_SUBSTANTIVE);
         AuditRecord audit = captureAudit();
         assertThat(audit.decision()).isEqualTo(GuardDecision.REFUSE);
-        assertThat(audit.detail().get("checksRun").asText()).isEqualTo("full_code,deny_match");
+        assertThat(audit.detail().get("checksRun").asString()).isEqualTo("full_code,deny_match");
         assertThat(audit.matchedProblems()).hasSize(1);
         assertThat(audit.matchedProblems().get(0).problemId()).isEqualTo(2002L);
     }
@@ -174,7 +174,7 @@ class ContestOutputGuardTest {
         assertThat(verdict.intercepted()).isTrue();
         assertThat(verdict.reasonCode()).isEqualTo(ContestOutputGuard.REASON_DENY_MATCH_SUBSTANTIVE);
         AuditRecord audit = captureAudit();
-        assertThat(audit.detail().get("checksRun").asText()).isEqualTo("full_code,private_statement,deny_match");
+        assertThat(audit.detail().get("checksRun").asString()).isEqualTo("full_code,private_statement,deny_match");
     }
 
     @Test
@@ -189,7 +189,7 @@ class ContestOutputGuardTest {
         assertThat(verdict.intercepted()).isFalse();
         AuditRecord audit = captureAudit();
         assertThat(audit.decision()).isEqualTo(GuardDecision.PASS);
-        assertThat(audit.detail().get("checksRun").asText()).isEqualTo("full_code,deny_match,hidden_test");
+        assertThat(audit.detail().get("checksRun").asString()).isEqualTo("full_code,deny_match,hidden_test");
     }
 
     @Test
@@ -205,7 +205,7 @@ class ContestOutputGuardTest {
 
         assertThat(verdict.intercepted()).isFalse();
         AuditRecord audit = captureAudit();
-        assertThat(audit.detail().get("checksRun").asText()).isEqualTo("full_code,hidden_test");
+        assertThat(audit.detail().get("checksRun").asString()).isEqualTo("full_code,hidden_test");
     }
 
     @Test
@@ -237,7 +237,7 @@ class ContestOutputGuardTest {
         // P3-6: race-triggered re-evaluations are ordinary L4 verdicts whose audit
         // detail names the trigger.
         assertThat(verdict.intercepted()).isFalse();
-        assertThat(captureAudit().detail().get("trigger").asText()).isEqualTo("recheck");
+        assertThat(captureAudit().detail().get("trigger").asString()).isEqualTo("recheck");
     }
 
     @Test
@@ -263,7 +263,7 @@ class ContestOutputGuardTest {
         assertThat(verdict.intercepted()).isTrue();
         AuditRecord audit = captureAudit();
         assertThat(audit.degraded()).isTrue();
-        assertThat(audit.detail().get("trigger").asText()).isEqualTo("recheck");
+        assertThat(audit.detail().get("trigger").asString()).isEqualTo("recheck");
     }
 
     private ContestPolicyView participantView() {

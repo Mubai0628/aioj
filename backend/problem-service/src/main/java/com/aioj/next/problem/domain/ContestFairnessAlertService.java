@@ -32,9 +32,9 @@ import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionRequestFingerprintMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -421,7 +421,7 @@ public class ContestFairnessAlertService {
     private String json(Map<String, Object> value) {
         try {
             return objectMapper.writeValueAsString(value == null ? Map.of() : value);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Could not serialize fairness alert evidence");
         }
     }
@@ -432,7 +432,7 @@ public class ContestFairnessAlertService {
         }
         try {
             return objectMapper.readValue(json, MAP_TYPE);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return Map.of();
         }
     }

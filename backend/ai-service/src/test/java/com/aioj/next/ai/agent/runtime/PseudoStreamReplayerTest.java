@@ -1,7 +1,7 @@
 package com.aioj.next.ai.agent.runtime;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -28,7 +28,7 @@ class PseudoStreamReplayerTest {
         for (int i = 0; i < payloads.size(); i++) {
             JsonNode node = objectMapper.readTree(payloads.get(i));
             assertThat(node.has("text")).isTrue();
-            String chunk = node.get("text").asText();
+            String chunk = node.get("text").asString();
             assertThat(chunk).hasSize(i < 3 ? 300 : 100);
             reassembled.append(chunk);
         }
@@ -51,15 +51,15 @@ class PseudoStreamReplayerTest {
         List<String> payloads = replayer.deltaPayloads(text);
 
         assertThat(payloads).hasSize(2);
-        String first = objectMapper.readTree(payloads.get(0)).get("text").asText();
-        String second = objectMapper.readTree(payloads.get(1)).get("text").asText();
+        String first = objectMapper.readTree(payloads.get(0)).get("text").asString();
+        String second = objectMapper.readTree(payloads.get(1)).get("text").asString();
         // Boundary moved one char back so the pair stays whole in the second chunk.
         assertThat(first).hasSize(299);
         assertThat(second).startsWith(emoji);
         assertThat(first + second).isEqualTo(text);
         // Every payload is well-formed JSON (no lone surrogates escaped mid-pair).
         for (String payload : payloads) {
-            assertThat(objectMapper.readTree(payload).get("text").asText()).isNotEmpty();
+            assertThat(objectMapper.readTree(payload).get("text").asString()).isNotEmpty();
         }
     }
 
@@ -69,7 +69,7 @@ class PseudoStreamReplayerTest {
         List<String> payloads = replayer.deltaPayloads(text);
         StringBuilder reassembled = new StringBuilder();
         for (String payload : payloads) {
-            reassembled.append(objectMapper.readTree(payload).get("text").asText());
+            reassembled.append(objectMapper.readTree(payload).get("text").asString());
         }
         assertThat(reassembled.toString()).isEqualTo(text);
     }
@@ -91,6 +91,6 @@ class PseudoStreamReplayerTest {
         String text = "第一行\"引号\"\n第二行\\反斜杠";
         List<String> payloads = replayer.deltaPayloads(text);
         assertThat(payloads).hasSize(1);
-        assertThat(objectMapper.readTree(payloads.get(0)).get("text").asText()).isEqualTo(text);
+        assertThat(objectMapper.readTree(payloads.get(0)).get("text").asString()).isEqualTo(text);
     }
 }

@@ -4,8 +4,9 @@ server:
 spring:
   application:
     name: ai-oj-auth-service
-  config:
-    import: optional:nacos:${spring.application.name}.yml
+  jackson:
+    # Jackson 3 (Spring Boot 4): keep the Jackson 2 defaults this service was built against.
+    use-jackson2-defaults: true
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://localhost:3306/ai_oj_next?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
     username: ${MYSQL_USER:aioj}
@@ -17,18 +18,6 @@ spring:
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
     clean-disabled: true
-  cloud:
-    nacos:
-      discovery:
-        enabled: ${NACOS_ENABLED:false}
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
-      config:
-        enabled: ${NACOS_ENABLED:false}
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
-        file-extension: yml
-    sentinel:
-      transport:
-        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
 
 aioj:
   auth:

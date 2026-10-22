@@ -18,7 +18,7 @@ import com.aioj.next.common.error.GlobalExceptionHandler;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.contract.ai.AiConversationContextDebugResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -89,8 +89,8 @@ class AiConversationContextDebugControllerTest {
                 aiMemoryDebugService,
                 null,
                 problemDraftStore,
-                new AiAssistantResponseNormalizer(new ObjectMapper().findAndRegisterModules(), new ClarificationSchemaRepairer()),
-                new ObjectMapper().findAndRegisterModules()
+                new AiAssistantResponseNormalizer(JsonMapper.builderWithJackson2Defaults().build(), new ClarificationSchemaRepairer()),
+                JsonMapper.builderWithJackson2Defaults().build()
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())

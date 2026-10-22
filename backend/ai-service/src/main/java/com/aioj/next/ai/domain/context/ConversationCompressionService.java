@@ -1,7 +1,7 @@
 package com.aioj.next.ai.domain.context;
 
 import com.aioj.next.ai.persistence.entity.AiMessageEntity;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

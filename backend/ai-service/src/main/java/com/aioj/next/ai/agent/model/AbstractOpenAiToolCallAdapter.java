@@ -6,8 +6,8 @@ import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
@@ -153,9 +153,9 @@ abstract class AbstractOpenAiToolCallAdapter implements ToolCallAdapter {
         for (JsonNode call : message.path("tool_calls")) {
             JsonNode function = call.path("function");
             toolCalls.add(new GatewayToolCall(
-                    call.path("id").asText(""),
-                    ToolNameCodec.toInternal(function.path("name").asText("")),
-                    function.path("arguments").isTextual() ? function.get("arguments").asText() : function.path("arguments").toString()
+                    call.path("id").asString(""),
+                    ToolNameCodec.toInternal(function.path("name").asString("")),
+                    function.path("arguments").isString() ? function.get("arguments").asString("") : function.path("arguments").toString()
             ));
         }
         JsonNode usage = root.path("usage");
@@ -166,7 +166,7 @@ abstract class AbstractOpenAiToolCallAdapter implements ToolCallAdapter {
                 content,
                 reasoningContent,
                 toolCalls,
-                choice.path("finish_reason").asText(""),
+                choice.path("finish_reason").asString(""),
                 promptTokens,
                 completionTokens,
                 cacheHitTokens,
@@ -179,15 +179,15 @@ abstract class AbstractOpenAiToolCallAdapter implements ToolCallAdapter {
         if (content == null || content.isMissingNode() || content.isNull()) {
             return "";
         }
-        if (content.isTextual()) {
-            return content.asText();
+        if (content.isString()) {
+            return content.asString("");
         }
         if (content.isArray()) {
             StringBuilder text = new StringBuilder();
             for (JsonNode part : content) {
                 JsonNode value = part.path("text");
-                if (value.isTextual()) {
-                    text.append(value.asText());
+                if (value.isString()) {
+                    text.append(value.asString(""));
                 }
             }
             return text.toString();

@@ -1,7 +1,7 @@
 package com.aioj.next.ai.agent.runtime;
 
 import com.aioj.next.ai.config.AiProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -67,7 +67,7 @@ public class PseudoStreamReplayer {
     private String toDeltaJson(String chunk) {
         try {
             return objectMapper.writeValueAsString(java.util.Map.of("text", chunk));
-        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+        } catch (tools.jackson.core.JacksonException ex) {
             // Map-of-string serialization cannot realistically fail; keep the
             // replayer total by falling back to a minimal escaped payload.
             return "{\"text\":\"\"}";

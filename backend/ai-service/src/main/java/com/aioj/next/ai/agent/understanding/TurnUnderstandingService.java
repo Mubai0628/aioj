@@ -9,8 +9,8 @@ import com.aioj.next.ai.agent.model.ModelUsage;
 import com.aioj.next.ai.agent.model.ToolChoiceMode;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.AiModelScope;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -134,7 +134,7 @@ public class TurnUnderstandingService {
     }
 
     private String textIfKnown(JsonNode node, String field, Set<String> known) {
-        String value = node.path(field).asText("");
+        String value = node.path(field).asString("");
         return known.contains(value) ? value : null;
     }
 
@@ -144,8 +144,8 @@ public class TurnUnderstandingService {
         }
         LinkedHashSet<String> values = new LinkedHashSet<>();
         for (JsonNode item : array) {
-            if (item.isTextual() && known.contains(item.asText())) {
-                values.add(item.asText());
+            if (item.isString() && known.contains(item.asString(""))) {
+                values.add(item.asString(""));
             }
         }
         return List.copyOf(values);

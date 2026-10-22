@@ -9,7 +9,7 @@ import com.aioj.next.ai.persistence.entity.AiMemoryEvidenceEntity;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryEvidenceMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

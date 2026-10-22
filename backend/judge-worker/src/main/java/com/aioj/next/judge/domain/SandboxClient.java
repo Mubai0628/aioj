@@ -8,7 +8,8 @@ import com.aioj.next.judge.config.JudgeWorkerProperties;
 import com.aioj.next.judge.persistence.entity.SubmissionEntity;
 import com.aioj.next.judge.persistence.mapper.SubmissionMapper;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -380,7 +381,7 @@ public class SandboxClient {
         CheckerJsonResult checkerResult;
         try {
             checkerResult = objectMapper.readValue(nullToEmpty(checkerStdout), CheckerJsonResult.class);
-        } catch (IOException ex) {
+        } catch (JacksonException ex) {
             return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR,
                     "Custom checker returned invalid JSON: " + safeMessage(ex),
                     programTimeMs, programMemoryKb, actualOutput, firstText(programStderr, checkerStderr),

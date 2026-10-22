@@ -23,7 +23,8 @@ import com.aioj.next.contract.ai.ProblemDraftRequest;
 import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
 import com.aioj.next.contract.ai.ProblemDraftGenerationJobResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -91,7 +92,7 @@ class AiProblemDraftStreamControllerTest {
     @Mock
     private AiAssistantResponseNormalizer responseNormalizer;
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().build();
     private ExecutorService executor;
     private MockMvc mockMvc;
 

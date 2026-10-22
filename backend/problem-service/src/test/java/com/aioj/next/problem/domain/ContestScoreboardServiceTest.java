@@ -42,7 +42,7 @@ import com.aioj.next.problem.persistence.mapper.LearningGroupMemberMapper;
 import com.aioj.next.problem.persistence.mapper.ProblemSubtaskMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionCaseResultMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

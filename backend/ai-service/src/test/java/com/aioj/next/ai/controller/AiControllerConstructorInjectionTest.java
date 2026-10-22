@@ -13,7 +13,7 @@ import com.aioj.next.ai.domain.memory.AiMemoryCandidateService;
 import com.aioj.next.ai.domain.memory.AiMemoryDebugService;
 import com.aioj.next.ai.domain.memory.AiMemoryReviewService;
 import com.aioj.next.ai.domain.response.AiAssistantResponseNormalizer;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 

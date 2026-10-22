@@ -2,10 +2,10 @@ package com.aioj.next.ai.domain.response;
 
 import com.aioj.next.ai.domain.AiCompletion;
 import com.aioj.next.ai.domain.clarification.ClarificationSchemaRepairer;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -52,7 +52,7 @@ public class AiAssistantResponseNormalizer {
         JsonNode root;
         try {
             root = objectMapper.readTree(candidate.json());
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             if (looksLikeInternalProtocol(raw) || candidate.looksInternal()) {
                 return malformedFallback(completion, List.of(WARNING_MALFORMED_INTERNAL_JSON));
             }
@@ -238,14 +238,14 @@ public class AiAssistantResponseNormalizer {
             List<AiCompletion.ClarificationOption> options = clarificationOptions(node.get("options"));
             AiCompletion.ClarificationInput input = clarificationInput(node.get("input"), options);
             return clarificationSchemaRepairer.repair(new AiCompletion.Clarification(
-                    safeInline(node.path("id").asText(""), 96),
-                    safeInline(node.path("priority").asText("helpful"), 32),
-                    safeInline(node.path("title").asText(""), 80),
-                    safeBlock(node.path("prompt").asText(""), 500),
+                    safeInline(node.path("id").asString(""), 96),
+                    safeInline(node.path("priority").asString("helpful"), 32),
+                    safeInline(node.path("title").asString(""), 80),
+                    safeBlock(node.path("prompt").asString(""), 500),
                     input,
                     input.options() == null || input.options().isEmpty() ? options : input.options(),
-                    safeInline(node.path("defaultAction").asText(""), 32),
-                    safeBlock(node.path("assumption").asText(""), 240)
+                    safeInline(node.path("defaultAction").asString(""), 32),
+                    safeBlock(node.path("assumption").asString(""), 240)
             ));
         }
         if (root.has("clarificationOptions")) {
@@ -259,12 +259,12 @@ public class AiAssistantResponseNormalizer {
             return AiCompletion.ClarificationInput.fromOptions(fallbackOptions);
         }
         return new AiCompletion.ClarificationInput(
-                safeInline(node.path("kind").asText(""), 32),
+                safeInline(node.path("kind").asString(""), 32),
                 node.path("required").asBoolean(false),
                 node.has("options") ? clarificationOptions(node.get("options")) : fallbackOptions,
                 node.path("allowCustom").asBoolean(false),
-                safeInline(node.path("customKind").asText(""), 32),
-                safeInline(node.path("placeholder").asText(""), 200)
+                safeInline(node.path("customKind").asString(""), 32),
+                safeInline(node.path("placeholder").asString(""), 200)
         );
     }
 
@@ -277,16 +277,16 @@ public class AiAssistantResponseNormalizer {
             if (options.size() >= 5) {
                 break;
             }
-            if (item.isTextual()) {
-                String message = safeInline(item.asText(), 240);
+            if (item.isString()) {
+                String message = safeInline(item.asString(""), 240);
                 options.add(new AiCompletion.ClarificationOption("choice", summarizeOptionLabel(message), message, "", ""));
             } else if (item.isObject()) {
                 options.add(new AiCompletion.ClarificationOption(
-                        clarificationOptionType(item.path("type").asText("")),
-                        safeInline(item.path("label").asText(""), 48),
-                        safeInline(item.path("message").asText(""), 240),
-                        safeInline(item.path("placeholder").asText(""), 200),
-                        safeInline(item.path("messageTemplate").asText(""), 240)
+                        clarificationOptionType(item.path("type").asString("")),
+                        safeInline(item.path("label").asString(""), 48),
+                        safeInline(item.path("message").asString(""), 240),
+                        safeInline(item.path("placeholder").asString(""), 200),
+                        safeInline(item.path("messageTemplate").asString(""), 240)
                 ));
             }
         }
@@ -318,7 +318,7 @@ public class AiAssistantResponseNormalizer {
         metadata.put("stuckLayer", completion.stuckLayer());
         metadata.put("studentLevel", completion.studentLevel());
         if (root.has("rawDebugId")) {
-            metadata.put("rawDebugId", safeInline(root.path("rawDebugId").asText(""), 80));
+            metadata.put("rawDebugId", safeInline(root.path("rawDebugId").asString(""), 80));
         }
         return metadata;
     }
@@ -341,7 +341,7 @@ public class AiAssistantResponseNormalizer {
 
     private String text(JsonNode root, String field) {
         JsonNode value = root.get(field);
-        return value == null || value.isNull() ? null : value.asText();
+        return value == null || value.isNull() ? null : value.asString("");
     }
 
     private String textOr(JsonNode root, String field, String fallback) {

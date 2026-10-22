@@ -14,7 +14,7 @@ import com.aioj.next.ai.persistence.mapper.AiUserMemoryMapper;
 import com.aioj.next.contract.ai.AiMemoryReviewActionRequest;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,7 +70,7 @@ class AiMemoryReviewServiceTest {
                 mergeService,
                 new AiMemoryEventPayloadSanitizer(),
                 auditWriter,
-                new ObjectMapper().findAndRegisterModules()
+                JsonMapper.builderWithJackson2Defaults().build()
         );
     }
 

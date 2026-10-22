@@ -37,11 +37,11 @@ import com.aioj.next.contract.ai.ProblemDraftToolCallResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -217,7 +217,7 @@ public class ProblemDraftWorkspaceService {
     public ProblemDraftWorkingState state(ProblemDraftWorkspaceEntity workspace) {
         try {
             return objectMapper.readValue(workspace.getWorkingStateJson(), ProblemDraftWorkingState.class);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Problem draft workspace state is invalid");
         }
     }
@@ -248,7 +248,7 @@ public class ProblemDraftWorkspaceService {
             throw new DomainException(ErrorCode.CONFLICT, "Problem draft workspace version conflict");
         }
         ObjectNode current = objectMapper.valueToTree(state(workspace));
-        patch.fieldNames().forEachRemaining(field -> {
+        patch.propertyNames().forEach(field -> {
             if (!PATCHABLE_FIELDS.contains(field)) {
                 throw new DomainException(ErrorCode.BAD_REQUEST, "Unsupported problem draft patch field: " + field);
             }
@@ -257,7 +257,7 @@ public class ProblemDraftWorkspaceService {
         ProblemDraftWorkingState next;
         try {
             next = objectMapper.treeToValue(current, ProblemDraftWorkingState.class);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Problem draft patch has invalid field types");
         }
         String oldVerificationFingerprint = workspace.getVerificationFingerprint();
@@ -660,7 +660,7 @@ public class ProblemDraftWorkspaceService {
         }
         try {
             return objectMapper.readValue(json, ValidationSnapshot.class);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return null;
         }
     }
@@ -762,7 +762,7 @@ public class ProblemDraftWorkspaceService {
         }
         try {
             return objectMapper.readValue(json, Object.class);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return Map.of("status", "UNREADABLE");
         }
     }
@@ -774,7 +774,7 @@ public class ProblemDraftWorkspaceService {
         try {
             Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<>() { });
             return parsed == null ? Map.of() : parsed;
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return Map.of();
         }
     }
@@ -782,7 +782,7 @@ public class ProblemDraftWorkspaceService {
     private String toJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Problem draft workspace value could not be serialized");
         }
     }
@@ -805,10 +805,10 @@ public class ProblemDraftWorkspaceService {
         }
         try {
             JsonNode node = objectMapper.readTree(json);
-            String status = node.path("status").asText("UNKNOWN");
-            String classification = node.path("classification").asText("");
+            String status = node.path("status").asString("UNKNOWN");
+            String classification = node.path("classification").asString("");
             return classification.isBlank() ? status : status + " · " + classification;
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return null;
         }
     }

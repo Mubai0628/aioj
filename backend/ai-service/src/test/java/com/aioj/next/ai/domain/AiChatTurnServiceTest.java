@@ -12,7 +12,7 @@ import com.aioj.next.contract.contest.ContestAiPolicyResponse;
 import com.aioj.next.contract.problem.ProblemVisibility;
 import com.aioj.next.ai.persistence.entity.AiConversationEntity;
 import com.aioj.next.ai.persistence.entity.AiTurnEntity;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 
@@ -666,7 +666,7 @@ class AiChatTurnServiceTest {
                     afterTurnEventService,
                     memoryClarificationService,
                     new AiCapacityService(new com.aioj.next.ai.config.AiProperties()),
-                    new AiAssistantResponseNormalizer(new ObjectMapper().findAndRegisterModules(), new ClarificationSchemaRepairer()),
+                    new AiAssistantResponseNormalizer(JsonMapper.builderWithJackson2Defaults().build(), new ClarificationSchemaRepairer()),
                     contestTurnGuard,
                     responsePolicyGuard,
                     turnService,

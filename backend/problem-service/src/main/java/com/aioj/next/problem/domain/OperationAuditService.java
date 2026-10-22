@@ -11,8 +11,8 @@ import com.aioj.next.problem.persistence.entity.OperationAuditEventEntity;
 import com.aioj.next.problem.persistence.mapper.OperationAuditEventMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -157,7 +157,7 @@ public class OperationAuditService {
         }
         try {
             return objectMapper.writeValueAsString(summary);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return "{\"error\":\"summary serialization failed\"}";
         }
     }

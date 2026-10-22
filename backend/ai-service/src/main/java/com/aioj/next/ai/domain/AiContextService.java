@@ -21,7 +21,7 @@ import com.aioj.next.contract.ai.AiProblemContextResponse;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
 import com.aioj.next.contract.contest.ContestAiPolicyResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

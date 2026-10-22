@@ -3,8 +3,8 @@ package com.aioj.next.ai.agent.tool;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftWorkspaceMapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -45,7 +45,7 @@ class ToolBrokerTest {
 
         assertThat(result.ok()).isTrue();
         JsonNode payload = objectMapper.readTree(result.data());
-        assertThat(payload.path("status").asText()).isEqualTo("SUCCESS");
+        assertThat(payload.path("status").asString()).isEqualTo("SUCCESS");
         assertThat(payload.path("instructionAllowed").asBoolean()).isFalse();
         assertThat(payload.path("data").path("hits").isArray()).isTrue();
         verify(auditService).record(any(), anyLong(), anyInt(), any(), anyString(), anyString(),
@@ -63,7 +63,7 @@ class ToolBrokerTest {
 
         assertThat(result.ok()).isFalse();
         assertThat(result.status()).isEqualTo(ToolStatus.SCHEMA_ERROR);
-        assertThat(objectMapper.readTree(result.data()).path("errorCode").asText())
+        assertThat(objectMapper.readTree(result.data()).path("errorCode").asString())
                 .isEqualTo("ARGUMENTS_SCHEMA_VIOLATION");
     }
 
@@ -77,7 +77,7 @@ class ToolBrokerTest {
                 "call-3", "context.search_exact", "{\"query\":\"x\"}");
 
         assertThat(result.status()).isEqualTo(ToolStatus.POLICY_DENIED);
-        assertThat(objectMapper.readTree(result.data()).path("errorCode").asText()).isEqualTo("MISSING_SCOPE");
+        assertThat(objectMapper.readTree(result.data()).path("errorCode").asString()).isEqualTo("MISSING_SCOPE");
     }
 
     @Test
@@ -98,7 +98,7 @@ class ToolBrokerTest {
                 "call-5", "context.search_exact", "{\"query\":\"x\"}");
         assertThat(result.status()).isEqualTo(ToolStatus.EXECUTION_ERROR);
         JsonNode payload = objectMapper.readTree(result.data());
-        assertThat(payload.path("errorCode").asText()).isEqualTo("TOOL_EXECUTION_ERROR");
+        assertThat(payload.path("errorCode").asString()).isEqualTo("TOOL_EXECUTION_ERROR");
     }
 
     @Test
@@ -149,7 +149,7 @@ class ToolBrokerTest {
                 "call-timeout", "context.search_exact", "{\"query\":\"x\"}");
 
         assertThat(result.status()).isEqualTo(ToolStatus.TIMEOUT);
-        assertThat(objectMapper.readTree(result.data()).path("errorCode").asText())
+        assertThat(objectMapper.readTree(result.data()).path("errorCode").asString())
                 .isEqualTo("TOOL_EXECUTION_TIMEOUT");
     }
 

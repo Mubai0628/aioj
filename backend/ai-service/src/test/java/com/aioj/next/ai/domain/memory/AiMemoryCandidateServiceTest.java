@@ -15,7 +15,7 @@ import com.aioj.next.ai.persistence.mapper.AiMemoryVersionMapper;
 import com.aioj.next.ai.persistence.mapper.AiUserMemoryMapper;
 import com.aioj.next.common.error.DomainException;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,7 +64,7 @@ class AiMemoryCandidateServiceTest {
                 memoryMapper,
                 retrievalService,
                 mergeService,
-                new ObjectMapper().findAndRegisterModules()
+                JsonMapper.builderWithJackson2Defaults().build()
         );
     }
 

@@ -3,7 +3,8 @@ package com.aioj.next.ai.domain;
 import com.aioj.next.contract.ai.AiProblemContextResponse;
 import com.aioj.next.contract.ai.AiSubmissionCaseContext;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -16,7 +17,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class AiSubmissionContextResolverTest {
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().build();
     private final AiProblemContextResolver problemContextResolver = mock(AiProblemContextResolver.class);
     private final AiSubmissionContextResolver resolver = new AiSubmissionContextResolver(
             mock(ProblemServiceClient.class),

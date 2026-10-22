@@ -2,8 +2,8 @@ package com.aioj.next.ai.agent.profile;
 
 import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobHandler;
 import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -36,7 +36,7 @@ public class ProfileAggregateJobHandler implements AgentAsyncJobHandler {
     @Override
     public void handle(AiAsyncJobEntity job) throws Exception {
         JsonNode payload = objectMapper.readTree(job.getPayloadJson());
-        Long userId = payload.path("userId").isNumber() ? payload.path("userId").asLong() : null;
+        Long userId = payload.path("userId").isNumber() ? payload.path("userId").asLong(0L) : null;
         if (userId == null) {
             throw new IllegalStateException("profile aggregate job payload missing userId");
         }

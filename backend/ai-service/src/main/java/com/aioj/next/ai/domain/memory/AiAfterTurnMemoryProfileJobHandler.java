@@ -9,8 +9,8 @@ import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
 import com.aioj.next.ai.persistence.entity.AiMessageEntity;
 import com.aioj.next.ai.persistence.mapper.AiMessageMapper;
 import com.aioj.next.contract.ai.AiChatRequest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -179,7 +179,7 @@ public class AiAfterTurnMemoryProfileJobHandler implements AiMemoryJobHandler {
         if (value.isNumber()) {
             return value.longValue();
         }
-        String text = value.asText("");
+        String text = value.asString("");
         if (text.isBlank()) {
             return null;
         }
@@ -195,7 +195,7 @@ public class AiAfterTurnMemoryProfileJobHandler implements AiMemoryJobHandler {
         if (value == null || value.isNull()) {
             throw new AiMemoryJobPermanentFailure("AI after-turn memory job missing " + field);
         }
-        String text = value.asText("");
+        String text = value.asString("");
         if (text.isBlank()) {
             throw new AiMemoryJobPermanentFailure("AI after-turn memory job empty " + field);
         }

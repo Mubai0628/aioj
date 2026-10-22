@@ -10,7 +10,7 @@ import com.aioj.next.ai.persistence.mapper.AiLearningWeaknessMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
 import com.aioj.next.ai.persistence.mapper.AiProfileSignalMapper;
 import com.aioj.next.ai.persistence.mapper.AiUserMemoryMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

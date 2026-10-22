@@ -59,41 +59,6 @@ services:
     mem_limit: 256m
     cpus: "0.50"
 
-  nacos:
-    image: nacos/nacos-server:v3.0.3
-    profiles: ["discovery", "infra"]
-    environment:
-      MODE: standalone
-      JVM_XMS: 256m
-      JVM_XMX: 384m
-      NACOS_AUTH_ENABLE: "true"
-      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-replace-with-long-nacos-token}
-      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-nacos}
-      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-nacos}
-    ports:
-      - "127.0.0.1:8848:8848"
-      - "127.0.0.1:9848:9848"
-      - "127.0.0.1:9849:9849"
-      - "127.0.0.1:7848:7848"
-      - "127.0.0.1:8080:8080"
-    volumes:
-      - nacos-data:/home/nacos/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8848/nacos/actuator/health || exit 1"]
-      interval: 15s
-      timeout: 8s
-      retries: 20
-    mem_limit: 512m
-    cpus: "0.50"
-
-  sentinel-dashboard:
-    image: bladex/sentinel-dashboard:1.8.8
-    profiles: ["observability", "infra"]
-    ports:
-      - "127.0.0.1:8858:8858"
-    mem_limit: 192m
-    cpus: "0.25"
-
   prometheus:
     image: prom/prometheus:v3.0.1
     profiles: ["observability"]
@@ -122,9 +87,6 @@ services:
     environment:
       SERVER_PORT: 8101
       JAVA_OPTS: ${GATEWAY_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError}
-      NACOS_ENABLED: ${NACOS_ENABLED:-false}
-      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
-      SENTINEL_DASHBOARD: ${SENTINEL_DASHBOARD:-sentinel-dashboard:8858}
       AUTH_SERVICE_URI: http://auth-service:8201
       PROBLEM_SERVICE_URI: http://problem-service:8202
       AI_SERVICE_URI: http://ai-service:8204
@@ -168,9 +130,6 @@ services:
       AUTH_DB_POOL_MIN_IDLE: ${AUTH_DB_POOL_MIN_IDLE:-1}
       DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-5000}
       FLYWAY_ENABLED: ${AUTH_FLYWAY_ENABLED:-true}
-      NACOS_ENABLED: ${NACOS_ENABLED:-false}
-      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
-      SENTINEL_DASHBOARD: ${SENTINEL_DASHBOARD:-sentinel-dashboard:8858}
       JWT_HMAC_SECRET: ${JWT_HMAC_SECRET:-replace-with-at-least-32-bytes-dev-secret}
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:-health}
       SPRINGDOC_ENABLED: ${SPRINGDOC_ENABLED:-false}
@@ -207,8 +166,6 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-aioj}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-rabbit-me}
       FLYWAY_ENABLED: ${PROBLEM_FLYWAY_ENABLED:-false}
-      NACOS_ENABLED: ${NACOS_ENABLED:-false}
-      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
       JWT_HMAC_SECRET: ${JWT_HMAC_SECRET:-replace-with-at-least-32-bytes-dev-secret}
       AIOJ_INTERNAL_API_TOKEN: ${AIOJ_INTERNAL_API_TOKEN:-}
       AI_SERVICE_URI: http://ai-service:8204
@@ -256,8 +213,6 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-change-redis-me}
       FLYWAY_ENABLED: ${AI_FLYWAY_ENABLED:-false}
-      NACOS_ENABLED: ${NACOS_ENABLED:-false}
-      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
       JWT_HMAC_SECRET: ${JWT_HMAC_SECRET:-replace-with-at-least-32-bytes-dev-secret}
       AIOJ_INTERNAL_API_TOKEN: ${AIOJ_INTERNAL_API_TOKEN:-}
       PROBLEM_SERVICE_URI: http://problem-service:8202
@@ -320,8 +275,6 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-aioj}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-rabbit-me}
-      NACOS_ENABLED: ${NACOS_ENABLED:-false}
-      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
       AIOJ_JUDGE_CACHE_ROOT: /aioj/cases
       SANDBOX_ENDPOINT: ${SANDBOX_ENDPOINT:-http://sandbox:8090/execute}
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:-}
@@ -422,7 +375,6 @@ volumes:
   mysql-data:
   redis-data:
   rabbitmq-data:
-  nacos-data:
   problem-testcases:
   operation-artifacts:
   testcase-cache:

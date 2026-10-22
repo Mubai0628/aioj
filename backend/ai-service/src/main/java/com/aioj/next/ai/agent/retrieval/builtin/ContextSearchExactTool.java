@@ -13,9 +13,9 @@ import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.persistence.entity.AiMessageEntity;
 import com.aioj.next.ai.persistence.mapper.AiMessageMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -81,7 +81,7 @@ public class ContextSearchExactTool implements AgentTool {
                     "exactTerms must contain at least one non-blank term");
         }
         int topK = input.path("topK").isIntegralNumber()
-                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt()))
+                ? Math.min(MAX_TOP_K, Math.max(1, input.path("topK").asInt(0)))
                 : DEFAULT_TOP_K;
         if (context.conversationId() == null || context.conversationId().isBlank()) {
             return success(List.of(), topK, terms);
@@ -147,10 +147,10 @@ public class ContextSearchExactTool implements AgentTool {
             return terms;
         }
         for (JsonNode term : exactTerms) {
-            if (!term.isTextual()) {
+            if (!term.isString()) {
                 continue;
             }
-            String normalized = term.asText().trim();
+            String normalized = term.asString("").trim();
             if (normalized.isEmpty()) {
                 continue;
             }

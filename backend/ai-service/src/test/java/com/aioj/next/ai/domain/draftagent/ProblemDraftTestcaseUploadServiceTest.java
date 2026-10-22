@@ -12,7 +12,7 @@ import com.aioj.next.contract.ai.ProblemDraftTestcaseUploadInitRequest;
 import com.aioj.next.contract.ai.ProblemDraftTestcaseUploadInitResponse;
 import com.aioj.next.contract.ai.ProblemDraftTestcaseUploadCompleteRequest;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

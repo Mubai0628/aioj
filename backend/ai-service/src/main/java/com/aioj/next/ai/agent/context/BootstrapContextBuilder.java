@@ -7,8 +7,8 @@ import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.aioj.next.contract.ai.AiChatRequest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -315,8 +315,8 @@ public class BootstrapContextBuilder {
                 if (out.size() >= FOCUS_MAX_OPEN_TASKS) {
                     return;
                 }
-                if (task.isTextual() && !task.asText().isBlank()) {
-                    out.add(cap(task.asText().trim()));
+                if (task.isString() && !task.asString("").isBlank()) {
+                    out.add(cap(task.asString("").trim()));
                 }
             }
         } catch (Exception ex) {

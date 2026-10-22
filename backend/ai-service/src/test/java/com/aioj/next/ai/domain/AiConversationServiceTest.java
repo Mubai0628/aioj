@@ -8,7 +8,7 @@ import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.contract.ai.AiConversationCreateRequest;
 import com.aioj.next.contract.ai.AiConversationResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

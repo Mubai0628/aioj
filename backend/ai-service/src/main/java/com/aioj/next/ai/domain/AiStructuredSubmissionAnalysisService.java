@@ -6,8 +6,8 @@ import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.ai.AiProblemContextResponse;
 import com.aioj.next.contract.ai.AiSubmissionCaseContext;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -100,15 +100,15 @@ public class AiStructuredSubmissionAnalysisService {
         boolean accepted = "ACCEPTED".equals(status);
         boolean masteryEvidence = accepted && root.path("masteryEvidence").asBoolean(fallback.masteryEvidence());
         boolean profileEligible = root.path("profileEligible").asBoolean(fallback.profileEligible()) && profileEligibleStatus(status);
-        String profileKey = normalizeTag(root.path("profileKey").asText(""));
+        String profileKey = normalizeTag(root.path("profileKey").asString(""));
         if (profileKey.isBlank()) {
             profileKey = fallback.profileKey();
         }
-        String profileLabel = safeText(root.path("profileLabel").asText(""), 200);
+        String profileLabel = safeText(root.path("profileLabel").asString(""), 200);
         if (profileLabel.isBlank()) {
             profileLabel = fallback.profileLabel();
         }
-        String summary = safeText(root.path("summary").asText(""), 600);
+        String summary = safeText(root.path("summary").asString(""), 600);
         if (summary.isBlank()) {
             summary = fallback.summary();
         }
@@ -456,13 +456,13 @@ public class AiStructuredSubmissionAnalysisService {
         List<String> values = new ArrayList<>();
         if (node.isArray()) {
             for (JsonNode item : node) {
-                String tag = normalizeTag(item.asText(""));
+                String tag = normalizeTag(item.asString(""));
                 if (!tag.isBlank()) {
                     values.add(tag);
                 }
             }
         } else {
-            String tag = normalizeTag(node.asText(""));
+            String tag = normalizeTag(node.asString(""));
             if (!tag.isBlank()) {
                 values.add(tag);
             }
@@ -489,13 +489,13 @@ public class AiStructuredSubmissionAnalysisService {
         List<String> values = new ArrayList<>();
         if (node.isArray()) {
             for (JsonNode item : node) {
-                String text = safeText(item.asText(""), maxLength);
+                String text = safeText(item.asString(""), maxLength);
                 if (!text.isBlank()) {
                     values.add(text);
                 }
             }
         } else {
-            String text = safeText(node.asText(""), maxLength);
+            String text = safeText(node.asString(""), maxLength);
             if (!text.isBlank()) {
                 values.add(text);
             }

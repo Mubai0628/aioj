@@ -20,9 +20,9 @@ import com.aioj.next.contract.ai.AiProblemContextResponse;
 import com.aioj.next.contract.ai.ProblemTitleInfo;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
 import com.aioj.next.contract.problem.ProblemVisibility;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -101,7 +101,7 @@ public class ProblemFetchAllowedViewTool implements AgentTool {
             return ToolResult.failure(null, ToolStatus.SCHEMA_ERROR, "PROBLEM_ID_REQUIRED",
                     "problemId must be an integer");
         }
-        long problemId = input.path("problemId").asLong();
+        long problemId = input.path("problemId").asLong(0L);
         ContestPolicyView policy = context.contestPolicy();
         if (policy != null && policy.isParticipant()) {
             return contestView(context, problemId, policy, startedNanos);

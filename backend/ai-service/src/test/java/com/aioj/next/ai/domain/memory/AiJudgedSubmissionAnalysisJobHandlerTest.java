@@ -4,7 +4,7 @@ import com.aioj.next.ai.domain.AiLearningProfileService;
 import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.contract.submission.SubmissionStatus;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

@@ -6,9 +6,9 @@ import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -78,7 +78,7 @@ public class DraftStatePatchTool implements AgentTool {
     @Override
     public ToolResult<Object> execute(ToolExecutionContext context, JsonNode input) {
         return DraftToolSupport.success(workspaceService.patch(DraftToolSupport.workspaceId(context), context.userId(),
-                input.path("expectedStateVersion").asLong(), input.get("patch")));
+                input.path("expectedStateVersion").asLong(0L), input.get("patch")));
     }
 
     private ObjectNode stringField(ObjectNode properties, String name, int maxLength) {

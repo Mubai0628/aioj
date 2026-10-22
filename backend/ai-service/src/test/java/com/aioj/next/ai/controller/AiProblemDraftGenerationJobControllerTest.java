@@ -8,7 +8,7 @@ import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.contract.ai.ProblemDraftGenerationJobResponse;
 import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
 import com.aioj.next.contract.ai.ProblemDraftRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,7 +60,7 @@ class AiProblemDraftGenerationJobControllerTest {
                 null,
                 null,
                 null,
-                new ObjectMapper().findAndRegisterModules()
+                JsonMapper.builderWithJackson2Defaults().build()
         );
         controller.setProblemDraftGenerationJobService(jobService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)

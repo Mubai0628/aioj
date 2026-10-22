@@ -11,9 +11,9 @@ import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.agent.tool.ToolStatus;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -85,23 +85,23 @@ public class MemoryProposeCandidateTool implements AgentTool {
 
     @Override
     public ToolResult<Object> execute(ToolExecutionContext context, JsonNode input) {
-        if (!input.path("text").isTextual() || input.path("text").asText().trim().isEmpty()) {
+        if (!input.path("text").isString() || input.path("text").asString("").trim().isEmpty()) {
             return ToolResult.failure(null, ToolStatus.SCHEMA_ERROR, "MISSING_TEXT",
                     "text is required and must be a non-empty string");
         }
-        String text = input.path("text").asText().trim();
+        String text = input.path("text").asString("").trim();
         List<String> warnings = new ArrayList<>();
         if (text.length() > MAX_TEXT_CHARS) {
             text = text.substring(0, MAX_TEXT_CHARS);
             warnings.add(WARNING_TEXT_TRUNCATED);
         }
-        String category = input.path("category").isTextual()
-                ? input.path("category").asText().trim().toUpperCase(Locale.ROOT) : "";
+        String category = input.path("category").isString()
+                ? input.path("category").asString("").trim().toUpperCase(Locale.ROOT) : "";
         if (!KNOWN_CATEGORIES.contains(category)) {
             return ToolResult.failure(null, ToolStatus.SCHEMA_ERROR, "INVALID_CATEGORY",
                     "category must be one of " + KNOWN_CATEGORIES);
         }
-        String memoryKey = input.path("memoryKey").isTextual() ? input.path("memoryKey").asText().trim() : null;
+        String memoryKey = input.path("memoryKey").isString() ? input.path("memoryKey").asString("").trim() : null;
         if (memoryKey != null && memoryKey.isEmpty()) {
             memoryKey = null;
         }
@@ -109,11 +109,11 @@ public class MemoryProposeCandidateTool implements AgentTool {
             memoryKey = memoryKey.substring(0, MAX_KEY_CHARS);
         }
         double confidence = input.path("confidence").isNumber()
-                ? input.path("confidence").asDouble() : DEFAULT_CONFIDENCE;
+                ? input.path("confidence").asDouble(0.0) : DEFAULT_CONFIDENCE;
         confidence = Math.max(0.0, Math.min(1.0, confidence));
-        boolean longTerm = !input.path("longTerm").isBoolean() || input.path("longTerm").asBoolean();
-        String evidenceType = input.path("evidenceType").isTextual()
-                ? input.path("evidenceType").asText().trim().toUpperCase(Locale.ROOT) : EVIDENCE_DEFAULT;
+        boolean longTerm = !input.path("longTerm").isBoolean() || input.path("longTerm").asBoolean(false);
+        String evidenceType = input.path("evidenceType").isString()
+                ? input.path("evidenceType").asString("").trim().toUpperCase(Locale.ROOT) : EVIDENCE_DEFAULT;
         if (evidenceType.isEmpty()) {
             evidenceType = EVIDENCE_DEFAULT;
         }

@@ -5,8 +5,8 @@ import com.aioj.next.contract.ai.StudentPostmortemAnalysisRequest;
 import com.aioj.next.contract.ai.StudentPostmortemAnalysisResponse;
 import com.aioj.next.contract.ai.StudentPostmortemPracticeSuggestion;
 import com.aioj.next.contract.ai.StudentPostmortemWeaknessSuggestion;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -150,15 +150,15 @@ public class StudentPostmortemAnalysisService {
             JsonNode seeds = root.path("weaknessSeeds");
             if (seeds.isArray()) {
                 for (JsonNode seed : seeds) {
-                    addSeedSuggestion(suggestions, seen, seed.asText(), 0.76);
+                    addSeedSuggestion(suggestions, seen, seed.asString(""), 0.76);
                 }
             }
             JsonNode problems = root.path("problems");
             if (problems.isArray()) {
                 for (JsonNode problem : problems) {
-                    String label = problem.path("label").asText("");
-                    String title = problem.path("title").asText("");
-                    String status = problem.path("bestStatus").asText("");
+                    String label = problem.path("label").asString("");
+                    String title = problem.path("title").asString("");
+                    String status = problem.path("bestStatus").asString("");
                     if (isAcm(request)) {
                         if (!"ACCEPTED".equals(status)) {
                             List<String> tags = readTags(problem.path("tags"));
@@ -255,7 +255,7 @@ public class StudentPostmortemAnalysisService {
         }
         List<String> tags = new ArrayList<>();
         for (JsonNode item : tagsNode) {
-            String value = item.asText("").trim();
+            String value = item.asString("").trim();
             if (!value.isBlank()) {
                 tags.add(value);
             }

@@ -4,7 +4,7 @@ import com.aioj.next.ai.persistence.entity.AiAgentRunEntity;
 import com.aioj.next.ai.persistence.mapper.AiAgentRunMapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

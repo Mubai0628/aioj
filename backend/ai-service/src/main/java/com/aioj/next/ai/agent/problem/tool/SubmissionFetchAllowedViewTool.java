@@ -19,9 +19,9 @@ import com.aioj.next.contract.ai.AiProblemContextResponse;
 import com.aioj.next.contract.ai.AiSubmissionCaseContext;
 import com.aioj.next.contract.ai.AiSubmissionContextRequest;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -91,7 +91,7 @@ public class SubmissionFetchAllowedViewTool implements AgentTool {
             return ToolResult.failure(null, ToolStatus.SCHEMA_ERROR, "SUBMISSION_ID_REQUIRED",
                     "submissionId must be an integer");
         }
-        long submissionId = input.path("submissionId").asLong();
+        long submissionId = input.path("submissionId").asLong(0L);
         AiSubmissionContextResponse submission;
         try {
             submission = problemServiceClient.aiSubmissionContext(new AiSubmissionContextRequest(

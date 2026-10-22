@@ -4,8 +4,9 @@ server:
 spring:
   application:
     name: ai-oj-ai-service
-  config:
-    import: optional:nacos:${spring.application.name}.yml
+  jackson:
+    # Jackson 3 (Spring Boot 4): keep the Jackson 2 defaults this service was built against.
+    use-jackson2-defaults: true
   mvc:
     async:
       # SSE chat/draft streams legitimately run for minutes while the provider generates;
@@ -27,18 +28,6 @@ spring:
   flyway:
     enabled: ${FLYWAY_ENABLED:false}
     clean-disabled: true
-  cloud:
-    nacos:
-      discovery:
-        enabled: ${NACOS_ENABLED:false}
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
-      config:
-        enabled: ${NACOS_ENABLED:false}
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
-        file-extension: yml
-    sentinel:
-      transport:
-        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
 
 aioj:
   internal:

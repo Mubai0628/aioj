@@ -9,7 +9,7 @@ import com.aioj.next.ai.domain.draftagent.DraftTestcasePackageAcceptanceClient;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftExecutionService;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
 import com.aioj.next.ai.domain.problem.DraftSandboxClient;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

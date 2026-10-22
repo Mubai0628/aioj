@@ -7,8 +7,8 @@ import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.common.error.DomainException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -49,8 +49,8 @@ class DeepSeekToolCallAdapterTest {
         adapter.execute(config("deepseek-v4-pro"), new CallSettings(true, "high", 0.3, 4096), request(List.of()));
 
         JsonNode body = objectMapper.readTree(recordedBody.get());
-        assertThat(body.path("thinking").path("type").asText()).isEqualTo("enabled");
-        assertThat(body.path("reasoning_effort").asText()).isEqualTo("high");
+        assertThat(body.path("thinking").path("type").asString()).isEqualTo("enabled");
+        assertThat(body.path("reasoning_effort").asString()).isEqualTo("high");
         assertThat(body.has("temperature")).isFalse();
         assertThat(body.path("max_tokens").asInt()).isEqualTo(4096);
         assertThat(body.path("stream").asBoolean()).isFalse();
@@ -62,7 +62,7 @@ class DeepSeekToolCallAdapterTest {
         adapter.execute(config("deepseek-v4-pro"), new CallSettings(false, "high", 0.3, 4096), request(List.of()));
 
         JsonNode body = objectMapper.readTree(recordedBody.get());
-        assertThat(body.path("thinking").path("type").asText()).isEqualTo("disabled");
+        assertThat(body.path("thinking").path("type").asString()).isEqualTo("disabled");
         assertThat(body.path("temperature").asDouble()).isEqualTo(0.3);
     }
 
@@ -85,9 +85,9 @@ class DeepSeekToolCallAdapterTest {
                 new CallSettings(false, "high", 0.3, 4096), request(tools(), ToolChoiceMode.AUTO));
 
         JsonNode body = objectMapper.readTree(recordedBody.get());
-        assertThat(body.path("tools").get(0).path("function").path("name").asText())
+        assertThat(body.path("tools").get(0).path("function").path("name").asString())
                 .isEqualTo("context__search_exact");
-        assertThat(body.path("tool_choice").asText()).isEqualTo("auto");
+        assertThat(body.path("tool_choice").asString()).isEqualTo("auto");
 
         assertThat(response.hasToolCalls()).isTrue();
         assertThat(response.toolCalls().get(0).name()).isEqualTo("context.search_exact");
@@ -113,7 +113,7 @@ class DeepSeekToolCallAdapterTest {
 
         JsonNode messages = objectMapper.readTree(recordedBody.get()).path("messages");
         assertThat(messages.get(0).has("reasoning_content")).isFalse();
-        assertThat(messages.get(1).path("reasoning_content").asText()).isEqualTo("private chain");
+        assertThat(messages.get(1).path("reasoning_content").asString()).isEqualTo("private chain");
         assertThat(messages.get(2).has("reasoning_content")).isFalse();
     }
 
@@ -140,7 +140,7 @@ class DeepSeekToolCallAdapterTest {
                 new GatewayRequest(List.of(GatewayMessage.user("整理")), List.of(), ToolChoiceMode.AUTO, CallProfile.CURATOR));
 
         JsonNode body = objectMapper.readTree(recordedBody.get());
-        assertThat(body.path("response_format").path("type").asText()).isEqualTo("json_object");
+        assertThat(body.path("response_format").path("type").asString()).isEqualTo("json_object");
     }
 
     @Test

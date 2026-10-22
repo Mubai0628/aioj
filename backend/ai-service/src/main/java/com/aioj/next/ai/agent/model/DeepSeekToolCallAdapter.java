@@ -4,7 +4,7 @@ import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;

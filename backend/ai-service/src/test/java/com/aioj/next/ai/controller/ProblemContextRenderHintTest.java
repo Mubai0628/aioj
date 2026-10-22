@@ -2,7 +2,7 @@ package com.aioj.next.ai.controller;
 
 import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.problem.TestCaseDto;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -28,7 +28,7 @@ class ProblemContextRenderHintTest {
                 null,
                 null,
                 null,
-                new ObjectMapper().findAndRegisterModules()
+                JsonMapper.builderWithJackson2Defaults().build()
         );
 
         Map<String, Object> problemContext = invokeProblemContextPayload(controller, new AiChatRequest(

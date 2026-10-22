@@ -16,7 +16,7 @@ import com.aioj.next.contract.ai.ProblemDraftApprovalRequest;
 import com.aioj.next.contract.ai.ProblemDraftRefineRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

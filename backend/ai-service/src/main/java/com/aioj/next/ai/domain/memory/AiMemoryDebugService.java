@@ -8,7 +8,7 @@ import com.aioj.next.ai.persistence.mapper.AiMemoryRecallLogMapper;
 import com.aioj.next.ai.persistence.mapper.AiUserMemoryMapper;
 import com.aioj.next.contract.ai.AiMemoryDebugResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;

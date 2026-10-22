@@ -49,8 +49,8 @@ import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Row;
@@ -802,7 +802,7 @@ public class PlagiarismService {
     private String optionsJson(PlagiarismJobCreateRequest request) {
         try {
             return objectMapper.writeValueAsString(request);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return "{}";
         }
     }
@@ -811,7 +811,7 @@ public class PlagiarismService {
         if (StringUtils.hasText(job.getOptionsJson())) {
             try {
                 return normalizeRequest(objectMapper.readValue(job.getOptionsJson(), PlagiarismJobCreateRequest.class));
-            } catch (IOException ignored) {
+            } catch (JacksonException ignored) {
                 // Fall through to persisted scalar fields if the stored options cannot be parsed.
             }
         }

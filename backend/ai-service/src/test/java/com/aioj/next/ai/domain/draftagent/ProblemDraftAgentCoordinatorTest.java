@@ -14,8 +14,8 @@ import com.aioj.next.common.error.DomainException;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -42,8 +42,8 @@ class ProblemDraftAgentCoordinatorTest {
         JsonNode snapshot = objectMapper.readTree(
                 ProblemDraftAgentCoordinator.workspaceContextSnapshot(workspaceId));
 
-        assertThat(snapshot.get("workspaceId").asText()).isEqualTo(workspaceId);
-        assertThat(snapshot.get("source").asText()).isEqualTo("problem_draft_agent");
+        assertThat(snapshot.get("workspaceId").asString()).isEqualTo(workspaceId);
+        assertThat(snapshot.get("source").asString()).isEqualTo("problem_draft_agent");
         assertThat(snapshot.size()).isEqualTo(2);
     }
 

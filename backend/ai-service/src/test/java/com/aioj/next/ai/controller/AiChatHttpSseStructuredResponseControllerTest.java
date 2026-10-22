@@ -28,8 +28,9 @@ import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.problem.TestCaseDto;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -102,7 +103,7 @@ class AiChatHttpSseStructuredResponseControllerTest {
     @Mock
     private AiResponsePolicyGuard aiResponsePolicyGuard;
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().build();
     private MockMvc mockMvc;
 
     @BeforeEach

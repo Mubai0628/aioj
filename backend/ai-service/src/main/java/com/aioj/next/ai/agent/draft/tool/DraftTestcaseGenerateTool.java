@@ -17,9 +17,9 @@ import com.aioj.next.ai.persistence.entity.ProblemDraftTestcaseArtifactEntity;
 import com.aioj.next.ai.persistence.entity.ProblemDraftWorkspaceEntity;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -59,7 +59,7 @@ public class DraftTestcaseGenerateTool implements AgentTool {
         String workspaceId = DraftToolSupport.workspaceId(context);
         ProblemDraftWorkspaceEntity workspace = workspaceService.requireForTool(workspaceId, context.userId());
         ProblemDraftWorkingState state = workspaceService.state(workspace);
-        Integer targetCount = input.has("targetCaseCount") ? input.get("targetCaseCount").asInt() : null;
+        Integer targetCount = input.has("targetCaseCount") ? input.get("targetCaseCount").asInt(0) : null;
         VerificationOptions options = new VerificationOptions(
                 java.util.List.of(), state.difficulty(), workspace.getRequestedCfRating(), targetCount, false);
         DraftExecutionReport report = sandboxClient.verifyDraftDetailed(

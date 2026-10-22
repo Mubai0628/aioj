@@ -4,10 +4,10 @@ import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.persistence.entity.AiToolCallEntity;
 import com.aioj.next.ai.persistence.mapper.AiToolCallMapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.node.ArrayNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -143,8 +143,8 @@ public class ToolAuditService {
             JsonNode data = envelope == null ? null : envelope.path("data");
             if (data != null && data.isObject()) {
                 JsonNode toolStatus = data.get("status");
-                if (toolStatus != null && toolStatus.isTextual()) {
-                    summary.put("toolStatus", truncateSafeText(toolStatus.asText(), 64));
+                if (toolStatus != null && toolStatus.isString()) {
+                    summary.put("toolStatus", truncateSafeText(toolStatus.asString(""), 64));
                 }
                 ObjectNode metrics = objectMapper.createObjectNode();
                 for (String field : SAFE_METRIC_FIELDS) {
@@ -161,10 +161,10 @@ public class ToolAuditService {
                 JsonNode artifactId = data.get("artifactId");
                 if (executionId != null && executionId.isValueNode()) {
                     entity.setResourceRefType("DRAFT_EXECUTION");
-                    entity.setResourceRefId(truncateSafeText(executionId.asText(), 128));
+                    entity.setResourceRefId(truncateSafeText(executionId.asString(""), 128));
                 } else if (artifactId != null && artifactId.isValueNode()) {
                     entity.setResourceRefType("DRAFT_TESTCASE_ARTIFACT");
-                    entity.setResourceRefId(truncateSafeText(artifactId.asText(), 128));
+                    entity.setResourceRefId(truncateSafeText(artifactId.asString(""), 128));
                 }
             }
             entity.setSafeSummaryJson(summary.toString());
@@ -214,7 +214,7 @@ public class ToolAuditService {
             return node;
         }
         ObjectNode copy = ((ObjectNode) node).deepCopy();
-        Iterator<Map.Entry<String, JsonNode>> fields = copy.fields();
+        Iterator<Map.Entry<String, JsonNode>> fields = new java.util.ArrayList<>(copy.properties()).iterator();
         while (fields.hasNext()) {
             Map.Entry<String, JsonNode> entry = fields.next();
             String key = entry.getKey().toLowerCase(java.util.Locale.ROOT);
@@ -224,7 +224,7 @@ public class ToolAuditService {
                 // Source, generators, testcase bytes and process I/O belong in
                 // protected resource stores, never the generic audit payload.
                 copy.put(entry.getKey(), "[redacted content]");
-            } else if (entry.getValue().isContainerNode()) {
+            } else if (entry.getValue().isContainer()) {
                 copy.set(entry.getKey(), redact(entry.getValue()));
             }
         }

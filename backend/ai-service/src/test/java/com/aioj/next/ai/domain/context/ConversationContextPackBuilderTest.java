@@ -4,7 +4,7 @@ import com.aioj.next.ai.persistence.entity.AiConversationSummaryEntity;
 import com.aioj.next.ai.persistence.entity.AiMessageEntity;
 import com.aioj.next.ai.domain.AiCompletion;
 import com.aioj.next.contract.ai.AiChatRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;

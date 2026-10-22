@@ -15,9 +15,9 @@ import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -99,17 +99,17 @@ class TurnDigestCuratorHandlerTest {
 
         var root = objectMapper.readTree(ready.getStructuredDigest());
         // Deterministic stub fields survive the merge.
-        assertThat(root.get("source").get("userMessageId").asText()).isEqualTo("100");
-        assertThat(root.get("codeRefs").get(0).get("language").asText()).isEqualTo("cpp");
-        assertThat(root.get("explicitSelection").get("text").asText()).contains("异或");
+        assertThat(root.get("source").get("userMessageId").asString()).isEqualTo("100");
+        assertThat(root.get("codeRefs").get(0).get("language").asString()).isEqualTo("cpp");
+        assertThat(root.get("explicitSelection").get("text").asString()).contains("异或");
         // Curator semantics landed.
-        assertThat(root.get("dialogueAct").asText()).isEqualTo("NEW_REQUEST");
+        assertThat(root.get("dialogueAct").asString()).isEqualTo("NEW_REQUEST");
         assertThat(root.get("topicPath").toString()).contains("xor");
         // P2-2: memory/profile outputs are kept in the digest; episodes still dropped.
         assertThat(root.get("memoryCandidates")).hasSize(1);
-        assertThat(root.get("memoryCandidates").get(0).get("memoryKey").asText()).isEqualTo("guidance_preference");
+        assertThat(root.get("memoryCandidates").get(0).get("memoryKey").asString()).isEqualTo("guidance_preference");
         assertThat(root.get("profileSignals")).hasSize(1);
-        assertThat(root.get("profileSignals").get(0).get("signalType").asText()).isEqualTo("WEAKNESS");
+        assertThat(root.get("profileSignals").get(0).get("signalType").asString()).isEqualTo("WEAKNESS");
         assertThat(root.has("episodeBoundaryProposal")).isFalse();
         assertThat(ready.getSearchText()).contains("异或").contains("区间异或");
         // P1-6: the READY digest hands off to the dense lane.

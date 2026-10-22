@@ -81,10 +81,10 @@ class GatewayRouteAndCorsTest {
     @Test
     void globalCorsUsesExplicitOriginWhitelistWithCredentials() {
         String allowCredentials = environment.getProperty(
-                "spring.cloud.gateway.globalcors.cors-configurations.[/**].allow-credentials");
+                "spring.cloud.gateway.server.webflux.globalcors.cors-configurations.[/**].allow-credentials");
         assertEquals("true", allowCredentials);
         String origins = environment.getProperty(
-                "spring.cloud.gateway.globalcors.cors-configurations.[/**].allowed-origins");
+                "spring.cloud.gateway.server.webflux.globalcors.cors-configurations.[/**].allowed-origins");
         assertNotNull(origins);
         assertFalse(origins.contains("*"), "CORS must stay an explicit whitelist, got: " + origins);
     }

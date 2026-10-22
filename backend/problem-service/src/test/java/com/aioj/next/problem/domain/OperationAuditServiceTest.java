@@ -5,7 +5,7 @@ import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.problem.persistence.entity.OperationAuditEventEntity;
 import com.aioj.next.problem.persistence.mapper.OperationAuditEventMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -2,7 +2,7 @@ package com.aioj.next.ai.domain;
 
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.contract.ai.AccountImportParseRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

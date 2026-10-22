@@ -9,7 +9,7 @@ import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
 import com.aioj.next.ai.persistence.entity.AiMessageEntity;
 import com.aioj.next.ai.persistence.mapper.AiMessageMapper;
 import com.aioj.next.contract.ai.AiChatRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -55,7 +55,7 @@ class AiAfterTurnMemoryProfileJobHandlerTest {
                 learningProfileService,
                 memoryService,
                 memoryUpdatePlanner,
-                new ObjectMapper().findAndRegisterModules()
+                JsonMapper.builderWithJackson2Defaults().build()
         );
     }
 
