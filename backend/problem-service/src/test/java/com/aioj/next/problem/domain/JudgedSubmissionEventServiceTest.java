@@ -3,6 +3,7 @@ package com.aioj.next.problem.domain;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.contract.submission.SubmissionStatus;
+import com.aioj.next.problem.domain.recommendation.ProblemRecommendationCache;
 import com.aioj.next.problem.persistence.entity.SubmissionEntity;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
 import org.junit.jupiter.api.Test;
@@ -21,8 +22,9 @@ import static org.mockito.Mockito.when;
 class JudgedSubmissionEventServiceTest {
     private final SubmissionMapper submissionMapper = mock(SubmissionMapper.class);
     private final JudgedSubmissionAiEventClient aiEventClient = mock(JudgedSubmissionAiEventClient.class);
+    private final ProblemRecommendationCache recommendationCache = mock(ProblemRecommendationCache.class);
     private final JudgedSubmissionEventService service =
-            new JudgedSubmissionEventService(submissionMapper, aiEventClient);
+            new JudgedSubmissionEventService(submissionMapper, aiEventClient, recommendationCache);
 
     @Test
     void terminalSubmissionIsForwardedUsingDatabaseFields() {
@@ -51,6 +53,17 @@ class JudgedSubmissionEventServiceTest {
         assertThat(captor.getValue().userId()).isEqualTo(7L);
         assertThat(captor.getValue().status()).isEqualTo(SubmissionStatus.WRONG_ANSWER);
         assertThat(captor.getValue().contestRunId()).isEqualTo(2L);
+        verify(recommendationCache, never()).evict(any());
+    }
+
+    @Test
+    void practiceVerdictClearsTheStudentsRecommendations() {
+        when(submissionMapper.selectById(123L)).thenReturn(submission(123L, SubmissionStatus.ACCEPTED));
+
+        service.handle(new AiJudgedSubmissionEventRequest(123L, 99L, 7L, SubmissionStatus.ACCEPTED, "cpp",
+                null, null, null, null));
+
+        verify(recommendationCache).evict(7L);
     }
 
     @Test

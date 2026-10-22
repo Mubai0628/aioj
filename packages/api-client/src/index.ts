@@ -1629,6 +1629,25 @@ export interface SubmissionCaseResultResponse {
   createdAt: string;
 }
 
+export type ProblemRecommendationReason = 'PROFILE_WEAKNESS' | 'UNSOLVED_ATTEMPT' | 'WEAK_TAG' | 'NEW_PROBLEM' | 'COLD_START';
+
+export interface ProblemRecommendationResponse {
+  problemId: EntityId;
+  title: string;
+  difficulty: Difficulty;
+  tags: string[];
+  score: number;
+  reason: ProblemRecommendationReason;
+  reasonParams: Record<string, string>;
+}
+
+export interface ProblemRecommendationsResponse {
+  items: ProblemRecommendationResponse[];
+  /** Distinct problems solved in practice; contest submissions never count. */
+  solvedProblems: number;
+  coldStart: boolean;
+}
+
 export interface JudgeMetricsResponse {
   workerReachable: boolean;
   started?: number | null;
@@ -3778,6 +3797,8 @@ export const api = {
 
   problems: (params: ProblemListParams = {}) =>
     request<PageResponse<ProblemResponse>>(`/api/v1/problems${queryString({ page: 1, pageSize: 20, ...params })}`),
+  problemRecommendations: (params: { limit?: number } = {}) =>
+    request<ProblemRecommendationsResponse>(`/api/v1/problems/recommendations${queryString(params)}`),
   problem: (id: EntityId, context: { contestRunId?: EntityId | null; contestProblemId?: EntityId | null; staffView?: boolean } = {}) =>
     request<ProblemResponse>(`/api/v1/problems/${id}${queryString({
       contestRunId: context.contestRunId ?? undefined,

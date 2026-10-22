@@ -12,12 +12,17 @@ import { readableJudgeMessage } from "../lib/readableError";
 export function DashboardView() {
   const { t } = useI18n();
   const { profile } = useAuth();
-  const problemsQuery = useQuery({ queryKey: ["problems", "dashboard"], queryFn: () => api.problems({ page: 1, pageSize: 6 }) });
+  // Only the total is shown; the list below comes from recommendations.
+  const problemsQuery = useQuery({ queryKey: ["problems", "dashboard"], queryFn: () => api.problems({ page: 1, pageSize: 1 }) });
+  const recommendationsQuery = useQuery({
+    queryKey: ["problems", "recommendations", "dashboard"],
+    queryFn: () => api.problemRecommendations({ limit: 6 })
+  });
   const submissionsQuery = useQuery({ queryKey: ["submissions", "mine", "dashboard"], queryFn: () => api.mySubmissions({ page: 1, pageSize: 8 }) });
   const usageQuery = useQuery({ queryKey: ["ai", "usage"], queryFn: () => api.usage(), retry: 0 });
 
   const submissions = submissionsQuery.data?.records ?? [];
-  const accepted = submissions.filter((item) => item.status === "ACCEPTED").length;
+  const recommendations = recommendationsQuery.data?.items ?? [];
   const latest = submissions[0];
   const aiUsage = usageQuery.data ? normalizeAiUsage(usageQuery.data) : null;
 
@@ -48,7 +53,7 @@ export function DashboardView() {
       <section className="grid gap-4 md:grid-cols-3">
         <Metric icon={<ListChecks className="size-4" />} label={t("dashboard.problemsAvailable")} value={problemsQuery.data?.total ?? "--"} />
         <Metric icon={<Send className="size-4" />} label={t("dashboard.mySubmissions")} value={submissionsQuery.data?.total ?? "--"} />
-        <Metric icon={<CheckCircle2 className="size-4" />} label={t("dashboard.accepted")} value={accepted} />
+        <Metric icon={<CheckCircle2 className="size-4" />} label={t("dashboard.accepted")} value={recommendationsQuery.data?.solvedProblems ?? "--"} />
       </section>
 
       <section className="grid min-h-0 gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.7fr)]">
@@ -63,20 +68,23 @@ export function DashboardView() {
             </Button>
           </div>
           <div className="divide-y divide-[var(--oj-border-soft)]">
-            {problemsQuery.isLoading ? Array.from({ length: 4 }).map((_, index) => (
+            {recommendationsQuery.isLoading ? Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="p-4"><SkeletonBlock className="h-14" /></div>
-            )) : problemsQuery.isError ? (
-              <div className="p-5"><ErrorPanel title={t("problems.loadFailed")} /></div>
-            ) : problemsQuery.data?.records.length ? problemsQuery.data.records.map((problem) => (
+            )) : recommendationsQuery.isError ? (
+              <div className="p-5"><ErrorPanel title={t("dashboard.recommendationsFailed")} /></div>
+            ) : recommendations.length ? recommendations.map((problem) => (
               <Link
-                key={problem.id}
+                key={problem.problemId}
                 to="/problems/$problemId"
-                params={{ problemId: problem.id }}
+                params={{ problemId: String(problem.problemId) }}
                 className="block px-5 py-4 outline-none transition-colors hover:bg-[var(--oj-surface-muted)] focus-visible:ring-2 focus-visible:ring-[var(--oj-focus)]"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-semibold text-[var(--oj-ink)]">{problem.title}</h3>
+                    <p className="mt-1 text-xs text-[var(--oj-ink-muted)]">
+                      {t(`dashboard.recommendationReason.${problem.reason}`, problem.reasonParams)}
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Badge tone={difficultyTone(problem.difficulty)}>{t(`difficulty.${problem.difficulty}`)}</Badge>
                       {problem.tags.slice(0, 3).map((tag) => <Badge key={tag}>{tag}</Badge>)}

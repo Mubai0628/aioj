@@ -4,6 +4,7 @@ import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.contract.submission.SubmissionStatus;
+import com.aioj.next.problem.domain.recommendation.ProblemRecommendationCache;
 import com.aioj.next.problem.persistence.entity.SubmissionEntity;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
 import org.springframework.stereotype.Service;
@@ -12,11 +13,14 @@ import org.springframework.stereotype.Service;
 public class JudgedSubmissionEventService {
     private final SubmissionMapper submissionMapper;
     private final JudgedSubmissionAiEventClient aiEventClient;
+    private final ProblemRecommendationCache recommendationCache;
 
     public JudgedSubmissionEventService(SubmissionMapper submissionMapper,
-                                        JudgedSubmissionAiEventClient aiEventClient) {
+                                        JudgedSubmissionAiEventClient aiEventClient,
+                                        ProblemRecommendationCache recommendationCache) {
         this.submissionMapper = submissionMapper;
         this.aiEventClient = aiEventClient;
+        this.recommendationCache = recommendationCache;
     }
 
     public void handle(AiJudgedSubmissionEventRequest request) {
@@ -29,6 +33,10 @@ public class JudgedSubmissionEventService {
         }
         if (submission.getStatus() == SubmissionStatus.QUEUED || submission.getStatus() == SubmissionStatus.RUNNING) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Submission is still being judged");
+        }
+        if (submission.getContestId() == null) {
+            // A practice verdict changes what to recommend next; contest ones never count.
+            recommendationCache.evict(submission.getUserId());
         }
         aiEventClient.notifyJudgedSubmission(new AiJudgedSubmissionEventRequest(
                 submission.getId(),
