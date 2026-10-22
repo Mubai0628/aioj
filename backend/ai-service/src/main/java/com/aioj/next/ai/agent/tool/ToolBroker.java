@@ -5,6 +5,7 @@ import com.aioj.next.common.error.DomainException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -15,6 +16,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -41,15 +43,24 @@ public class ToolBroker {
     private final ExecutorService executor;
     private final Map<InFlightKey, Future<?>> inFlight = new ConcurrentHashMap<>();
 
+    @Autowired
     public ToolBroker(ToolRegistry registry, ToolAuthorizationService authorizationService,
                       ToolResultSanitizer sanitizer, ToolAuditService auditService, ObjectMapper objectMapper,
                       AiProperties aiProperties) {
+        this(registry, authorizationService, sanitizer, auditService, objectMapper,
+                createExecutor(aiProperties.getCapacity()));
+    }
+
+    /** Tests pass their own executor to pin down how a call and a cancel interleave. */
+    ToolBroker(ToolRegistry registry, ToolAuthorizationService authorizationService,
+               ToolResultSanitizer sanitizer, ToolAuditService auditService, ObjectMapper objectMapper,
+               ExecutorService executor) {
         this.registry = registry;
         this.authorizationService = authorizationService;
         this.sanitizer = sanitizer;
         this.auditService = auditService;
         this.objectMapper = objectMapper;
-        this.executor = createExecutor(aiProperties.getCapacity());
+        this.executor = executor;
     }
 
     /**
@@ -108,10 +119,12 @@ public class ToolBroker {
                 descriptor, toolName, callId, argumentsJson, decision.decisionId());
         ToolResult<Object> result;
         InFlightKey inFlightKey = new InFlightKey(agentRunId, callId == null ? "" : callId);
-        Future<ToolResult<Object>> future = null;
+        // Registered before the executor can start it, so a cancelRun that arrives
+        // just as the call begins still finds and interrupts it.
+        FutureTask<ToolResult<Object>> future = new FutureTask<>(() -> tool.execute(context, arguments));
+        inFlight.put(inFlightKey, future);
         try {
-            future = executor.submit(() -> tool.execute(context, arguments));
-            inFlight.put(inFlightKey, future);
+            executor.execute(future);
             Duration timeout = effectiveTimeout(descriptor.timeout(), remainingRunTime);
             result = future.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
             if (result == null) {
@@ -119,18 +132,14 @@ public class ToolBroker {
                         "Tool execution returned no result");
             }
         } catch (TimeoutException ex) {
-            if (future != null) {
-                future.cancel(true);
-            }
+            future.cancel(true);
             result = ToolResult.failure(callId, ToolStatus.TIMEOUT, "TOOL_EXECUTION_TIMEOUT",
                     "Tool execution exceeded its server timeout");
         } catch (CancellationException ex) {
             result = ToolResult.failure(callId, ToolStatus.CANCELLED, "TOOL_EXECUTION_CANCELLED",
                     "Tool execution was cancelled by the server");
         } catch (InterruptedException ex) {
-            if (future != null) {
-                future.cancel(true);
-            }
+            future.cancel(true);
             Thread.currentThread().interrupt();
             result = ToolResult.failure(callId, ToolStatus.CANCELLED, "TOOL_EXECUTION_CANCELLED",
                     "Tool execution was cancelled by the server");
@@ -151,7 +160,8 @@ public class ToolBroker {
             result = ToolResult.failure(callId, ToolStatus.EXECUTION_ERROR, "TOOL_EXECUTION_ERROR",
                     "Tool execution failed");
         } finally {
-            inFlight.remove(inFlightKey);
+            // Only this call's entry: another call with the same key may have registered since.
+            inFlight.remove(inFlightKey, future);
         }
         result = result.withPolicyDecisionId(decision.decisionId());
         return finish(context, agentRunId, callSeq, descriptor, toolName, callId, argumentsJson, decision.decisionId(),

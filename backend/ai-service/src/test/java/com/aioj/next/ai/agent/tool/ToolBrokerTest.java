@@ -13,11 +13,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -181,6 +184,27 @@ class ToolBrokerTest {
     }
 
     @Test
+    void aCallIsRegisteredBeforeItCanStartSoCancelRunNeverMissesIt() throws Exception {
+        AtomicReference<ToolBroker> broker = new AtomicReference<>();
+        AtomicInteger cancelledOnStart = new AtomicInteger(-1);
+        AgentTool tool = fakeTool("context.search_exact", Set.of("AI_CHAT"), schema(), (context, input) -> {
+            // The inline executor starts the call before handing control back to the broker:
+            // the tightest gap a stop request can land in.
+            cancelledOnStart.set(broker.get().cancelRun(77L));
+            return ToolResult.success(null, Map.of(), List.of(), DataClassification.USER_PRIVATE, null);
+        });
+        broker.set(brokerWithExecutor(inlineExecutor(), tool));
+
+        ToolResult<String> result = broker.get().execute(executionContext(Set.of("AI_CHAT")), 77L, 1, "call-early",
+                "context.search_exact", "{\"query\":\"x\"}");
+        // cancel(true) interrupted the inline runner, which is this thread.
+        Thread.interrupted();
+
+        assertThat(cancelledOnStart.get()).isEqualTo(1);
+        assertThat(result.status()).isEqualTo(ToolStatus.CANCELLED);
+    }
+
+    @Test
     void saturatedToolExecutorReturnsStructuredErrorAndStaysOnAuditPath() throws Exception {
         when(auditService.start(any(), anyLong(), anyInt(), any(), anyString(), anyString(),
                 anyString(), anyString())).thenReturn(new ToolAuditService.AuditHandle(99L));
@@ -256,6 +280,50 @@ class ToolBrokerTest {
         return new ToolBroker(new ToolRegistry(List.of(tools)),
                 new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
                 new ToolResultSanitizer(objectMapper), auditService, objectMapper, properties);
+    }
+
+    private ToolBroker brokerWithExecutor(ExecutorService executor, AgentTool... tools) {
+        return new ToolBroker(new ToolRegistry(List.of(tools)),
+                new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
+                new ToolResultSanitizer(objectMapper), auditService, objectMapper, executor);
+    }
+
+    /** Runs every task on the submitting thread, before execute() returns. */
+    private static ExecutorService inlineExecutor() {
+        return new AbstractExecutorService() {
+            private volatile boolean shutdown;
+
+            @Override
+            public void execute(Runnable command) {
+                command.run();
+            }
+
+            @Override
+            public void shutdown() {
+                shutdown = true;
+            }
+
+            @Override
+            public List<Runnable> shutdownNow() {
+                shutdown = true;
+                return List.of();
+            }
+
+            @Override
+            public boolean isShutdown() {
+                return shutdown;
+            }
+
+            @Override
+            public boolean isTerminated() {
+                return shutdown;
+            }
+
+            @Override
+            public boolean awaitTermination(long timeout, TimeUnit unit) {
+                return true;
+            }
+        };
     }
 
     private ToolExecutionContext executionContext(Set<String> scopes) {
