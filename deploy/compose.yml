@@ -1,5 +1,12 @@
 name: ${COMPOSE_PROJECT_NAME:-aioj-local}
 
+# Same bounded json-file logs as compose.production.yml, so a long local run cannot fill the disk.
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "3"
+
 services:
   mysql:
     image: mysql:8.4
@@ -8,8 +15,8 @@ services:
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-ai_oj_next}
       MYSQL_USER: ${MYSQL_USER:-aioj}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-root-me}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD, see .env.example}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD, see .env.example}
     ports:
       - "127.0.0.1:3306:3306"
     volumes:
@@ -19,6 +26,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 640m
     cpus: "0.75"
 
@@ -37,6 +46,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 96m
     cpus: "0.25"
 
@@ -56,6 +67,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 256m
     cpus: "0.50"
 
@@ -66,6 +79,8 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 192m
     cpus: "0.25"
 
@@ -74,6 +89,8 @@ services:
     profiles: ["observability"]
     ports:
       - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 192m
     cpus: "0.25"
 
@@ -90,7 +107,7 @@ services:
       AUTH_SERVICE_URI: http://auth-service:8201
       PROBLEM_SERVICE_URI: http://problem-service:8202
       AI_SERVICE_URI: http://ai-service:8204
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,http://127.0.0.1:5176}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5175,http://127.0.0.1:5175,http://localhost:5176,http://127.0.0.1:5176}
       GATEWAY_RESPONSE_TIMEOUT: ${GATEWAY_RESPONSE_TIMEOUT:-240s}
       AI_GATEWAY_RESPONSE_TIMEOUT_MS: ${AI_GATEWAY_RESPONSE_TIMEOUT_MS:-900000}
       GATEWAY_CONNECT_TIMEOUT_MS: ${GATEWAY_CONNECT_TIMEOUT_MS:-10000}
@@ -110,6 +127,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 320m
     cpus: "0.35"
 
@@ -125,7 +144,7 @@ services:
       JAVA_OPTS: ${AUTH_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError}
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ai_oj_next}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       MYSQL_USER: ${MYSQL_USER:-aioj}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD, see .env.example}
       AUTH_DB_POOL_MAX: ${AUTH_DB_POOL_MAX:-4}
       AUTH_DB_POOL_MIN_IDLE: ${AUTH_DB_POOL_MIN_IDLE:-1}
       DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-5000}
@@ -141,6 +160,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 384m
     cpus: "0.35"
 
@@ -156,7 +177,7 @@ services:
       JAVA_OPTS: ${PROBLEM_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError}
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ai_oj_next}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       MYSQL_USER: ${MYSQL_USER:-aioj}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD, see .env.example}
       PROBLEM_DB_POOL_MAX: ${PROBLEM_DB_POOL_MAX:-8}
       PROBLEM_DB_POOL_MIN_IDLE: ${PROBLEM_DB_POOL_MIN_IDLE:-2}
       DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-5000}
@@ -192,6 +213,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 640m
     cpus: "0.65"
 
@@ -207,7 +230,7 @@ services:
       JAVA_OPTS: ${AI_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError}
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ai_oj_next}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       MYSQL_USER: ${MYSQL_USER:-aioj}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD, see .env.example}
       AI_DB_POOL_MAX: ${AI_DB_POOL_MAX:-4}
       AI_DB_POOL_MIN_IDLE: ${AI_DB_POOL_MIN_IDLE:-1}
       DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-5000}
@@ -254,6 +277,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 640m
     cpus: "0.65"
 
@@ -269,7 +294,7 @@ services:
       JAVA_OPTS: ${JUDGE_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError}
       MYSQL_URL: ${MYSQL_URL:-jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ai_oj_next}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
       MYSQL_USER: ${MYSQL_USER:-aioj}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD, see .env.example}
       JUDGE_DB_POOL_MAX: ${JUDGE_DB_POOL_MAX:-4}
       JUDGE_DB_POOL_MIN_IDLE: ${JUDGE_DB_POOL_MIN_IDLE:-1}
       DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-5000}
@@ -308,6 +333,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 384m
     cpus: "0.50"
 
@@ -335,6 +362,8 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 960m
     cpus: "1.20"
 
@@ -352,6 +381,8 @@ services:
     depends_on:
       gateway-service:
         condition: service_healthy
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 64m
     cpus: "0.10"
 
@@ -369,6 +400,8 @@ services:
     depends_on:
       gateway-service:
         condition: service_healthy
+    restart: unless-stopped
+    logging: *bounded-logging
     mem_limit: 64m
     cpus: "0.10"
 
