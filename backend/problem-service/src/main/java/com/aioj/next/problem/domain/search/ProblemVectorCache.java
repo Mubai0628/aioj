@@ -39,7 +39,8 @@ public class ProblemVectorCache {
 
     public Map<Long, Vector> vectors() {
         Snapshot current = snapshot;
-        if (current.loadedAt().plus(properties.getVectorRefreshInterval()).isBefore(Instant.now()) && refreshLock.tryLock()) {
+        // Inclusive: two calls on the same clock tick still refresh when the interval is zero.
+        if (!Instant.now().isBefore(current.loadedAt().plus(properties.getVectorRefreshInterval())) && refreshLock.tryLock()) {
             try {
                 current = refresh(current);
                 snapshot = current;
