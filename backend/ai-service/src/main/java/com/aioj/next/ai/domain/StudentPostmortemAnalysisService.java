@@ -19,6 +19,8 @@ import java.util.Set;
 public class StudentPostmortemAnalysisService {
     private static final int MAX_STATISTICS_CHARS = 16000;
     private static final int MAX_SUMMARY_CHARS = 5000;
+    /** A problem solved in the end is weaker evidence of a weakness than one left unsolved. */
+    private static final double SOLVED_REVIEW_CONFIDENCE = 0.62;
 
     private final AiProvider aiProvider;
     private final AiQuotaService aiQuotaService;
@@ -139,47 +141,69 @@ public class StudentPostmortemAnalysisService {
         );
     }
 
+    /**
+     * One candidate per attempted problem that still needs review: unsolved, low
+     * IOI score, or flagged by a problem-service weakness seed. A seed starts with
+     * "label title：" and, when present, is the evidence because it carries tags
+     * and attempt details; seeds never become candidates on their own.
+     */
     private List<StudentPostmortemWeaknessSuggestion> deterministicWeaknessCandidates(StudentPostmortemAnalysisRequest request) {
         if (request == null || !StringUtils.hasText(request.statisticsJson())) {
             return List.of();
         }
         try {
             JsonNode root = objectMapper.readTree(request.statisticsJson());
-            List<StudentPostmortemWeaknessSuggestion> suggestions = new ArrayList<>();
-            Set<String> seen = new LinkedHashSet<>();
-            JsonNode seeds = root.path("weaknessSeeds");
-            if (seeds.isArray()) {
-                for (JsonNode seed : seeds) {
-                    addSeedSuggestion(suggestions, seen, seed.asString(""), 0.76);
+            JsonNode problems = root.path("problems");
+            if (!problems.isArray()) {
+                return List.of();
+            }
+            List<String> seeds = new ArrayList<>();
+            JsonNode seedNodes = root.path("weaknessSeeds");
+            if (seedNodes.isArray()) {
+                for (JsonNode seed : seedNodes) {
+                    String value = seed.asString("");
+                    if (StringUtils.hasText(value)) {
+                        seeds.add(value);
+                    }
                 }
             }
-            JsonNode problems = root.path("problems");
-            if (problems.isArray()) {
-                for (JsonNode problem : problems) {
-                    String label = problem.path("label").asString("");
-                    String title = problem.path("title").asString("");
-                    String status = problem.path("bestStatus").asString("");
-                    if (isAcm(request)) {
-                        if (!"ACCEPTED".equals(status)) {
-                            List<String> tags = readTags(problem.path("tags"));
-                            int attempts = problem.path("submissionCount").asInt(0);
-                            addSuggestion(suggestions, seen,
-                                    "%s %s：最佳状态 %s，提交 %d 次".formatted(label, title, status, attempts),
-                                    tags,
-                                    attempts >= 3 ? 0.80 : 0.72);
-                        }
+            boolean acm = isAcm(request);
+            List<StudentPostmortemWeaknessSuggestion> suggestions = new ArrayList<>();
+            Set<String> seen = new LinkedHashSet<>();
+            for (JsonNode problem : problems) {
+                int attempts = problem.path("submissionCount").asInt(0);
+                if (attempts <= 0) {
+                    continue;
+                }
+                String label = problem.path("label").asString("");
+                String title = problem.path("title").asString("");
+                String status = problem.path("bestStatus").asString("");
+                boolean solved = "ACCEPTED".equals(status);
+                String prefix = "%s %s：".formatted(label, title);
+                String seed = seeds.stream().filter(value -> value.startsWith(prefix)).findFirst().orElse(null);
+                if (acm) {
+                    if (solved && seed == null) {
                         continue;
                     }
-                    double best = problem.path("bestScore").asDouble(0);
-                    double max = problem.path("maxScore").asDouble(0);
-                    if (!"ACCEPTED".equals(status) || (max > 0 && best / max < 0.7)) {
-                        List<String> tags = readTags(problem.path("tags"));
-                        addSuggestion(suggestions, seen,
-                                "%s %s：最佳状态 %s，得分 %.2f/%.2f".formatted(label, title, status, best, max),
-                                tags,
-                                max > 0 && best / max < 0.4 ? 0.82 : 0.72);
-                    }
+                    addSuggestion(suggestions, seen,
+                            solved ? "最终通过，但提交过程仍值得复盘" : "提交后仍未通过",
+                            seed != null ? seed : "%s %s：最佳状态 %s，提交 %d 次".formatted(label, title, status, attempts),
+                            readTags(problem.path("tags")),
+                            solved ? SOLVED_REVIEW_CONFIDENCE : attempts >= 3 ? 0.80 : 0.72);
+                    continue;
                 }
+                double best = problem.path("bestScore").asDouble(0);
+                double max = problem.path("maxScore").asDouble(0);
+                double ratio = max > 0 ? best / max : 0;
+                boolean lowScore = max > 0 && ratio < 0.7;
+                if (solved && !lowScore && seed == null) {
+                    continue;
+                }
+                addSuggestion(suggestions, seen,
+                        solved ? "最终通过，但得分或提交过程仍值得复盘" : "提交后仍未拿到满分",
+                        seed != null ? seed : "%s %s：最佳状态 %s，得分 %.2f/%.2f".formatted(label, title, status, best, max),
+                        readTags(problem.path("tags")),
+                        solved ? SOLVED_REVIEW_CONFIDENCE : max > 0 && ratio < 0.4 ? 0.82 : 0.72);
             }
             return suggestions.stream().limit(8).toList();
         } catch (Exception ignored) {
@@ -188,45 +212,17 @@ public class StudentPostmortemAnalysisService {
     }
 
     private void addSuggestion(List<StudentPostmortemWeaknessSuggestion> suggestions, Set<String> seen,
-                               String evidence, List<String> tags, double confidence) {
-        String normalized = summarize(evidence, 220);
-        if (!StringUtils.hasText(normalized) || !seen.add(normalized)) {
+                               String symptom, String evidence, List<String> tags, double confidence) {
+        String normalizedEvidence = summarize(evidence, 220);
+        if (!StringUtils.hasText(normalizedEvidence) || !seen.add(normalizedEvidence)) {
             return;
         }
         String knowledgeNode = tags == null || tags.isEmpty() ? "赛后复盘薄弱点" : tags.get(0);
         suggestions.add(new StudentPostmortemWeaknessSuggestion(
                 knowledgeNode,
-                normalized,
+                symptom,
                 tags == null ? List.of() : tags,
-                List.of(normalized),
-                confidence
-        ));
-    }
-
-    private void addSeedSuggestion(List<StudentPostmortemWeaknessSuggestion> suggestions, Set<String> seen,
-                                   String evidence, double confidence) {
-        String normalized = summarize(evidence, 220);
-        if (!StringUtils.hasText(normalized) || !seen.add(normalized)) {
-            return;
-        }
-        String knowledgeNode = "赛后复盘薄弱点";
-        List<String> tags = List.of();
-        int separator = normalized.indexOf(':');
-        if (separator < 0) {
-            separator = normalized.indexOf('：');
-        }
-        if (separator > 0) {
-            String candidate = normalized.substring(0, separator).trim();
-            if (StringUtils.hasText(candidate) && candidate.length() <= 80) {
-                knowledgeNode = candidate;
-                tags = List.of(candidate);
-            }
-        }
-        suggestions.add(new StudentPostmortemWeaknessSuggestion(
-                knowledgeNode,
-                normalized,
-                tags,
-                List.of(normalized),
+                List.of(normalizedEvidence),
                 confidence
         ));
     }

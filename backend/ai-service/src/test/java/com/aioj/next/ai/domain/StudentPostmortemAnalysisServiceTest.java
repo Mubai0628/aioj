@@ -2,6 +2,7 @@ package com.aioj.next.ai.domain;
 
 import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.ai.StudentPostmortemAnalysisRequest;
+import com.aioj.next.contract.ai.StudentPostmortemAnalysisResponse;
 import com.aioj.next.contract.ai.StudentPostmortemCodeReference;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -31,8 +32,12 @@ class StudentPostmortemAnalysisServiceTest {
 
         assertThat(response.success()).isTrue();
         assertThat(response.markdown()).contains("个人成绩概览");
-        assertThat(response.weaknessCandidates()).isNotEmpty();
-        assertThat(response.weaknessCandidates().get(0).knowledgeNode()).isEqualTo("binary_search");
+        assertThat(response.weaknessCandidates()).hasSize(1);
+        var candidate = response.weaknessCandidates().get(0);
+        assertThat(candidate.knowledgeNode()).isEqualTo("binary_search");
+        assertThat(candidate.symptom()).isEqualTo("提交后仍未拿到满分");
+        assertThat(candidate.evidence()).containsExactly("A 星港间距：最佳状态 WRONG_ANSWER，得分 35/100，标签 binary_search, greedy");
+        assertThat(candidate.confidence()).isEqualTo(0.82);
         assertThat(response.practiceSuggestions()).isNotEmpty();
         verify(quotaService).record(7L, "mock", "mock-model", 80, 32, true);
     }
@@ -67,8 +72,9 @@ class StudentPostmortemAnalysisServiceTest {
         StudentPostmortemAnalysisService service = new StudentPostmortemAnalysisService(provider, quotaService,
                 new AiCapacityService(new com.aioj.next.ai.config.AiProperties()), new ObjectMapper());
 
-        service.analyze(acmRequest());
+        var response = service.analyze(acmRequest());
 
+        assertThat(response.weaknessCandidates()).isEmpty();
         var contextCaptor = forClass(AiChatContext.class);
         verify(provider).chat(any(AiChatRequest.class), contextCaptor.capture(), eq(AiModelScope.REPORT_ANALYSIS));
         String pack = contextCaptor.getValue().conversationContextPack();
@@ -76,6 +82,71 @@ class StudentPostmortemAnalysisServiceTest {
         assertThat(pack).contains("Representative ACM Code References");
         assertThat(pack).contains("int main()");
         assertThat(pack).contains("Do not mention total score");
+    }
+
+    @Test
+    void unattemptedProblemIsNotAWeaknessCandidate() {
+        var response = analyzeStatistics("ACM", """
+                {
+                  "weaknessSeeds": [],
+                  "problems": [
+                    {"label": "B", "title": "迷宫最短逃脱", "bestStatus": null, "submissionCount": 0, "tags": ["BFS"]}
+                  ]
+                }
+                """);
+
+        assertThat(response.weaknessCandidates()).isEmpty();
+    }
+
+    @Test
+    void acceptedAcmProblemWithSeedIsAWeakerReviewCandidate() {
+        var response = analyzeStatistics("ACM", """
+                {
+                  "weaknessSeeds": ["A 星港间距：最佳状态 ACCEPTED，提交 3 次，标签 binary_search"],
+                  "problems": [
+                    {"label": "A", "title": "星港间距", "bestStatus": "ACCEPTED", "submissionCount": 3, "tags": ["binary_search"]},
+                    {"label": "B", "title": "迷宫最短逃脱", "bestStatus": "TIME_LIMIT_EXCEEDED", "submissionCount": 4, "tags": ["BFS"]}
+                  ]
+                }
+                """);
+
+        assertThat(response.weaknessCandidates()).hasSize(2);
+        var solved = response.weaknessCandidates().get(0);
+        assertThat(solved.knowledgeNode()).isEqualTo("binary_search");
+        assertThat(solved.symptom()).isEqualTo("最终通过，但提交过程仍值得复盘");
+        assertThat(solved.evidence()).containsExactly("A 星港间距：最佳状态 ACCEPTED，提交 3 次，标签 binary_search");
+        var unsolved = response.weaknessCandidates().get(1);
+        assertThat(unsolved.symptom()).isEqualTo("提交后仍未通过");
+        assertThat(unsolved.evidence()).containsExactly("B 迷宫最短逃脱：最佳状态 TIME_LIMIT_EXCEEDED，提交 4 次");
+        assertThat(solved.confidence()).isLessThan(unsolved.confidence());
+    }
+
+    @Test
+    void seedsWithoutAMatchingProblemNeverBecomeCandidatesOfTheirOwn() {
+        var response = analyzeStatistics("IOI", """
+                {
+                  "weaknessSeeds": ["binary_search: A 星港间距 得分 35/100"],
+                  "problems": [
+                    {"label": "A", "title": "星港间距", "bestStatus": "WRONG_ANSWER", "bestScore": 35, "maxScore": 100,
+                     "submissionCount": 2, "tags": []}
+                  ]
+                }
+                """);
+
+        assertThat(response.weaknessCandidates()).hasSize(1);
+        var candidate = response.weaknessCandidates().get(0);
+        assertThat(candidate.knowledgeNode()).isEqualTo("赛后复盘薄弱点");
+        assertThat(candidate.evidence()).containsExactly("A 星港间距：最佳状态 WRONG_ANSWER，得分 35.00/100.00");
+    }
+
+    private StudentPostmortemAnalysisResponse analyzeStatistics(String mode, String statisticsJson) {
+        AiProvider provider = mock(AiProvider.class);
+        when(provider.chat(any(AiChatRequest.class), any(AiChatContext.class), eq(AiModelScope.REPORT_ANALYSIS)))
+                .thenReturn(new AiCompletion("ok", "mock", "mock-model", 1, 1));
+        StudentPostmortemAnalysisService service = new StudentPostmortemAnalysisService(provider, mock(AiQuotaService.class),
+                new AiCapacityService(new com.aioj.next.ai.config.AiProperties()), new ObjectMapper());
+        return service.analyze(new StudentPostmortemAnalysisRequest(7L, 12L, 34L, 56L, 7L,
+                "Spring Contest", "Replay Run", mode, statisticsJson, "", List.of()));
     }
 
     private StudentPostmortemAnalysisRequest request() {
@@ -94,7 +165,7 @@ class StudentPostmortemAnalysisServiceTest {
                           "acceptedCount": 1,
                           "totalScore": 35,
                           "maxScore": 100,
-                          "weaknessSeeds": ["binary_search: A 星港间距 得分 35/100"],
+                          "weaknessSeeds": ["A 星港间距：最佳状态 WRONG_ANSWER，得分 35/100，标签 binary_search, greedy"],
                           "problems": [
                             {
                               "label": "A",
@@ -102,6 +173,7 @@ class StudentPostmortemAnalysisServiceTest {
                               "bestStatus": "WRONG_ANSWER",
                               "bestScore": 35,
                               "maxScore": 100,
+                              "submissionCount": 3,
                               "tags": ["binary_search", "greedy"]
                             }
                           ]

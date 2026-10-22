@@ -53,6 +53,7 @@ type StudentPostmortemStats = {
   }>;
   submissionTimeline?: Array<{
     submissionId?: EntityId;
+    contestProblemId?: EntityId;
     problemLabel?: string;
     problemTitle?: string;
     language?: string;
@@ -365,6 +366,7 @@ export function ContestStudentPostmortemPanel({
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <main className="min-w-0 space-y-5">
                 {stats ? <StatsOverview stats={stats} /> : <ErrorPanel title={t("contests.studentPostmortemStatsParseFailed")} />}
+                {stats ? <ProblemBreakdown stats={stats} /> : null}
 
                 <section className="rounded-2xl border border-[var(--oj-border)] bg-white p-5">
                   <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -396,8 +398,6 @@ export function ContestStudentPostmortemPanel({
                     <p className="text-sm leading-6 text-[var(--oj-ink-muted)]">{t("contests.postmortemNoMarkdown")}</p>
                   )}
                 </section>
-
-                {stats ? <ProblemBreakdown stats={stats} /> : null}
               </main>
 
               <aside className="space-y-5">
@@ -431,16 +431,41 @@ export function ContestStudentPostmortemPanel({
 function StatsOverview({ stats }: { stats: StudentPostmortemStats }) {
   const { t } = useI18n();
   const isAcm = stats.mode === "ACM";
-  const unresolved = (stats.problems ?? []).filter((problem) => (problem.submissionCount ?? 0) > 0 && problem.bestStatus !== "ACCEPTED").length;
+  const progress = problemProgress(stats.problems ?? []);
+  const segments = [
+    { key: "solved", label: t("contests.scoreboardSolvedStatus"), count: progress.solved, color: "bg-emerald-500" },
+    { key: "unsolved", label: t("contests.studentPostmortemUnsolved"), count: progress.unsolved, color: "bg-amber-500" },
+    { key: "unattempted", label: t("contests.studentPostmortemUnattempted"), count: progress.unattempted, color: "bg-slate-300" }
+  ];
   return (
-    <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <InfoCard label={t("contests.postmortemSubmissions")} value={String(stats.submissionCount ?? 0)} />
-      <InfoCard label={t("contests.postmortemAccepted")} value={String(stats.acceptedCount ?? 0)} />
-      <InfoCard
-        label={isAcm ? t("contests.studentPostmortemUnresolvedProblems") : t("contests.studentPostmortemScore")}
-        value={isAcm ? String(unresolved) : formatScoreSummary(stats.totalScore, stats.maxScore)}
-      />
-      <InfoCard label={t("contests.postmortemWeaknessCandidates")} value={String(stats.weaknessSeeds?.length ?? 0)} />
+    <section className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <InfoCard label={t("contests.postmortemSubmissions")} value={String(stats.submissionCount ?? 0)} />
+        <InfoCard label={t("contests.studentPostmortemSolvedProblems")} value={`${progress.solved}/${progress.total}`} />
+        <InfoCard
+          label={isAcm ? t("contests.studentPostmortemUnresolvedProblems") : t("contests.studentPostmortemScore")}
+          value={isAcm ? String(progress.unsolved) : formatScoreSummary(stats.totalScore, stats.maxScore)}
+        />
+        <InfoCard label={t("contests.postmortemWeaknessCandidates")} value={String(stats.weaknessSeeds?.length ?? 0)} />
+      </div>
+      {progress.total > 0 ? (
+        <div className="rounded-2xl border border-[var(--oj-border-soft)] bg-white p-4">
+          <div className="text-xs font-medium text-[var(--oj-ink-muted)]">{t("contests.studentPostmortemProblemProgress")}</div>
+          <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+            {segments.filter((segment) => segment.count > 0).map((segment) => (
+              <span key={segment.key} className={`h-full ${segment.color}`} style={{ width: `${(segment.count / progress.total) * 100}%` }} />
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--oj-ink-muted)]">
+            {segments.map((segment) => (
+              <span key={segment.key} className="inline-flex items-center gap-2">
+                <span className={`size-2.5 rounded-full ${segment.color}`} aria-hidden="true" />
+                {segment.label} <span className="tabular-nums">{segment.count}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -450,52 +475,66 @@ function ProblemBreakdown({ stats }: { stats: StudentPostmortemStats }) {
   const problems = stats.problems ?? [];
   const timeline = stats.submissionTimeline ?? [];
   const isAcm = stats.mode === "ACM";
+  const statusLabel = (status?: string) => status ? t(`submissionStatus.${status}`) : "--";
   return (
     <section className="rounded-2xl border border-[var(--oj-border)] bg-white p-5">
       <h2 className="text-base font-semibold text-[var(--oj-ink)]">{t("contests.studentPostmortemProblemReview")}</h2>
-      <div className="mt-4 overflow-x-auto">
-        <table className={`w-full text-sm ${isAcm ? "min-w-[660px]" : "min-w-[760px]"}`}>
-          <thead className="border-b border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] text-xs font-semibold text-[var(--oj-ink-muted)]">
-            <tr>
-              <th className="px-4 py-3 text-left">{t("contests.problem")}</th>
-              <th className="px-4 py-3 text-center">{t("contests.postmortemAttempts")}</th>
-              <th className="px-4 py-3 text-center">{t("contests.studentPostmortemBestStatus")}</th>
-              {!isAcm ? <th className="px-4 py-3 text-center">{t("contests.score")}</th> : null}
-              <th className="px-4 py-3 text-left">{t("contests.postmortemTags")}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--oj-border-soft)]">
-            {problems.map((problem) => (
-              <tr key={`${problem.contestProblemId}-${problem.problemId}`}>
-                <td className="px-4 py-3">
-                  <div className="font-medium text-[var(--oj-ink)]">{problem.label} · {problem.title}</div>
-                  <div className="mt-1 text-xs text-[var(--oj-ink-muted)]">{problem.difficulty || "--"}</div>
-                </td>
-                <td className="px-4 py-3 text-center tabular-nums">{problem.submissionCount ?? 0}</td>
-                <td className="px-4 py-3 text-center">{problem.bestStatus ? t(`submissionStatus.${problem.bestStatus}`) : "--"}</td>
-                {!isAcm ? <td className="px-4 py-3 text-center tabular-nums">{formatScoreSummary(problem.bestScore, problem.maxScore)}</td> : null}
-                <td className="px-4 py-3 text-xs text-[var(--oj-ink-muted)]">{problem.tags?.join(", ") || "--"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {problems.map((problem, index) => {
+          const attempts = problem.submissionCount ?? 0;
+          const solved = problem.bestStatus === "ACCEPTED";
+          const trail = problem.contestProblemId == null ? [] : statusTrail(timeline
+            .filter((submission) => submission.contestProblemId != null && String(submission.contestProblemId) === String(problem.contestProblemId))
+            .map((submission) => statusLabel(submission.status)));
+          return (
+            <article key={problem.contestProblemId ?? problem.problemId ?? index} className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-[var(--oj-ink)]">{problem.label} · {problem.title}</h3>
+                  <p className="mt-1 text-xs text-[var(--oj-ink-muted)]">{problem.difficulty || "--"}</p>
+                </div>
+                <Badge className="shrink-0" tone={solved ? "green" : attempts > 0 ? "amber" : "neutral"}>
+                  {solved ? t("contests.scoreboardSolvedStatus") : attempts > 0 ? t("contests.studentPostmortemUnsolved") : t("contests.studentPostmortemUnattempted")}
+                </Badge>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--oj-ink-muted)]">
+                <span>{t("contests.postmortemAttempts")}: <span className="tabular-nums">{attempts}</span></span>
+                {attempts > 0 ? <span>{t("contests.studentPostmortemBestStatus")}: {statusLabel(problem.bestStatus)}</span> : null}
+                {!isAcm ? <span>{t("contests.score")}: <span className="tabular-nums">{formatScoreSummary(problem.bestScore, problem.maxScore)}</span></span> : null}
+              </div>
+              {problem.tags?.length ? (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {problem.tags.map((tag, tagIndex) => <Badge key={`${tag}-${tagIndex}`} tone="neutral">{tag}</Badge>)}
+                </div>
+              ) : null}
+              {trail.length ? (
+                <p className="mt-3 border-t border-[var(--oj-border-soft)] pt-3 text-sm leading-6 text-[var(--oj-ink)]">
+                  <span className="mr-2 text-xs font-medium text-[var(--oj-ink-muted)]">{t("contests.studentPostmortemTimeline")}</span>
+                  {trail.map((step) => step.count > 1 ? `${step.label} ×${step.count}` : step.label).join(" → ")}
+                </p>
+              ) : null}
+            </article>
+          );
+        })}
       </div>
 
       {timeline.length ? (
-        <div className="mt-5 rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4">
-          <h3 className="text-sm font-semibold text-[var(--oj-ink)]">{t("contests.studentPostmortemTimeline")}</h3>
+        <details className="mt-5 rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-[var(--oj-ink)]">
+            {t("contests.studentPostmortemTimeline")} <span className="tabular-nums">({timeline.length})</span>
+          </summary>
           <div className="mt-3 space-y-2">
-            {timeline.slice(0, 8).map((submission) => (
-              <div key={submission.submissionId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm">
+            {timeline.map((submission, index) => (
+              <div key={submission.submissionId ?? index} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm">
                 <span className="font-medium text-[var(--oj-ink)]">{submission.problemLabel} · {submission.problemTitle}</span>
                 <span className="text-xs tabular-nums text-[var(--oj-ink-muted)]">
-                  {submission.language} · {submission.status ? t(`submissionStatus.${submission.status}`) : "--"}
+                  {submission.language} · {statusLabel(submission.status)}
                   {!isAcm ? ` · ${formatScoreSummary(submission.score, submission.maxScore)}` : ""}
                 </span>
               </div>
             ))}
           </div>
-        </div>
+        </details>
       ) : null}
     </section>
   );
@@ -622,6 +661,26 @@ function PostmortemAiStatusChip({ status }: { status: string }) {
   const { t } = useI18n();
   const tone = status === "COMPLETED" ? "green" : status === "FAILED" ? "red" : status === "RUNNING" ? "blue" : "neutral";
   return <Badge className="w-fit" tone={tone}>{t(`contests.postmortemAiStatus.${status}`)}</Badge>;
+}
+
+function problemProgress(problems: NonNullable<StudentPostmortemStats["problems"]>) {
+  const solved = problems.filter((problem) => problem.bestStatus === "ACCEPTED").length;
+  const unsolved = problems.filter((problem) => (problem.submissionCount ?? 0) > 0 && problem.bestStatus !== "ACCEPTED").length;
+  return { total: problems.length, solved, unsolved, unattempted: problems.length - solved - unsolved };
+}
+
+/** Collapses repeated statuses, so WA, WA, WA, AC reads as "WA ×3 → AC". */
+function statusTrail(labels: string[]) {
+  const steps: Array<{ label: string; count: number }> = [];
+  for (const label of labels) {
+    const last = steps[steps.length - 1];
+    if (last && last.label === label) {
+      last.count += 1;
+    } else {
+      steps.push({ label, count: 1 });
+    }
+  }
+  return steps;
 }
 
 function parseStats(value: string): StudentPostmortemStats | null {
