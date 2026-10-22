@@ -2,13 +2,53 @@ import * as React from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { FilterX, Search } from "lucide-react";
-import { api, type Difficulty } from "@aioj/api-client";
+import {
+  api,
+  type Difficulty,
+  type EntityId,
+  type ProblemResponse,
+  type TutorProblemResponse
+} from "@aioj/api-client";
 import { Badge, Button } from "@aioj/ui-react";
 import { EmptyState, ErrorPanel, LoadingPanel, PageSection, inputClass } from "../components/Common";
 import { useI18n } from "../lib/i18n";
 import { difficultyTone } from "../lib/format";
 
 const difficulties: Array<Difficulty | ""> = ["", "EASY", "MEDIUM", "HARD", "CHALLENGE"];
+
+type ProblemCard = Pick<
+  ProblemResponse,
+  "id" | "title" | "difficulty" | "statement" | "tags" | "aiGenerated"
+>;
+
+type ProblemListResult = {
+  records: ProblemCard[];
+  total: number;
+  semantic: boolean;
+  fallback: boolean;
+};
+
+function catalogProblemCard(problem: ProblemResponse): ProblemCard {
+  return {
+    id: problem.id,
+    title: problem.title,
+    difficulty: problem.difficulty,
+    statement: problem.statement,
+    tags: problem.tags,
+    aiGenerated: problem.aiGenerated
+  };
+}
+
+function tutorProblemCard(problem: TutorProblemResponse): ProblemCard {
+  return {
+    id: problem.problemId,
+    title: problem.title,
+    difficulty: problem.difficulty,
+    statement: problem.statement,
+    tags: problem.tags,
+    aiGenerated: false
+  };
+}
 
 export function ProblemsView() {
   const { t } = useI18n();
@@ -19,15 +59,52 @@ export function ProblemsView() {
   const difficulty = search.difficulty ?? "";
   const page = Number(search.page ?? 1);
 
-  const problemsQuery = useQuery({
-    queryKey: ["problems", { page, keyword: search.keyword ?? "", difficulty, tag: search.tag ?? "" }],
-    queryFn: () => api.problems({
-      page,
-      pageSize: 12,
-      keyword: search.keyword,
-      difficulty,
-      tag: search.tag
-    })
+  const semanticSearch =
+  Boolean(search.keyword?.trim()) &&
+  !difficulty &&
+  !search.tag?.trim();
+
+  const problemsQuery = useQuery<ProblemListResult>({
+    queryKey: [
+      "problems",
+      {
+        page,
+        keyword: search.keyword ?? "",
+        difficulty,
+        tag: search.tag ?? "",
+        semanticSearch
+      }
+    ],
+    queryFn: async () => {
+      if (semanticSearch) {
+        const result = await api.tutorSemanticSearch({
+          query: search.keyword!.trim(),
+          limit: 12
+        });
+
+        return {
+          records: result.records.map(({ problem }) => tutorProblemCard(problem)),
+          total: result.records.length,
+          semantic: true,
+          fallback: result.fallback
+        };
+      }
+
+      const result = await api.problems({
+        page,
+        pageSize: 12,
+        keyword: search.keyword,
+        difficulty,
+        tag: search.tag
+      });
+
+      return {
+        records: result.records.map(catalogProblemCard),
+        total: result.total,
+        semantic: false,
+        fallback: false
+      };
+    }
   });
 
   function updateSearch(next: Partial<typeof search>) {
@@ -122,7 +199,7 @@ export function ProblemsView() {
                   </div>
                   <h2 className="line-clamp-2 text-balance text-lg font-semibold text-[var(--oj-ink)]">{problem.title}</h2>
                   <p className="mt-3 line-clamp-3 text-sm leading-6 text-[var(--oj-ink-muted)]">
-                    {problem.notes || t("problems.openDetailFallback")}
+                    {problem.statement || t("problems.openDetailFallback")}
                   </p>
                 </div>
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3">

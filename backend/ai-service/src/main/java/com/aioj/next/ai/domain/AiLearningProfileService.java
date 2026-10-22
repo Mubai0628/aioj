@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.aioj.next.contract.ai.AiRecommendationProfileSignal;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -141,6 +142,38 @@ public class AiLearningProfileService {
         return profileMapper.selectList(query).stream()
                 .filter(this::isListVisibleProfile)
                 .map(profile -> toResponse(profile, evidence(profile.id, 3)))
+                .toList();
+    }
+
+    public List<AiRecommendationProfileSignal> recommendationSignals(
+            Long userId,
+            Integer requestedLimit
+    ) {
+        if (userId == null) {
+            return List.of();
+        }
+
+        int limit = requestedLimit == null || requestedLimit <= 0
+                ? 20
+                : Math.min(requestedLimit, 50);
+
+        return profileMapper.selectList(new QueryWrapper<AiLearningProfileEntity>()
+                        .eq("user_id", userId)
+                        .eq("category", CATEGORY_WEAKNESS)
+                        .eq("state", STATE_ACTIVE)
+                        .isNull("deleted_at")
+                        .isNull("disabled_at")
+                        .orderByDesc("confidence")
+                        .orderByDesc("updated_at")
+                        .last("LIMIT " + limit))
+                .stream()
+                .map(profile -> new AiRecommendationProfileSignal(
+                        profile.profileKey,
+                        profile.category,
+                        "NEGATIVE",
+                        profile.confidence == null ? null : profile.confidence.doubleValue(),
+                        profile.evidenceCount
+                ))
                 .toList();
     }
 

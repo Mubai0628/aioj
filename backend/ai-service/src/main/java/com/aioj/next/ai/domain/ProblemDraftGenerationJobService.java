@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,6 +82,7 @@ public class ProblemDraftGenerationJobService {
     /** Jobs currently executing on this instance; lease recovery must not touch them. */
     private final Set<Long> inFlightJobs = ConcurrentHashMap.newKeySet();
 
+    @Autowired
     public ProblemDraftGenerationJobService(
             ProblemDraftGenerationJobMapper jobMapper,
             ProblemDraftStore problemDraftStore,

@@ -53,6 +53,7 @@ type StudentPostmortemStats = {
   }>;
   submissionTimeline?: Array<{
     submissionId?: EntityId;
+    contestProblemId?: EntityId;
     problemLabel?: string;
     problemTitle?: string;
     language?: string;
@@ -365,6 +366,7 @@ export function ContestStudentPostmortemPanel({
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <main className="min-w-0 space-y-5">
                 {stats ? <StatsOverview stats={stats} /> : <ErrorPanel title={t("contests.studentPostmortemStatsParseFailed")} />}
+                {stats ? <ProblemBreakdown stats={stats} /> : null}
 
                 <section className="rounded-2xl border border-[var(--oj-border)] bg-white p-5">
                   <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -397,7 +399,6 @@ export function ContestStudentPostmortemPanel({
                   )}
                 </section>
 
-                {stats ? <ProblemBreakdown stats={stats} /> : null}
               </main>
 
               <aside className="space-y-5">
@@ -431,16 +432,62 @@ export function ContestStudentPostmortemPanel({
 function StatsOverview({ stats }: { stats: StudentPostmortemStats }) {
   const { t } = useI18n();
   const isAcm = stats.mode === "ACM";
-  const unresolved = (stats.problems ?? []).filter((problem) => (problem.submissionCount ?? 0) > 0 && problem.bestStatus !== "ACCEPTED").length;
+  const problems = stats.problems ?? [];
+  const total = problems.length;
+  const solved = problems.filter((problem) => problem.bestStatus === "ACCEPTED").length;
+  const attemptedUnsolved = problems.filter(
+    (problem) => (problem.submissionCount ?? 0) > 0 && problem.bestStatus !== "ACCEPTED"
+  ).length;
+  const unattempted = total - solved - attemptedUnsolved;
+
+  const segments = [
+    { label: t("contests.scoreboardSolvedStatus"), count: solved, color: "bg-emerald-500" },
+    { label: t("contests.studentPostmortemUnresolvedProblems"), count: attemptedUnsolved, color: "bg-amber-400" },
+    { label: t("contests.studentPostmortemUnattempted"), count: unattempted, color: "bg-slate-300" }
+  ];
+
   return (
-    <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <InfoCard label={t("contests.postmortemSubmissions")} value={String(stats.submissionCount ?? 0)} />
-      <InfoCard label={t("contests.postmortemAccepted")} value={String(stats.acceptedCount ?? 0)} />
-      <InfoCard
-        label={isAcm ? t("contests.studentPostmortemUnresolvedProblems") : t("contests.studentPostmortemScore")}
-        value={isAcm ? String(unresolved) : formatScoreSummary(stats.totalScore, stats.maxScore)}
-      />
-      <InfoCard label={t("contests.postmortemWeaknessCandidates")} value={String(stats.weaknessSeeds?.length ?? 0)} />
+    <section className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <InfoCard label={t("contests.postmortemSubmissions")} value={String(stats.submissionCount ?? 0)} />
+        <InfoCard
+          label={isAcm ? t("contests.scoreboardSolvedStatus") : t("contests.postmortemAccepted")}
+          value={String(isAcm ? solved : stats.acceptedCount ?? 0)}
+        />
+        <InfoCard
+          label={isAcm ? t("contests.studentPostmortemUnresolvedProblems") : t("contests.studentPostmortemScore")}
+          value={isAcm ? String(attemptedUnsolved) : formatScoreSummary(stats.totalScore, stats.maxScore)}
+        />
+        <InfoCard label={t("contests.postmortemWeaknessCandidates")} value={String(stats.weaknessSeeds?.length ?? 0)} />
+      </div>
+
+      {isAcm && total > 0 ? (
+        <div className="rounded-2xl border border-[var(--oj-border-soft)] bg-white p-5">
+          <p className="text-xs font-medium text-[var(--oj-ink-muted)]">{t("contests.allProblems")}</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--oj-ink)]">
+            {solved}<span className="text-base font-normal text-[var(--oj-ink-muted)]"> / {total}</span>
+          </p>
+
+          <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+            {segments.filter((segment) => segment.count > 0).map((segment) => (
+              <span
+                key={segment.label}
+                className={`h-full ${segment.color}`}
+                style={{ width: `${(segment.count / total) * 100}%` }}
+              />
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--oj-ink-muted)]">
+            {segments.map((segment) => (
+              <div key={segment.label} className="flex items-center gap-2">
+                <span className={`size-2.5 rounded-full ${segment.color}`} aria-hidden="true" />
+                <span>{segment.label} {segment.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -453,39 +500,98 @@ function ProblemBreakdown({ stats }: { stats: StudentPostmortemStats }) {
   return (
     <section className="rounded-2xl border border-[var(--oj-border)] bg-white p-5">
       <h2 className="text-base font-semibold text-[var(--oj-ink)]">{t("contests.studentPostmortemProblemReview")}</h2>
-      <div className="mt-4 overflow-x-auto">
-        <table className={`w-full text-sm ${isAcm ? "min-w-[660px]" : "min-w-[760px]"}`}>
-          <thead className="border-b border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] text-xs font-semibold text-[var(--oj-ink-muted)]">
-            <tr>
-              <th className="px-4 py-3 text-left">{t("contests.problem")}</th>
-              <th className="px-4 py-3 text-center">{t("contests.postmortemAttempts")}</th>
-              <th className="px-4 py-3 text-center">{t("contests.studentPostmortemBestStatus")}</th>
-              {!isAcm ? <th className="px-4 py-3 text-center">{t("contests.score")}</th> : null}
-              <th className="px-4 py-3 text-left">{t("contests.postmortemTags")}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--oj-border-soft)]">
-            {problems.map((problem) => (
-              <tr key={`${problem.contestProblemId}-${problem.problemId}`}>
-                <td className="px-4 py-3">
-                  <div className="font-medium text-[var(--oj-ink)]">{problem.label} · {problem.title}</div>
-                  <div className="mt-1 text-xs text-[var(--oj-ink-muted)]">{problem.difficulty || "--"}</div>
-                </td>
-                <td className="px-4 py-3 text-center tabular-nums">{problem.submissionCount ?? 0}</td>
-                <td className="px-4 py-3 text-center">{problem.bestStatus ? t(`submissionStatus.${problem.bestStatus}`) : "--"}</td>
-                {!isAcm ? <td className="px-4 py-3 text-center tabular-nums">{formatScoreSummary(problem.bestScore, problem.maxScore)}</td> : null}
-                <td className="px-4 py-3 text-xs text-[var(--oj-ink-muted)]">{problem.tags?.join(", ") || "--"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {problems.map((problem, index) => {
+            const attempts = problem.submissionCount ?? 0;
+            const solved = problem.bestStatus === "ACCEPTED";
+            const problemTimeline = problem.contestProblemId == null
+              ? []
+              : timeline.filter(
+                  (submission) =>
+                    submission.contestProblemId != null &&
+                    String(submission.contestProblemId) === String(problem.contestProblemId)
+                );
+            let outcome: string;
+
+            if (!isAcm) {
+              outcome = problem.bestStatus
+                ? t(`submissionStatus.${problem.bestStatus}`)
+                : t("contests.studentPostmortemUnattempted");
+            } else if (solved) {
+              outcome = t("contests.scoreboardSolvedStatus");
+            } else if (attempts > 0) {
+              outcome = t("contests.studentPostmortemUnresolvedProblems");
+            } else {
+              outcome = t("contests.studentPostmortemUnattempted");
+            }
+
+            return (
+              <article
+                key={problem.contestProblemId ?? problem.problemId ?? index}
+                className="rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-[var(--oj-ink)]">
+                      {problem.label} · {problem.title}
+                    </h3>
+                    <p className="mt-1 text-xs text-[var(--oj-ink-muted)]">
+                      {problem.difficulty || "--"}
+                    </p>
+                  </div>
+                  <Badge tone={solved ? "green" : attempts > 0 ? "amber" : "neutral"}>
+                    {outcome}
+                  </Badge>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--oj-ink-muted)]">
+                  <span>{t("contests.postmortemAttempts")}: {attempts}</span>
+                  {attempts > 0 ? (
+                    <span>
+                      {t("contests.studentPostmortemBestStatus")}:{" "}
+                      {problem.bestStatus ? t(`submissionStatus.${problem.bestStatus}`) : "--"}
+                    </span>
+                  ) : null}
+                  {!isAcm ? (
+                    <span>{t("contests.score")}: {formatScoreSummary(problem.bestScore, problem.maxScore)}</span>
+                  ) : null}
+                </div>
+
+                {problem.tags?.length ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-[var(--oj-ink-muted)]">{t("contests.postmortemTags")}:</span>
+                    {problem.tags.map((tag, tagIndex) => (
+                      <Badge key={`${tag}-${tagIndex}`} tone="neutral">{tag}</Badge>
+                    ))}
+                  </div>
+                ) : null}
+
+                {problemTimeline.length > 0 ? (
+                  <div className="mt-4 border-t border-[var(--oj-border-soft)] pt-3">
+                    <p className="text-xs font-medium text-[var(--oj-ink-muted)]">
+                      {t("contests.studentPostmortemTimeline")}
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--oj-ink)]">
+                      {problemTimeline
+                        .map((submission) =>
+                          submission.status ? t(`submissionStatus.${submission.status}`) : "--"
+                        )
+                        .join(" → ")}
+                    </p>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
 
       {timeline.length ? (
-        <div className="mt-5 rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4">
-          <h3 className="text-sm font-semibold text-[var(--oj-ink)]">{t("contests.studentPostmortemTimeline")}</h3>
+        <details className="mt-5 rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-[var(--oj-ink)]">
+            {t("contests.studentPostmortemTimeline")} ({timeline.length})
+          </summary>
           <div className="mt-3 space-y-2">
-            {timeline.slice(0, 8).map((submission) => (
+            {timeline.map((submission) => (
               <div key={submission.submissionId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm">
                 <span className="font-medium text-[var(--oj-ink)]">{submission.problemLabel} · {submission.problemTitle}</span>
                 <span className="text-xs tabular-nums text-[var(--oj-ink-muted)]">
@@ -495,7 +601,7 @@ function ProblemBreakdown({ stats }: { stats: StudentPostmortemStats }) {
               </div>
             ))}
           </div>
-        </div>
+        </details>
       ) : null}
     </section>
   );

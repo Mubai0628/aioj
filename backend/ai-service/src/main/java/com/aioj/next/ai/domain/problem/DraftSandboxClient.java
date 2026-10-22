@@ -289,9 +289,10 @@ public class DraftSandboxClient {
                         firstText(item.message(), "Accepted")))
                 .toList();
         int generatedInputCount = generatedInputCount(script, officialPackage);
-        if (generatedInputCount > targetCount) {
-            warnings.add(new VerificationWarning("SANDBOX_HIDDEN_SKIPPED",
-                    "verified first " + targetCount + " of " + generatedInputCount + " generated hidden inputs",
+        if (generatedInputCount > benchmarkRuns.size()) {
+            warnings.add(new VerificationWarning("HIDDEN_CASES_PARTIAL_VERIFICATION",
+                    "verified first " + benchmarkRuns.size() + " of " + generatedInputCount
+                            + " generated hidden inputs",
                     "testcaseGeneratorPython"));
         }
         return new HiddenCaseVerificationResult(benchmarkRuns, generatedInputCount, officialPackage);
@@ -321,7 +322,6 @@ public class DraftSandboxClient {
         List<ComplexityBenchmarkRun> benchmarkRuns = new ArrayList<>();
         List<HiddenCase> selectedInputs = inputOnlyCases.values().stream()
                 .sorted(Comparator.comparing(HiddenCase::name))
-                .limit(targetCount)
                 .toList();
         for (HiddenCase inputCase : selectedInputs) {
             RunResponse run = run(draft, compile.fileId(), inputCase.input(), MATERIALIZED_OUTPUT_STDOUT_LIMIT_BYTES);
@@ -458,7 +458,6 @@ public class DraftSandboxClient {
         }
         List<HiddenCase> stressCases = stressCases(script.generatedFiles()).values().stream()
                 .sorted(Comparator.comparing(HiddenCase::name))
-                .limit(targetCount)
                 .toList();
         if (stressCases.size() < DEFAULT_HIDDEN_CASE_COUNT) {
             errors.add(error("REFERENCE_INPUTS_REQUIRED",

@@ -16,6 +16,7 @@ export type SubmissionStatus =
   | 'MEMORY_LIMIT_EXCEEDED'
   | 'OUTPUT_LIMIT_EXCEEDED'
   | 'SYSTEM_ERROR';
+export type JudgePhase = 'COMPILE' | 'RUN' | 'CHECKER';
 
 export interface ApiResponse<T> {
   code: number;
@@ -218,6 +219,11 @@ export interface TokenResponse {
   displayName: string;
   roles: Role[];
   passwordResetRequired: boolean;
+}
+
+export interface HandoffExchangeResponse {
+  tokens: TokenResponse;
+  nextPath: string;
 }
 
 function isRole(value: unknown): value is Role {
@@ -534,6 +540,37 @@ export interface ContestProblemResponse {
   scoringMode?: ContestProblemScoringMode | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TutorProblemResponse {
+  problemId: EntityId;
+  version: string;
+  updatedAt?: string | null;
+  solveUrl: string;
+  title: string;
+  difficulty: Difficulty;
+  statement: string;
+  notes?: string | null;
+  tags: string[];
+  samples: TestCaseDto[];
+  timeLimitMillis: number;
+  memoryLimitKb: number;
+}
+
+export interface TutorRecommendationResponse {
+  problem: TutorProblemResponse;
+  score: number;
+  reason: string;
+}
+
+export interface ProblemSemanticSearchRecord {
+  problem: TutorProblemResponse;
+  score: number;
+}
+
+export interface ProblemSemanticSearchResponse {
+  records: ProblemSemanticSearchRecord[];
+  fallback: boolean;
 }
 
 export interface ContestParticipantResponse {
@@ -1144,6 +1181,8 @@ export interface ContestSubmissionResponse {
   emailSnapshot?: string | null;
   language: string;
   status: SubmissionStatus;
+  judgePhase?: JudgePhase | null;
+  sandboxStatus?: string | null;
   judgeMessage: string;
   timeMillis?: number | null;
   memoryKb?: number | null;
@@ -1583,6 +1622,8 @@ export interface SubmissionResponse {
   language: string;
   code?: string | null;
   status: SubmissionStatus;
+  judgePhase?: JudgePhase | null;
+  sandboxStatus?: string | null;
   judgeMessage: string;
   timeMillis?: number;
   memoryKb?: number;
@@ -1609,12 +1650,15 @@ export interface SubmissionCaseResultResponse {
   caseName?: string | null;
   subtaskKey?: string | null;
   status: SubmissionStatus;
+  judgePhase?: JudgePhase | null;
+  sandboxStatus?: string | null;
   score: number;
   maxScore: number;
   timeMillis?: number | null;
   memoryKb?: number | null;
   message?: string | null;
   createdAt: string;
+  sample?: boolean | null;
 }
 
 export interface AiChatMessageResponse {
@@ -1975,6 +2019,7 @@ export interface AiModelListResponse {
   models: AiModelOption[];
 }
 
+export interface JudgeMetricsResponse { started:number; completed:number; failed:number; systemErrors:number; inFlight:number; lastConsumedAt?:string|null; lastError?:string|null; averageQueueWaitMs:number; }
 export interface DailySubmissionStatsResponse {
   date: string;
   totalSubmissions: number;
@@ -2336,6 +2381,21 @@ export interface ProblemDraftResponse {
   reviewRisk?: ProblemDraftReviewRisk | null;
   testcaseArtifact?: ProblemDraftTestcaseArtifactResponse | null;
   importReadiness?: ProblemDraftImportReadinessResponse | null;
+}
+
+export interface ProblemDraftTestcaseArtifactPreview {
+  id: EntityId;
+  draftId: EntityId;
+  status: string;
+  fileName: string;
+  fileSizeBytes: number;
+  sha256: string;
+  caseCount: number;
+  totalInputBytes: number;
+  totalOutputBytes: number;
+  largestCaseBytes: number;
+  createdAt: string;
+  entries: Array<{ name: string; sizeBytes: number | null; preview: string; truncated: boolean }>;
 }
 
 export interface ProblemDraftRefinePayload {
@@ -3222,6 +3282,16 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   }
 }
 
+async function anonymousRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.delete('Authorization');
+  if (!headers.has('Content-Type') && init.body !== undefined) {
+    headers.set('Content-Type', 'application/json');
+  }
+  const response = await fetch(apiUrl(path), { ...init, headers });
+  return parseResponse<T>(response);
+}
+
 async function requestForm<T>(path: string, formData: FormData, retry = true): Promise<T> {
   const headers = new Headers();
   const snapshot = authStore.snapshot();
@@ -3291,6 +3361,7 @@ async function logoutCurrentSession() {
 }
 
 export const api = {
+  judgeMetrics: () => request<JudgeMetricsResponse>('/api/v1/admin/judge/metrics'),
   login: (account: string, password: string) =>
     request<TokenResponse>('/api/v1/auth/login', {
       method: 'POST',
@@ -3300,6 +3371,11 @@ export const api = {
     request<TokenResponse>('/api/v1/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   refresh: () => refreshAccessToken(),
   logout: () => logoutCurrentSession(),
+  exchangeHandoff: (ticket: string) =>
+    anonymousRequest<HandoffExchangeResponse>('/api/v1/auth/handoff/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ ticket })
+    }),
   me: () => request<UserProfileResponse>('/api/v1/users/me'),
   updateMe: (payload: { displayName: string; email?: string }) =>
     request<UserProfileResponse>('/api/v1/users/me', { method: 'PUT', body: JSON.stringify(payload) }),
@@ -3725,7 +3801,14 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(payload)
     }),
-
+  tutorRecommendations: (params: { limit?: number } = {}) =>
+    request<TutorRecommendationResponse[]>(
+      `/api/v1/tutor/recommendations${queryString(params)}`
+    ),
+  tutorSemanticSearch: (params: { query: string; limit?: number }) =>
+    request<ProblemSemanticSearchResponse>(
+      `/api/v1/tutor/problems/semantic-search${queryString(params)}`
+    ),
   problems: (params: ProblemListParams = {}) =>
     request<PageResponse<ProblemResponse>>(`/api/v1/problems${queryString({ page: 1, pageSize: 20, ...params })}`),
   problem: (id: EntityId, context: { contestRunId?: EntityId | null; contestProblemId?: EntityId | null; staffView?: boolean } = {}) =>
@@ -4043,6 +4126,10 @@ export const api = {
     request<PageResponse<ProblemDraftResponse>>(`/api/v1/admin/problem-drafts${queryString({ page: 1, pageSize: 20, ...params })}`),
   problemDraft: (id: EntityId) =>
     request<ProblemDraftResponse>(`/api/v1/admin/problem-drafts/${id}`),
+  problemDraftTestcaseArtifact: (id: EntityId) =>
+    request<ProblemDraftTestcaseArtifactPreview>(`/api/v1/admin/problem-drafts/${id}/testcase-artifacts/latest`),
+  downloadProblemDraftTestcaseArtifact: (id: EntityId) =>
+    requestBinary(`/api/v1/admin/problem-drafts/${id}/testcase-artifacts/latest/download`, {}, 'official-hidden-testcases.zip'),
   refineDraft: (id: EntityId, payload: ProblemDraftRefinePayload) =>
     request<ProblemDraftResponse>(`/api/v1/admin/problem-drafts/${id}/refine`, {
       method: 'POST',

@@ -1,3 +1,4 @@
+//对应数据库表的一行数据
 package com.aioj.next.problem.persistence.entity;
 
 import com.aioj.next.contract.problem.Difficulty;
