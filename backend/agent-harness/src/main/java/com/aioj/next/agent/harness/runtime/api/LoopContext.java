@@ -1,5 +1,6 @@
 package com.aioj.next.agent.harness.runtime.api;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -30,4 +31,7 @@ public interface LoopContext {
 
     /** Adds a warning to the run result (duplicates are kept once). */
     void warn(String warning);
+
+    /** The run's warnings so far, in the order they first occurred. */
+    List<String> warnings();
 }

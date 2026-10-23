@@ -112,8 +112,7 @@ class TurnCoordinatorTest {
                 eq(""), isNull(), eq("client-1:assistant"), isNull(), eq("RUNNING"), isNull()))
                 .thenReturn(message(200L, "assistant", "", "client-1:assistant", "RUNNING"));
         when(turnService.advanceToGenerating("t-1", "t-1")).thenReturn(true);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "你好，我是助教。", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "你好，我是助教。", "deepseek", "deepseek-v4-pro",
                         30, 12, 0, 1, 0, false, List.of()));
         when(responseNormalizer.normalize(any(AiCompletion.class)))
                 .thenAnswer(invocation -> new AiAssistantResponseNormalizer.NormalizedResponse(
@@ -181,8 +180,7 @@ class TurnCoordinatorTest {
                 eq(""), isNull(), eq("client-1:assistant"), isNull(), eq("RUNNING"), isNull()))
                 .thenReturn(message(200L, "assistant", "", "client-1:assistant", "RUNNING"));
         when(turnService.advanceToGenerating("t-1", "t-1")).thenReturn(true);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "提示：想想贪心。", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "提示：想想贪心。", "deepseek", "deepseek-v4-pro",
                         30, 12, 0, 1, 0, false, List.of()));
         when(responseNormalizer.normalize(any(AiCompletion.class)))
                 .thenAnswer(invocation -> new AiAssistantResponseNormalizer.NormalizedResponse(
@@ -238,8 +236,7 @@ class TurnCoordinatorTest {
                 eq(""), isNull(), eq("client-1:assistant"), isNull(), eq("RUNNING"), isNull()))
                 .thenReturn(message(200L, "assistant", "", "client-1:assistant", "RUNNING"));
         when(turnService.advanceToGenerating("t-1", "t-1")).thenReturn(true);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "无可奉告。", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "无可奉告。", "deepseek", "deepseek-v4-pro",
                         30, 12, 0, 1, 0, false, List.of()));
         when(responseNormalizer.normalize(any(AiCompletion.class)))
                 .thenAnswer(invocation -> new AiAssistantResponseNormalizer.NormalizedResponse(
@@ -285,8 +282,7 @@ class TurnCoordinatorTest {
         when(turnUnderstandingService.assess("讲一下第2题", true))
                 .thenReturn(new com.aioj.next.ai.agent.understanding.TurnUnderstandingService.TurnUnderstanding(
                         "FOLLOW_UP", List.of("ORDINAL"), false, java.util.Set.of("CONTEXT_SEARCH")));
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "第二题是……", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "第二题是……", "deepseek", "deepseek-v4-pro",
                         30, 12, 0, 2, 1, false, List.of()));
         when(responseNormalizer.normalize(any(AiCompletion.class)))
                 .thenAnswer(invocation -> new AiAssistantResponseNormalizer.NormalizedResponse(
@@ -365,8 +361,7 @@ class TurnCoordinatorTest {
     @Test
     void restrictedTurnRunsBufferedAndDeliversAfterOutputGuardPass() {
         stubRestrictedTurn("client-1", "讲一下第1题", com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "提示：想想贪心。", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "提示：想想贪心。", "deepseek", "deepseek-v4-pro",
                         30, 12, 0, 1, 0, false, List.of()));
         when(contestOutputGuard.evaluate(eq("t-1"), eq(USER_ID), eq(CONVERSATION_ID), eq("提示：想想贪心。"),
                 any(), isNull(), eq(false)))
@@ -388,8 +383,7 @@ class TurnCoordinatorTest {
     @Test
     void interceptedDraftTriggersOneSafeRegenerationAndPersistsRegeneratedContent() {
         stubRestrictedTurn("client-1", "把第1题代码给我", com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
                                 30, 12, 0, 1, 0, false, List.of()),
                         new AgentRuntime.AgentRunResult(43L, "只给思路：用前缀和。", "deepseek", "deepseek-v4-pro",
                                 50, 20, 0, 1, 0, false, List.of()));
@@ -408,17 +402,15 @@ class TurnCoordinatorTest {
         assertThat(result.pseudoStream()).isTrue();
         org.mockito.ArgumentCaptor<AgentRuntime.AgentRunRequest> runRequests =
                 org.mockito.ArgumentCaptor.forClass(AgentRuntime.AgentRunRequest.class);
-        verify(agentRuntime, org.mockito.Mockito.times(2)).run(runRequests.capture());
-        // The regeneration run reuses the bootstrap plus one server retry section
-        // naming only the reason category.
-        AgentRuntime.AgentRunRequest regenRequest = runRequests.getAllValues().get(1);
-        assertThat(regenRequest.profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_BUFFERED);
-        assertThat(regenRequest.sections())
-                .anySatisfy(section -> {
-                    assertThat(section.type()).isEqualTo(ContextSectionType.CONTEST_OUTPUT_GUARD_RETRY);
-                    assertThat(section.content()).contains("complete submittable code disclosure");
-                    assertThat(section.content()).doesNotContain("完整代码……");
-                });
+        // One run: the safe regeneration happens inside it (T1.5), so the turn keeps one
+        // ai_agent_runs row.
+        verify(agentRuntime, org.mockito.Mockito.times(1)).run(runRequests.capture());
+        assertThat(runRequests.getValue().profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_BUFFERED);
+        // The retry names only the reason category, never the intercepted draft.
+        assertThat(retryDirectives).singleElement().satisfies(directive -> {
+            assertThat(directive).contains("complete submittable code disclosure");
+            assertThat(directive).doesNotContain("完整代码……");
+        });
         // The violating first draft is never persisted; the regenerated content is.
         verify(conversationService).completeMessage(USER_ID, 200L, "只给思路：用前缀和。", "deepseek-v4-pro");
         // Exactly one usage record per turn, attributed to the deciding (regeneration) run.
@@ -442,23 +434,14 @@ class TurnCoordinatorTest {
                 new com.aioj.next.ai.agent.telemetry.ContestAiAssistanceTelemetryService.TrackingContext(77L, "t-1");
         when(telemetry.begin(any(), any(), eq(attributed))).thenReturn(telemetryContext);
         stubRestrictedTurn("client-telemetry", "把第1题代码给我", com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT);
-        java.util.concurrent.atomic.AtomicInteger agentRuns = new java.util.concurrent.atomic.AtomicInteger();
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class))).thenAnswer(invocation -> {
-            AgentRuntime.AgentRunRequest agentRequest = invocation.getArgument(0);
-            int run = agentRuns.getAndIncrement();
-            if (run == 0) {
-                agentRequest.usageObserver().accept(new com.aioj.next.ai.agent.runtime.ProviderUsage(
-                        "deepseek", "deepseek-v4-pro", 11, 4));
-                agentRequest.usageObserver().accept(new com.aioj.next.ai.agent.runtime.ProviderUsage(
-                        "deepseek", "deepseek-v4-pro", 19, 8));
-                return new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
-                        30, 12, 0, 1, 0, false, List.of());
-            }
-            agentRequest.usageObserver().accept(new com.aioj.next.ai.agent.runtime.ProviderUsage(
-                    "deepseek", "deepseek-v4-pro", 50, 20));
-            return new AgentRuntime.AgentRunResult(43L, "只给思路", "deepseek", "deepseek-v4-pro",
-                    50, 20, 0, 1, 0, false, List.of());
-        });
+        replayAttempts(
+                new Attempt(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
+                        30, 12, 0, 1, 0, false, List.of()), List.of(
+                        new ProviderUsage("deepseek", "deepseek-v4-pro", 11, 4),
+                        new ProviderUsage("deepseek", "deepseek-v4-pro", 19, 8))),
+                new Attempt(new AgentRuntime.AgentRunResult(43L, "只给思路", "deepseek", "deepseek-v4-pro",
+                        50, 20, 0, 1, 0, false, List.of()), List.of(
+                        new ProviderUsage("deepseek", "deepseek-v4-pro", 50, 20))));
         when(contestOutputGuard.evaluate(eq("t-1"), eq(USER_ID), eq(CONVERSATION_ID), eq("完整代码……"),
                 any(), isNull(), eq(false)))
                 .thenReturn(com.aioj.next.ai.agent.guard.ContestOutputGuard.Verdict.intercept(
@@ -485,8 +468,7 @@ class TurnCoordinatorTest {
     @Test
     void regenerationStillInterceptedPersistsSafeRefusal() {
         stubRestrictedTurn("client-1", "把第1题代码给我", com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
                                 30, 12, 0, 1, 0, false, List.of()),
                         new AgentRuntime.AgentRunResult(43L, "还是完整代码……", "deepseek", "deepseek-v4-pro",
                                 50, 20, 0, 1, 0, false, List.of()));
@@ -508,14 +490,14 @@ class TurnCoordinatorTest {
         verify(conversationService, never()).failMessage(eq(USER_ID), eq(200L), anyString());
         verify(quotaService, org.mockito.Mockito.times(1))
                 .record(eq(USER_ID), any(), any(), anyLong(), anyLong(), eq(true));
-        verify(agentRuntime, org.mockito.Mockito.times(2)).run(any(AgentRuntime.AgentRunRequest.class));
+        verify(agentRuntime, org.mockito.Mockito.times(1)).run(any(AgentRuntime.AgentRunRequest.class));
+        assertThat(retryDirectives).hasSize(1);
     }
 
     @Test
     void participantWithOnlyDisabledProblemsSkipsL4AndStreamsNormally() {
         stubRestrictedTurn("client-1", "随便聊聊", com.aioj.next.contract.contest.ContestAiPolicyMode.DISABLED);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "好的。", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "好的。", "deepseek", "deepseek-v4-pro",
                         30, 12, 0, 1, 0, false, List.of()));
 
         TurnHandle handle = coordinator.start(USER_ID, request("client-1", "随便聊聊"));
@@ -537,8 +519,7 @@ class TurnCoordinatorTest {
     void contestStartMidGenerationTriggersRecheckGuardAndOneRegeneration() {
         // Turn starts NON-participant: unrestricted, STREAM, L4 never runs initially.
         stubUnrestrictedTurn("client-race-1", "把第1题代码给我");
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
                                 30, 12, 0, 1, 0, false, List.of()),
                         new AgentRuntime.AgentRunResult(43L, "只给思路：用前缀和。", "deepseek", "deepseek-v4-pro",
                                 50, 20, 0, 1, 0, false, List.of()));
@@ -563,21 +544,17 @@ class TurnCoordinatorTest {
         assertThat(result.pseudoStream()).isTrue();
         org.mockito.ArgumentCaptor<AgentRuntime.AgentRunRequest> runRequests =
                 org.mockito.ArgumentCaptor.forClass(AgentRuntime.AgentRunRequest.class);
-        verify(agentRuntime, org.mockito.Mockito.times(2)).run(runRequests.capture());
-        // The first run streamed (turn started unrestricted); the race-triggered
-        // regeneration runs BUFFERED under the NEW contest policy with a null L3 verdict.
-        AgentRuntime.AgentRunRequest first = runRequests.getAllValues().get(0);
-        assertThat(first.profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_STREAM);
-        AgentRuntime.AgentRunRequest regen = runRequests.getAllValues().get(1);
-        assertThat(regen.profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_BUFFERED);
-        assertThat(regen.contestPolicy().isParticipant()).isTrue();
-        assertThat(regen.contestPolicy().contestProblems()).containsOnlyKeys(1001L);
-        assertThat(regen.messageLayerVerdict()).isNull();
-        assertThat(regen.sections()).anySatisfy(section -> {
-            assertThat(section.type()).isEqualTo(ContextSectionType.CONTEST_OUTPUT_GUARD_RETRY);
-            assertThat(section.content()).contains("complete submittable code disclosure");
-            assertThat(section.content()).doesNotContain("完整代码……");
+        verify(agentRuntime, org.mockito.Mockito.times(1)).run(runRequests.capture());
+        // The turn started unrestricted, so the run streamed; the race-triggered
+        // regeneration happens inside it, and its answer is checked under the NEW policy
+        // with a null L3 verdict.
+        assertThat(runRequests.getValue().profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_STREAM);
+        assertThat(retryDirectives).singleElement().satisfies(directive -> {
+            assertThat(directive).contains("complete submittable code disclosure");
+            assertThat(directive).doesNotContain("完整代码……");
         });
+        assertThat(recheckPolicyFor("只给思路：用前缀和。").isParticipant()).isTrue();
+        assertThat(recheckPolicyFor("只给思路：用前缀和。").contestProblems()).containsOnlyKeys(1001L);
         verify(conversationService).completeMessage(USER_ID, 200L, "只给思路：用前缀和。", "deepseek-v4-pro");
         verify(quotaService, org.mockito.Mockito.times(1))
                 .record(eq(USER_ID), any(), any(), anyLong(), anyLong(), eq(true));
@@ -587,8 +564,7 @@ class TurnCoordinatorTest {
     @Test
     void contestStartMidGenerationRegenerationStillInterceptedPersistsSafeRefusal() {
         stubUnrestrictedTurn("client-race-2", "把第1题代码给我");
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
                                 30, 12, 0, 1, 0, false, List.of()),
                         new AgentRuntime.AgentRunResult(43L, "还是完整代码……", "deepseek", "deepseek-v4-pro",
                                 50, 20, 0, 1, 0, false, List.of()));
@@ -608,7 +584,8 @@ class TurnCoordinatorTest {
 
         assertThat(result.assistant().content()).isEqualTo(TurnCoordinator.CONTEST_SAFE_REFUSAL_TEXT);
         assertThat(result.pseudoStream()).isTrue();
-        verify(agentRuntime, org.mockito.Mockito.times(2)).run(any(AgentRuntime.AgentRunRequest.class));
+        verify(agentRuntime, org.mockito.Mockito.times(1)).run(any(AgentRuntime.AgentRunRequest.class));
+        assertThat(retryDirectives).hasSize(1);
         verify(conversationService).completeMessage(USER_ID, 200L,
                 TurnCoordinator.CONTEST_SAFE_REFUSAL_TEXT, "deepseek-v4-pro");
         verify(quotaService, org.mockito.Mockito.times(1))
@@ -618,8 +595,7 @@ class TurnCoordinatorTest {
     @Test
     void contestEndMidGenerationReleasesGeneratedContentEvenAfterRefusal() {
         stubRestrictedTurn("client-race-3", "把第1题代码给我", com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
                                 30, 12, 0, 1, 0, false, List.of()),
                         new AgentRuntime.AgentRunResult(43L, "还是完整代码……", "deepseek", "deepseek-v4-pro",
                                 50, 20, 0, 1, 0, false, List.of()));
@@ -643,7 +619,8 @@ class TurnCoordinatorTest {
         verify(conversationService).completeMessage(USER_ID, 200L, "还是完整代码……", "deepseek-v4-pro");
         verify(quotaService, org.mockito.Mockito.times(1))
                 .record(eq(USER_ID), any(), any(), anyLong(), anyLong(), eq(true));
-        verify(agentRuntime, org.mockito.Mockito.times(2)).run(any(AgentRuntime.AgentRunRequest.class));
+        verify(agentRuntime, org.mockito.Mockito.times(1)).run(any(AgentRuntime.AgentRunRequest.class));
+        assertThat(retryDirectives).hasSize(1);
     }
 
     @Test
@@ -652,8 +629,7 @@ class TurnCoordinatorTest {
         // generating, problem 1002 became constrained too (PRIVATE); the pending
         // content leaks it — the race re-guard catches that under the NEW policy.
         stubRestrictedTurn("client-race-4", "讲讲第2题", com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "第2题题面复述……", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "第2题题面复述……", "deepseek", "deepseek-v4-pro",
                                 30, 12, 0, 1, 0, false, List.of()),
                         new AgentRuntime.AgentRunResult(43L, "第2题不能讲，给学习方向。", "deepseek", "deepseek-v4-pro",
                                 50, 20, 0, 1, 0, false, List.of()));
@@ -680,13 +656,10 @@ class TurnCoordinatorTest {
         assertThat(result.pseudoStream()).isTrue();
         org.mockito.ArgumentCaptor<AgentRuntime.AgentRunRequest> runRequests =
                 org.mockito.ArgumentCaptor.forClass(AgentRuntime.AgentRunRequest.class);
-        verify(agentRuntime, org.mockito.Mockito.times(2)).run(runRequests.capture());
-        AgentRuntime.AgentRunRequest regen = runRequests.getAllValues().get(1);
-        assertThat(regen.contestPolicy().contestProblems()).containsOnlyKeys(1001L, 1002L);
-        assertThat(regen.sections()).anySatisfy(section -> {
-            assertThat(section.type()).isEqualTo(ContextSectionType.CONTEST_OUTPUT_GUARD_RETRY);
-            assertThat(section.content()).contains("private contest statement leakage");
-        });
+        verify(agentRuntime, org.mockito.Mockito.times(1)).run(runRequests.capture());
+        assertThat(recheckPolicyFor("第2题不能讲，给学习方向。").contestProblems()).containsOnlyKeys(1001L, 1002L);
+        assertThat(retryDirectives).singleElement()
+                .satisfies(directive -> assertThat(directive).contains("private contest statement leakage"));
         verify(quotaService, org.mockito.Mockito.times(1))
                 .record(eq(USER_ID), any(), any(), anyLong(), anyLong(), eq(true));
     }
@@ -697,8 +670,7 @@ class TurnCoordinatorTest {
         // race recheck re-intercepts the pending content under a stricter new policy,
         // the turn downgrades straight to the refusal — no third provider run.
         stubRestrictedTurn("client-race-5", "把第1题代码给我", com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
                                 30, 12, 0, 1, 0, false, List.of()),
                         new AgentRuntime.AgentRunResult(43L, "只给思路：用前缀和。", "deepseek", "deepseek-v4-pro",
                                 50, 20, 0, 1, 0, false, List.of()));
@@ -726,7 +698,8 @@ class TurnCoordinatorTest {
         assertThat(result.assistant().content()).isEqualTo(TurnCoordinator.CONTEST_SAFE_REFUSAL_TEXT);
         // Exactly two provider runs: initial + the one shared regeneration. The race
         // re-interception cannot spend another regeneration.
-        verify(agentRuntime, org.mockito.Mockito.times(2)).run(any(AgentRuntime.AgentRunRequest.class));
+        verify(agentRuntime, org.mockito.Mockito.times(1)).run(any(AgentRuntime.AgentRunRequest.class));
+        assertThat(retryDirectives).hasSize(1);
         verify(conversationService).completeMessage(USER_ID, 200L,
                 TurnCoordinator.CONTEST_SAFE_REFUSAL_TEXT, "deepseek-v4-pro");
         verify(quotaService, org.mockito.Mockito.times(1))
@@ -736,8 +709,7 @@ class TurnCoordinatorTest {
     @Test
     void recheckLookupFailureFailsTurnClosed() {
         stubRestrictedTurn("client-race-6", "你好", com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT);
-        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class)))
-                .thenReturn(new AgentRuntime.AgentRunResult(42L, "提示：想想贪心。", "deepseek", "deepseek-v4-pro",
+        replayRuns(new AgentRuntime.AgentRunResult(42L, "提示：想想贪心。", "deepseek", "deepseek-v4-pro",
                         30, 12, 0, 1, 0, false, List.of()));
         // Recheck lookup failure: fail-closed like the turn-start L1/L2 failures.
         when(policySnapshotService.recheckBeforeReturn(eq(USER_ID), eq("t-1"), eq(CONVERSATION_ID), any()))
@@ -929,5 +901,122 @@ class TurnCoordinatorTest {
     private AiChatMessageResponse message(Long id, String role, String content, String clientMessageId, String status) {
         return new AiChatMessageResponse(id, CONVERSATION_ID, null, clientMessageId, role, content, null,
                 status, null, Instant.now(), "COMPLETED".equals(status) ? Instant.now() : null);
+    }
+
+    /** Directives the run's final checks sent back for a regeneration, in order. */
+    private final List<String> retryDirectives = new java.util.ArrayList<>();
+
+    private record Attempt(AgentRuntime.AgentRunResult result, List<ProviderUsage> usages) {
+    }
+
+    /** Each scripted result is one attempt of the run, reporting its own tokens. */
+    private void replayRuns(AgentRuntime.AgentRunResult... results) {
+        replayAttempts(java.util.Arrays.stream(results)
+                .map(result -> new Attempt(result, List.of(new ProviderUsage(result.provider(), result.model(),
+                        result.promptTokens(), result.completionTokens()))))
+                .toArray(Attempt[]::new));
+    }
+
+    /**
+     * Plays the Harness loop for the stubbed run (T1.5): an attempt reports its usage, then
+     * offers its answer to the run's final checks; a retry moves on to the next attempt, a
+     * replacement ends the run with the server's text.
+     */
+    private void replayAttempts(Attempt... attempts) {
+        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class))).thenAnswer(invocation -> {
+            AgentRuntime.AgentRunRequest request = invocation.getArgument(0);
+            ReplayContext context = new ReplayContext();
+            for (Attempt attempt : attempts) {
+                AgentRuntime.AgentRunResult result = attempt.result();
+                if (request.usageObserver() != null) {
+                    attempt.usages().forEach(request.usageObserver());
+                }
+                String decided = decideFinal(request.interceptors(), context, result.content());
+                if (decided != null) {
+                    return new AgentRuntime.AgentRunResult(result.runId(), decided, result.provider(), result.model(),
+                            result.promptTokens(), result.completionTokens(), result.cacheHitTokens(), result.steps(),
+                            result.toolCallCount(), result.missedRequiredTool(), result.warnings(),
+                            result.contestGuardVerdict(), result.executionMode());
+                }
+            }
+            throw new AssertionError("the scripted attempts ran out before an answer was accepted");
+        });
+    }
+
+    /** As the Harness loop decides: the first check that does not accept decides; one retry per run. */
+    private String decideFinal(List<com.aioj.next.agent.harness.runtime.api.LoopInterceptor> interceptors,
+                               ReplayContext context, String content) {
+        for (com.aioj.next.agent.harness.runtime.api.LoopInterceptor interceptor : interceptors) {
+            com.aioj.next.agent.harness.runtime.api.FinalDecision decision = interceptor.beforeFinal(context, content);
+            if (decision == null || decision.type() == com.aioj.next.agent.harness.runtime.api.FinalDecision.Type.ACCEPT) {
+                continue;
+            }
+            if (decision.type() == com.aioj.next.agent.harness.runtime.api.FinalDecision.Type.REPLACE) {
+                return decision.text();
+            }
+            assertThat(context.finalRetries()).as("the loop allows one retry per run").isZero();
+            context.retries++;
+            retryDirectives.add(decision.text());
+            return null;
+        }
+        return content;
+    }
+
+    /** The policy the race re-guard checked a regenerated answer under. */
+    private com.aioj.next.ai.agent.policy.ContestPolicyView recheckPolicyFor(String content) {
+        org.mockito.ArgumentCaptor<com.aioj.next.ai.agent.policy.ContestPolicyView> policy =
+                org.mockito.ArgumentCaptor.forClass(com.aioj.next.ai.agent.policy.ContestPolicyView.class);
+        verify(contestOutputGuard).evaluate(eq("t-1"), eq(USER_ID), eq(CONVERSATION_ID), eq(content),
+                policy.capture(), isNull(), eq(true), eq(com.aioj.next.ai.agent.guard.ContestOutputGuard.TRIGGER_RECHECK));
+        return policy.getValue();
+    }
+
+    /** What a final check may read of the loop in these tests. */
+    private static final class ReplayContext implements com.aioj.next.agent.harness.runtime.api.LoopContext {
+        private int retries;
+
+        @Override
+        public String runId() {
+            return "42";
+        }
+
+        @Override
+        public String scenario() {
+            return "tutor";
+        }
+
+        @Override
+        public int step() {
+            return 1 + retries;
+        }
+
+        @Override
+        public int toolCallCount() {
+            return 0;
+        }
+
+        @Override
+        public java.util.Set<String> succeededTools() {
+            return java.util.Set.of();
+        }
+
+        @Override
+        public int finalRetries() {
+            return retries;
+        }
+
+        @Override
+        public Map<String, Object> attributes() {
+            return Map.of();
+        }
+
+        @Override
+        public void warn(String warning) {
+        }
+
+        @Override
+        public List<String> warnings() {
+            return List.of();
+        }
     }
 }

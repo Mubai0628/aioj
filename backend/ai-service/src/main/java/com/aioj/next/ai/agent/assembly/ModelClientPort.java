@@ -1,6 +1,5 @@
 package com.aioj.next.ai.agent.assembly;
 
-import com.aioj.next.agent.harness.runtime.api.HarnessMessage;
 import com.aioj.next.agent.harness.runtime.api.ModelCall;
 import com.aioj.next.agent.harness.runtime.api.ModelCallException;
 import com.aioj.next.agent.harness.runtime.api.ModelPort;
@@ -12,7 +11,6 @@ import com.aioj.next.ai.agent.runtime.AgentExecutionMode;
 import com.aioj.next.ai.model.api.CallOptions;
 import com.aioj.next.ai.model.api.CallProfile;
 import com.aioj.next.ai.model.api.CancellationSignal;
-import com.aioj.next.ai.model.api.ChatMessage;
 import com.aioj.next.ai.model.api.ModelClient;
 import com.aioj.next.ai.model.api.ModelEndpointConfig;
 import com.aioj.next.ai.model.api.ModelErrorKind;
@@ -20,7 +18,6 @@ import com.aioj.next.ai.model.api.ModelException;
 import com.aioj.next.ai.model.api.ModelRequest;
 import com.aioj.next.ai.model.api.ModelResponse;
 import com.aioj.next.ai.model.api.ProviderCapabilities;
-import com.aioj.next.ai.model.api.ToolCall;
 import com.aioj.next.ai.model.api.ToolChoice;
 import com.aioj.next.ai.model.api.ToolSpec;
 import org.slf4j.Logger;
@@ -90,7 +87,7 @@ public final class ModelClientPort implements ModelPort {
 
     @Override
     public ModelTurn complete(ModelCall call) {
-        ModelRequest request = ModelRequest.builder(scope).endpoint(endpoint).messages(chatMessages(call.messages()))
+        ModelRequest request = ModelRequest.builder(scope).endpoint(endpoint).messages(HarnessMessages.toChat(call.messages()))
                 .tools(toolSpecs(call.tools())).toolChoice(toolChoice(call)).profile(CallProfile.valueOf(call.profile()))
                 .build();
         CancellationSignal signal = new CancellationSignal();
@@ -170,22 +167,6 @@ public final class ModelClientPort implements ModelPort {
     private static ToolChoice toolChoice(ModelCall call) {
         return call.toolChoice() == com.aioj.next.agent.harness.runtime.api.ToolChoice.REQUIRED
                 ? ToolChoice.REQUIRED : ToolChoice.AUTO;
-    }
-
-    private static List<ChatMessage> chatMessages(List<HarnessMessage> messages) {
-        List<ChatMessage> converted = new ArrayList<>(messages.size());
-        for (HarnessMessage message : messages) {
-            converted.add(switch (message.role()) {
-                case SYSTEM -> ChatMessage.system(message.content());
-                case USER -> ChatMessage.user(message.content());
-                case ASSISTANT -> ChatMessage.assistant(message.content(), message.reasoningContent(),
-                        message.toolCalls().stream()
-                                .map(call -> new ToolCall(call.callId(), call.toolName(), call.argumentsJson()))
-                                .toList());
-                case TOOL -> ChatMessage.toolResult(message.toolCallId(), message.content());
-            });
-        }
-        return converted;
     }
 
     private static List<ToolSpec> toolSpecs(List<ModelTool> tools) {

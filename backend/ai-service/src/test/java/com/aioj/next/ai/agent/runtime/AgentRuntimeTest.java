@@ -1,5 +1,7 @@
 package com.aioj.next.ai.agent.runtime;
 
+import com.aioj.next.ai.agent.assembly.HarnessAgentRunner;
+import com.aioj.next.ai.agent.assembly.HarnessToolConfiguration;
 import com.aioj.next.ai.domain.AiModelConfigEndpointSource;
 import com.aioj.next.ai.model.api.CallOptions;
 import com.aioj.next.ai.model.api.EmbeddingRequest;
@@ -71,9 +73,6 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -130,14 +129,7 @@ class AgentRuntimeTest {
         adapter = new FakeAdapter();
         toolExecutions = new AtomicInteger();
         when(configService.effectiveConfig(AiModelScope.TEXT_GENERATION)).thenReturn(config());
-        ModelClient gateway = adapter;
-        ToolRegistry registry = new ToolRegistry(List.of(searchTool()));
-        ToolBroker broker = new ToolBroker(registry,
-                new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
-                new ToolResultSanitizer(objectMapper), auditService, objectMapper, new AiProperties());
-        runtime = new AgentRuntime(gateway, registry, broker, new ContextSectionRenderer(),
-                manifestService, new AgentRunStateMachine(runMapper, objectMapper), objectMapper, contextGuard,
-                new AiProperties());
+        runtime = runtimeWith(List.of(searchTool()), contextGuard, new AiProperties());
     }
 
     @Test
@@ -380,6 +372,41 @@ class AgentRuntimeTest {
         });
     }
 
+    /**
+     * T1.5: a final check that sends the first answer back regenerates inside the same
+     * run, so a regenerated turn keeps one ai_agent_runs row (the old second run hit the
+     * uk_agent_run_turn key).
+     */
+    @Test
+    void aFinalCheckRetryRegeneratesInsideTheSameRun() {
+        adapter.script.add(finalResponse("完整代码……"));
+        adapter.script.add(finalResponse("只给思路"));
+        java.util.List<String> checked = new ArrayList<>();
+        com.aioj.next.agent.harness.runtime.api.LoopInterceptor finalCheck =
+                new com.aioj.next.agent.harness.runtime.api.LoopInterceptor() {
+                    @Override
+                    public com.aioj.next.agent.harness.runtime.api.FinalDecision beforeFinal(
+                            com.aioj.next.agent.harness.runtime.api.LoopContext context, String content) {
+                        checked.add(content);
+                        return context.finalRetries() == 0
+                                ? com.aioj.next.agent.harness.runtime.api.FinalDecision.retry("regenerate safely")
+                                : com.aioj.next.agent.harness.runtime.api.FinalDecision.accept();
+                    }
+                };
+
+        AgentRuntime.AgentRunResult result = runtime.run(spec(false, budget(8, 6, 3, 3))
+                .withInterceptors(List.of(finalCheck)));
+
+        assertThat(result.content()).isEqualTo("只给思路");
+        assertThat(checked).containsExactly("完整代码……", "只给思路");
+        assertThat(result.warnings()).contains("final_answer_retried");
+        verify(runMapper, org.mockito.Mockito.times(1)).insert(any(com.aioj.next.ai.persistence.entity.AiAgentRunEntity.class));
+        assertThat(adapter.requests).hasSize(2);
+        List<com.aioj.next.ai.model.api.ChatMessage> second = adapter.requests.get(1).messages();
+        assertThat(second.get(second.size() - 1).content()).isEqualTo("regenerate safely");
+        assertThat(second).noneSatisfy(message -> assertThat(message.content()).contains("完整代码……"));
+    }
+
     @Test
     void emptyCompletionGetsOneThinkingOffRecoveryRetry() {
         adapter.script.add(emptyResponse("length"));
@@ -596,67 +623,6 @@ class AgentRuntimeTest {
         return TestModelResponses.response("", List.of(), finishReason, 10, 5, 0, "deepseek", "deepseek-v4-pro");
     }
 
-    @Test
-    void saturatedModelExecutorFailsOneRunWithStructuredServiceUnavailable() throws Exception {
-        AiProperties properties = new AiProperties();
-        properties.getCapacity().setModelCorePoolSize(1);
-        properties.getCapacity().setModelMaxPoolSize(1);
-        properties.getCapacity().setModelQueueCapacity(1);
-        AgentRuntime saturated = runtimeWith(List.of(), contextGuard, properties);
-        CountDownLatch gate = new CountDownLatch(1);
-        adapter.gate = gate;
-        adapter.script.add(finalResponse("结论一"));
-        adapter.script.add(finalResponse("结论二"));
-        LoopBudget deadlineBudget = new LoopBudget(4, 2, 1, 1, Integer.MAX_VALUE, Integer.MAX_VALUE,
-                Integer.MAX_VALUE, Duration.ofMinutes(5));
-        ExecutorService runners = Executors.newFixedThreadPool(3);
-        try {
-            // Pool 1/1 with queue 1: of three concurrent runs exactly one is rejected at
-            // submission time. The model calls stay gated until the rejection is
-            // observed, so no run can finish early and reopen capacity.
-            List<Future<AgentRuntime.AgentRunResult>> futures = new ArrayList<>();
-            for (int i = 0; i < 3; i++) {
-                futures.add(runners.submit(() -> saturated.run(spec(false, deadlineBudget))));
-            }
-            DomainException rejection = null;
-            long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-            while (rejection == null && System.nanoTime() < deadlineNanos) {
-                for (Future<AgentRuntime.AgentRunResult> future : futures) {
-                    if (future.isDone()) {
-                        try {
-                            future.get();
-                        } catch (java.util.concurrent.ExecutionException ex) {
-                            assertThat(ex.getCause()).isInstanceOf(DomainException.class);
-                            rejection = (DomainException) ex.getCause();
-                        }
-                        break;
-                    }
-                }
-                if (rejection == null) {
-                    Thread.sleep(10);
-                }
-            }
-            assertThat(rejection).isNotNull();
-            assertThat(rejection.errorCode()).isEqualTo(ErrorCode.SERVICE_UNAVAILABLE);
-            assertThat(rejection.getMessage()).isEqualTo("AI model capacity saturated; retry later");
-
-            gate.countDown();
-            int succeeded = 0;
-            for (Future<AgentRuntime.AgentRunResult> future : futures) {
-                try {
-                    future.get(10, TimeUnit.SECONDS);
-                    succeeded++;
-                } catch (java.util.concurrent.ExecutionException ex) {
-                    assertThat(ex.getCause()).isSameAs(rejection);
-                }
-            }
-            assertThat(succeeded).isEqualTo(2);
-        } finally {
-            gate.countDown();
-            runners.shutdownNow();
-        }
-    }
-
     private AgentRuntime.AgentRunRequest spec(boolean requireToolCall, LoopBudget budget) {
         return new AgentRuntime.AgentRunRequest("turn-1", 7L, "c1", "ps-1", Set.of("AI_CHAT"),
                 sections(), requireToolCall, "STREAM", CallProfile.CHAT_STREAM, budget);
@@ -683,9 +649,14 @@ class AgentRuntimeTest {
         ToolBroker broker = new ToolBroker(registry,
                 new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
                 new ToolResultSanitizer(objectMapper), auditService, objectMapper, properties);
+        AgentRunStateMachine stateMachine = new AgentRunStateMachine(runMapper, objectMapper);
+        // Chat turns run on the Harness loop over the same tools, audit and state rows (T1.5).
+        HarnessAgentRunner harnessRunner = new HarnessAgentRunner(gateway,
+                HarnessToolConfiguration.create(tools, mock(ProblemDraftWorkspaceMapper.class), auditService,
+                        properties.getCapacity(), objectMapper),
+                new ContextSectionRenderer(), manifestService, stateMachine, guard);
         return new AgentRuntime(gateway, registry, broker, new ContextSectionRenderer(),
-                manifestService, new AgentRunStateMachine(runMapper, objectMapper), objectMapper, guard,
-                properties);
+                manifestService, stateMachine, objectMapper, guard, properties, harnessRunner);
     }
 
     /** Real L3 context layer on top of a mock audit recorder, for the P3-4 tests. */

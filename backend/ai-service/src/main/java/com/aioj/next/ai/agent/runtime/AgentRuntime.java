@@ -20,6 +20,8 @@ import com.aioj.next.ai.agent.runtime.ProviderUsage;
 import com.aioj.next.ai.model.api.ToolChoice;
 import com.aioj.next.ai.model.api.ModelErrorKind;
 import com.aioj.next.ai.model.api.ModelException;
+import com.aioj.next.agent.harness.runtime.api.LoopInterceptor;
+import com.aioj.next.ai.agent.assembly.HarnessAgentRunner;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.tool.ToolBroker;
 import com.aioj.next.ai.agent.tool.ToolDescriptor;
@@ -90,11 +92,14 @@ public class AgentRuntime {
     private final ObjectMapper objectMapper;
     private final ContextFingerprintGuard contextGuard;
     private final ExecutorService boundedModelExecutor;
+    private final HarnessAgentRunner harnessRunner;
 
     public AgentRuntime(ModelClient modelClient, ToolRegistry toolRegistry, ToolBroker toolBroker,
                         ContextSectionRenderer renderer, ContextManifestService manifestService,
                         AgentRunStateMachine stateMachine, ObjectMapper objectMapper,
-                        ContextFingerprintGuard contextGuard, AiProperties aiProperties) {
+                        ContextFingerprintGuard contextGuard, AiProperties aiProperties,
+                        HarnessAgentRunner harnessRunner) {
+        this.harnessRunner = harnessRunner;
         this.modelClient = modelClient;
         this.toolRegistry = toolRegistry;
         this.toolBroker = toolBroker;
@@ -129,12 +134,33 @@ public class AgentRuntime {
             /** Permit one explicit thinking-capability fallback to standard tools/tool_calls. */
             boolean allowStandardToolFallback,
             /** Optional server-owned terminal gate; model prose cannot satisfy it. */
-            AgentCompletionPolicy completionPolicy
+            AgentCompletionPolicy completionPolicy,
+            /** Per-run Harness interceptors of the caller, for example the L4 final-answer check. */
+            List<LoopInterceptor> interceptors
     ) {
         public AgentRunRequest {
             modelScope = modelScope == null ? AiModelScope.TEXT_GENERATION : modelScope;
             serverBindings = serverBindings == null ? Map.of() : Map.copyOf(serverBindings);
             completionPolicy = completionPolicy == null ? AgentCompletionPolicy.none() : completionPolicy;
+            interceptors = interceptors == null ? List.of() : List.copyOf(interceptors);
+        }
+
+        public AgentRunRequest(String turnId, long userId, String conversationId, String policySnapshotId,
+                               Set<String> grantedScopes, List<ContextSection> sections, boolean requireToolCall,
+                               String outputMode, CallProfile profile, LoopBudget budget,
+                               ContestPolicyView contestPolicy, GuardVerdict messageLayerVerdict,
+                               Consumer<ProviderUsage> usageObserver, AiModelScope modelScope,
+                               Map<String, String> serverBindings, boolean allowStandardToolFallback,
+                               AgentCompletionPolicy completionPolicy) {
+            this(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections, requireToolCall,
+                    outputMode, profile, budget, contestPolicy, messageLayerVerdict, usageObserver, modelScope,
+                    serverBindings, allowStandardToolFallback, completionPolicy, List.of());
+        }
+
+        public AgentRunRequest withInterceptors(List<LoopInterceptor> runInterceptors) {
+            return new AgentRunRequest(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections,
+                    requireToolCall, outputMode, profile, budget, contestPolicy, messageLayerVerdict, usageObserver,
+                    modelScope, serverBindings, allowStandardToolFallback, completionPolicy, runInterceptors);
         }
 
         /** Signature before model-scope/resource-binding/fallback support. */
@@ -266,6 +292,10 @@ public class AgentRuntime {
     }
 
     public AgentRunResult run(AgentRunRequest spec) {
+        if (!spec.completionPolicy().isRequired() && spec.profile() != CallProfile.PROBLEM_DRAFT) {
+            // T1.5: chat turns run on the Harness loop; problem drafts move there in the next step.
+            return harnessRunner.run(spec);
+        }
         ModelEndpointConfig config = modelClient.resolve(spec.modelScope().name());
         ProviderCapabilities capabilities = modelClient.capabilities(config);
         List<ToolDescriptor> tools = toolRegistry.descriptorsForScopes(spec.grantedScopes());

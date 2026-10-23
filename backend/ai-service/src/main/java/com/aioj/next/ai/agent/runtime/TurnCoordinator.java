@@ -2,10 +2,9 @@ package com.aioj.next.ai.agent.runtime;
 
 import com.aioj.next.ai.agent.AgentChatFacade.TurnHandle;
 import com.aioj.next.ai.agent.AgentChatFacade.TurnResult;
+import com.aioj.next.ai.agent.assembly.ContestFinalAnswerCheck;
 import com.aioj.next.ai.agent.context.BootstrapContextBuilder;
-import com.aioj.next.ai.agent.context.ContextSection;
 import com.aioj.next.ai.agent.context.ContextSectionType;
-import com.aioj.next.ai.agent.context.TrustLevel;
 import com.aioj.next.ai.agent.digest.TurnDigestInput;
 import com.aioj.next.ai.agent.digest.TurnDigestService;
 import com.aioj.next.ai.model.api.CallProfile;
@@ -45,6 +44,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -74,9 +74,7 @@ public class TurnCoordinator {
      * P3-5: server-authored safe refusal persisted as the assistant content when the
      * one allowed regeneration is still intercepted. Polite, names no policy details.
      */
-    static final String CONTEST_SAFE_REFUSAL_TEXT =
-            "抱歉，该内容涉及正在进行中的比赛，我暂时不能提供解答或完整代码。"
-                    + "我可以为你提供学习方向上的建议，例如相关算法的思路讲解或同类练习题的练习方法。";
+    static final String CONTEST_SAFE_REFUSAL_TEXT = ContestFinalAnswerCheck.CONTEST_SAFE_REFUSAL_TEXT;
 
     private final AgentRuntime agentRuntime;
     private final BootstrapContextBuilder bootstrapBuilder;
@@ -198,43 +196,6 @@ public class TurnCoordinator {
                 GuardLayer.L3_FINGERPRINT_MSG, verdict.decision(),
                 verdict.matchedProblems(), verdict.reasonCode(), detail, false, latencyMs);
         return verdict;
-    }
-
-    /**
-     * P3-5 (§5.4): the one safe-regeneration run gets the original sections plus
-     * one trailing server system section naming only the intercepted reason
-     * category — the violating draft itself is never shown back to the model.
-     * CONTEST_OUTPUT_GUARD_RETRY rides inside the combined system text, right
-     * after any L3 match block (priority 26 vs 25).
-     */
-    private List<ContextSection> sectionsWithOutputGuardRetry(List<ContextSection> sections, String reasonCode) {
-        List<ContextSection> out = new ArrayList<>(sections);
-        out.add(ContextSection.text(ContextSectionType.CONTEST_OUTPUT_GUARD_RETRY, 26, true,
-                TrustLevel.SERVER_AUTHORITATIVE, renderOutputGuardRetryDirective(reasonCode)));
-        return out;
-    }
-
-    private String renderOutputGuardRetryDirective(String reasonCode) {
-        return "[Contest Output Guard — server safety check intercepted the previous draft; regenerate]\n"
-                + "Your previous draft reply for this turn was intercepted by a server-side contest output "
-                + "safety check (reason category: " + outputGuardReasonCategory(reasonCode) + "). "
-                + "The intercepted draft is withheld and must not be restated or quoted.\n"
-                + "Regenerate the reply under these rules:\n"
-                + "- Private contest problems: refuse to discuss their content, solution, or code; decline politely.\n"
-                + "- Public contest problems of a running contest: hints and idea-level guidance only; "
-                + "never output complete submittable code.\n"
-                + "- Never reveal hidden test data, judging points, or evaluation details.\n"
-                + "[/Contest Output Guard]";
-    }
-
-    private String outputGuardReasonCategory(String reasonCode) {
-        return switch (reasonCode == null ? "" : reasonCode) {
-            case ContestOutputGuard.REASON_FULL_CODE -> "complete submittable code disclosure";
-            case ContestOutputGuard.REASON_PRIVATE_STATEMENT -> "private contest statement leakage";
-            case ContestOutputGuard.REASON_HIDDEN_TEST -> "hidden test information leakage";
-            case ContestOutputGuard.REASON_GUARD_ERROR -> "output safety check failure (fail-closed)";
-            default -> "contest output policy violation";
-        };
     }
 
     public TurnHandle start(Long userId, AiChatRequest request) {
@@ -498,6 +459,20 @@ public class TurnCoordinator {
             // Non-restricted turns skip L4 entirely — zero cost, zero audit rows (same
             // contract as L3).
             boolean restrictedTurn = contestPolicy.isParticipant() && !contestPolicy.constrainedProblems().isEmpty();
+            // P3-5 L4 and the P3-6 recheck decide the delivered answer inside the run: an
+            // intercepted draft is never persisted to ai_messages; it is regenerated once in the
+            // same run, and a second interception downgrades the reply to the server-authored
+            // safe refusal text (ContestFinalAnswerCheck).
+            ContestFinalAnswerCheck finalCheck = new ContestFinalAnswerCheck(contestOutputGuard,
+                    policySnapshotService, turn.getId(), userId, conversation.getId(), snapshot, contestPolicy,
+                    restrictedTurn);
+            AttemptUsage attemptUsage = new AttemptUsage(finalCheck,
+                    contestAssistanceUsageObserver(telemetryContext,
+                            ContestAiAssistanceTelemetryService.SOURCE_AGENT_PRIMARY),
+                    contestAssistanceUsageObserver(telemetryContext,
+                            ContestAiAssistanceTelemetryService.SOURCE_AGENT_SAFE_REGENERATION),
+                    contestAssistanceUsageObserver(telemetryContext,
+                            ContestAiAssistanceTelemetryService.SOURCE_AGENT_RECHECK_REGENERATION));
             AgentRuntime.AgentRunResult runResult = agentRuntime.run(new AgentRuntime.AgentRunRequest(
                     turn.getId(),
                     userId,
@@ -511,116 +486,17 @@ public class TurnCoordinator {
                     LoopBudget.from(properties.getAgentCore()),
                     contestPolicy,
                     msgVerdict,
-                    contestAssistanceUsageObserver(telemetryContext,
-                            ContestAiAssistanceTelemetryService.SOURCE_AGENT_PRIMARY)
-            ));
-            // P3-5 L4 (§5.4): restricted turns deliver only guard-passed content. An
-            // intercepted draft is never persisted to ai_messages; it triggers exactly
-            // one safe regeneration, and a second interception downgrades the reply to
-            // the server-authored safe refusal text.
-            boolean finalRefusal = false;
-            // P3-6 (§5.5): the safe-regeneration budget is exactly one per turn, shared
-            // between the initial L4 interception and a race-triggered re-interception.
-            boolean regenerationUsed = false;
-            if (restrictedTurn) {
-                ContestOutputGuard.Verdict verdict = contestOutputGuard.evaluate(
-                        turn.getId(), userId, conversation.getId(), runResult.content(),
-                        contestPolicy, runResult.contestGuardVerdict(), false);
-                if (verdict.intercepted()) {
-                    regenerationUsed = true;
-                    AgentRuntime.AgentRunResult regenerated = agentRuntime.run(new AgentRuntime.AgentRunRequest(
-                            turn.getId(),
-                            userId,
-                            conversation.getId(),
-                            snapshot.id(),
-                            Set.of("AI_CHAT"),
-                            sectionsWithOutputGuardRetry(bootstrap.sections(), verdict.reasonCode()),
-                            requireToolCall,
-                            "BUFFERED",
-                            CallProfile.CHAT_BUFFERED,
-                            LoopBudget.from(properties.getAgentCore()),
-                            contestPolicy,
-                            msgVerdict,
-                            contestAssistanceUsageObserver(telemetryContext,
-                                    ContestAiAssistanceTelemetryService.SOURCE_AGENT_SAFE_REGENERATION)
-                    ));
-                    ContestOutputGuard.Verdict regenVerdict = contestOutputGuard.evaluate(
-                            turn.getId(), userId, conversation.getId(), regenerated.content(),
-                            contestPolicy, regenerated.contestGuardVerdict(), true);
-                    finalRefusal = regenVerdict.intercepted();
-                    runResult = regenerated;
-                }
-            }
-            // P3-6 (§5.5 时间竞争双检): re-read participation + running-contest statements
-            // right before the answer is finalized and compare with the turn-start
-            // snapshot. Lookup failures are fail-closed inside (audited degraded +
-            // SERVICE_UNAVAILABLE), landing in this method's normal failure path.
-            PolicySnapshotService.PolicyRecheck recheck =
-                    policySnapshotService.recheckBeforeReturn(userId, turn.getId(), conversation.getId(), snapshot);
-            boolean pseudoStream = restrictedTurn;
-            if (recheck.changed()) {
-                ContestPolicyView recheckedPolicy = ContestPolicyView.from(
-                        recheck.participation().status(), recheck.statements());
-                boolean nowRestricted = recheckedPolicy.isParticipant()
-                        && !recheckedPolicy.constrainedProblems().isEmpty();
-                if (nowRestricted) {
-                    // Became restricted mid-generation (contest started / user joined /
-                    // newly constrained problem): the pending content must pass L4 under
-                    // the NEW policy before delivery. The L3 verdict is null — the
-                    // full-code check does not depend on it. An already-decided refusal
-                    // stands: the server text is safe under any policy.
-                    pseudoStream = true;
-                    if (!finalRefusal) {
-                        ContestOutputGuard.Verdict raceVerdict = contestOutputGuard.evaluate(
-                                turn.getId(), userId, conversation.getId(), runResult.content(),
-                                recheckedPolicy, null, false, ContestOutputGuard.TRIGGER_RECHECK);
-                        if (raceVerdict.intercepted()) {
-                            if (!regenerationUsed) {
-                                regenerationUsed = true;
-                                AgentRuntime.AgentRunResult regenerated = agentRuntime.run(new AgentRuntime.AgentRunRequest(
-                                        turn.getId(),
-                                        userId,
-                                        conversation.getId(),
-                                        snapshot.id(),
-                                        Set.of("AI_CHAT"),
-                                        sectionsWithOutputGuardRetry(bootstrap.sections(), raceVerdict.reasonCode()),
-                                        requireToolCall,
-                                        "BUFFERED",
-                                        CallProfile.CHAT_BUFFERED,
-                                        LoopBudget.from(properties.getAgentCore()),
-                                        recheckedPolicy,
-                                        null,
-                                        contestAssistanceUsageObserver(telemetryContext,
-                                                ContestAiAssistanceTelemetryService.SOURCE_AGENT_RECHECK_REGENERATION)
-                                ));
-                                ContestOutputGuard.Verdict regenVerdict = contestOutputGuard.evaluate(
-                                        turn.getId(), userId, conversation.getId(), regenerated.content(),
-                                        recheckedPolicy, null, true, ContestOutputGuard.TRIGGER_RECHECK);
-                                finalRefusal = regenVerdict.intercepted();
-                                runResult = regenerated;
-                            } else {
-                                // Shared budget already spent by the initial interception:
-                                // no second regeneration — downgrade straight to refusal.
-                                finalRefusal = true;
-                            }
-                        }
-                    }
-                } else {
-                    // Became unrestricted mid-generation (e.g., the run ended or the user
-                    // left the participant set): the generated content no longer has any
-                    // violation basis — deliver it even when L4 had downgraded to refusal.
-                    finalRefusal = false;
-                }
-            }
-            // Quota semantics (P3-5): exactly one usage record per turn, attributed to
-            // the run that determined the delivered content (first run on pass, the
-            // regeneration run otherwise — including a race-triggered regeneration).
-            // A refused turn is a completed turn — the record stays success=true and
-            // is never duplicated.
+                    attemptUsage
+            ).withInterceptors(List.of(finalCheck)));
+            boolean pseudoStream = finalCheck.pseudoStream();
+            // Quota semantics (P3-5): exactly one usage record per turn, attributed to the
+            // attempt that determined the delivered content (the first on pass, the
+            // regeneration otherwise, including a race-triggered one). A refused turn is a
+            // completed turn — the record stays success=true and is never duplicated.
             AiCompletion completion = new AiCompletion(
-                    finalRefusal ? CONTEST_SAFE_REFUSAL_TEXT : runResult.content(),
+                    runResult.content(),
                     runResult.provider(), runResult.model(),
-                    runResult.promptTokens(), runResult.completionTokens());
+                    attemptUsage.promptTokens(), attemptUsage.completionTokens());
             AiAssistantResponseNormalizer.NormalizedResponse normalized = responseNormalizer.normalize(completion);
             completion = normalized.completion();
             // CAS GENERATING -> COMPLETED: only the winner may record usage and complete the
@@ -877,5 +753,60 @@ public class TurnCoordinator {
             return domainException.getMessage();
         }
         return "AI provider call failed";
+    }
+
+    /**
+     * A chat run's usage, attributed to the attempt that produced it: telemetry keeps every
+     * attempt under its own source, and the turn's one quota record counts only the attempt
+     * whose answer was delivered (P3-5, unchanged since the regeneration moved into the run).
+     */
+    private static final class AttemptUsage implements Consumer<ProviderUsage> {
+        private final ContestFinalAnswerCheck check;
+        private final Map<ContestFinalAnswerCheck.Attempt, Consumer<ProviderUsage>> telemetry =
+                new EnumMap<>(ContestFinalAnswerCheck.Attempt.class);
+        private ContestFinalAnswerCheck.Attempt counted = ContestFinalAnswerCheck.Attempt.PRIMARY;
+        private long promptTokens;
+        private long completionTokens;
+
+        AttemptUsage(ContestFinalAnswerCheck check, Consumer<ProviderUsage> primary,
+                     Consumer<ProviderUsage> safeRegeneration, Consumer<ProviderUsage> recheckRegeneration) {
+            this.check = check;
+            putIfPresent(ContestFinalAnswerCheck.Attempt.PRIMARY, primary);
+            putIfPresent(ContestFinalAnswerCheck.Attempt.SAFE_REGENERATION, safeRegeneration);
+            putIfPresent(ContestFinalAnswerCheck.Attempt.RECHECK_REGENERATION, recheckRegeneration);
+        }
+
+        @Override
+        public synchronized void accept(ProviderUsage usage) {
+            ContestFinalAnswerCheck.Attempt attempt = check.attempt();
+            Consumer<ProviderUsage> observer = telemetry.get(attempt);
+            if (observer != null) {
+                observer.accept(usage);
+            }
+            if (usage == null) {
+                return;
+            }
+            if (attempt != counted) {
+                counted = attempt;
+                promptTokens = 0;
+                completionTokens = 0;
+            }
+            promptTokens += usage.promptTokens();
+            completionTokens += usage.completionTokens();
+        }
+
+        synchronized long promptTokens() {
+            return promptTokens;
+        }
+
+        synchronized long completionTokens() {
+            return completionTokens;
+        }
+
+        private void putIfPresent(ContestFinalAnswerCheck.Attempt attempt, Consumer<ProviderUsage> observer) {
+            if (observer != null) {
+                telemetry.put(attempt, observer);
+            }
+        }
     }
 }

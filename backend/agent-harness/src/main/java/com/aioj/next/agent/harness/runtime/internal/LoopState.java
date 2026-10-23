@@ -80,7 +80,8 @@ final class LoopState implements LoopContext {
         finalRetries++;
     }
 
-    List<String> warnings() {
+    @Override
+    public List<String> warnings() {
         return List.copyOf(warnings);
     }
 }

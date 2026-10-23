@@ -39,6 +39,13 @@ public class HarnessToolConfiguration {
     public ToolRuntime harnessToolRuntime(List<AgentTool> tools, ProblemDraftWorkspaceMapper workspaceMapper,
                                           ToolAuditService auditService, AiProperties aiProperties,
                                           ObjectMapper objectMapper) {
+        return create(tools, workspaceMapper, auditService, aiProperties.getCapacity(), objectMapper);
+    }
+
+    /** The same pipeline outside Spring, for tests that run the loop end to end. */
+    public static ToolRuntime create(List<AgentTool> tools, ProblemDraftWorkspaceMapper workspaceMapper,
+                                     ToolAuditService auditService, AiProperties.Capacity capacity,
+                                     ObjectMapper objectMapper) {
         List<BridgedTool> bridged = tools.stream().map(BridgedTool::new).toList();
         ToolCatalog catalog = ToolCatalog.of(bridged, DRAFT_FORBIDDEN_INPUT_FIELDS);
         for (ToolRejection rejection : catalog.rejections()) {
@@ -48,8 +55,7 @@ public class HarnessToolConfiguration {
         Map<String, com.aioj.next.ai.agent.tool.ToolDescriptor> legacyDescriptors = new LinkedHashMap<>();
         tools.forEach(tool -> legacyDescriptors.putIfAbsent(tool.descriptor().name(), tool.descriptor()));
         return ToolRuntimes.create(catalog, List.of(new WorkspaceOwnershipAuthorizer(workspaceMapper)),
-                new ToolCallAuditSink(auditService, legacyDescriptors), bulkheadLimits(aiProperties.getCapacity()),
-                objectMapper);
+                new ToolCallAuditSink(auditService, legacyDescriptors), bulkheadLimits(capacity), objectMapper);
     }
 
     /**
