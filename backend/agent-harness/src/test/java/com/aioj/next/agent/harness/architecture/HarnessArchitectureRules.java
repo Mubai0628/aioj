@@ -1,7 +1,9 @@
 package com.aioj.next.agent.harness.architecture;
 
+import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
@@ -9,14 +11,17 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.SecureClassLoader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
@@ -60,6 +65,25 @@ final class HarnessArchitectureRules {
                 .should().dependOnClassesThat().resideInAPackage(base + ".runtime..")
                 .orShould().dependOnClassesThat().resideInAPackage(base + ".context.internal..")
                 .because("the loop uses tools and context, never the other way round");
+    }
+
+    /**
+     * Plan A4.1: the Harness runs no user or model code itself. No processes, script engines,
+     * compilers or class loading; execution tools go through SandboxExecutor to agent-executor.
+     */
+    static ArchRule runsNoCodeInProcess(String base) {
+        return noClasses().that().resideInAPackage(base + "..")
+                .should().dependOnClassesThat(JavaClass.Predicates.belongToAnyOf(
+                                ProcessBuilder.class, URLClassLoader.class, SecureClassLoader.class)
+                        .or(resideInAnyPackage("javax.script..", "javax.tools..", "jdk.jshell.."))
+                        .as("process, script engine, compiler or class loader types"))
+                .orShould().callMethodWhere(DescribedPredicate.describe("Runtime.exec or defineClass",
+                        (JavaMethodCall call) -> (call.getTargetOwner().isEquivalentTo(Runtime.class)
+                                && call.getName().equals("exec"))
+                                || call.getName().equals("defineClass")
+                                || call.getName().equals("defineHiddenClass")))
+                .orShould().beAssignableTo(ClassLoader.class)
+                .because("execution tools run code through SandboxExecutor only (plan A4.1)");
     }
 
     static ArchRule contextDoesNotKnowTools(String base) {

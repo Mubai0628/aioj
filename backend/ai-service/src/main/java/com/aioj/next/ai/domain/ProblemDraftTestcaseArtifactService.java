@@ -2,7 +2,6 @@ package com.aioj.next.ai.domain;
 
 import com.aioj.next.contract.ai.ProblemDraftTestcaseArtifactPreviewResponse;
 import com.aioj.next.ai.config.AiProperties;
-import com.aioj.next.ai.config.InternalApiProperties;
 import com.aioj.next.ai.domain.problem.OfficialTestcasePackageReport;
 import com.aioj.next.ai.persistence.entity.ProblemDraftTestcaseArtifactEntity;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftTestcaseArtifactMapper;
@@ -36,19 +35,18 @@ public class ProblemDraftTestcaseArtifactService {
 
     private final ProblemDraftTestcaseArtifactMapper mapper;
     private final ObjectMapper objectMapper;
-    private final RestClient judgeWorkerClient;
+    private final RestClient executorClient;
     private final Path storageRoot;
 
     public ProblemDraftTestcaseArtifactService(ProblemDraftTestcaseArtifactMapper mapper,
                                                ObjectMapper objectMapper,
-                                               AiProperties properties,
-                                               InternalApiProperties internalApiProperties) {
+                                               AiProperties properties) {
         this.mapper = mapper;
         this.objectMapper = objectMapper;
         this.storageRoot = Path.of(properties.getProblemDraft().getTestcaseArtifactStorageRoot()).toAbsolutePath().normalize();
-        this.judgeWorkerClient = RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getJudgeWorkerUri()))
-                .defaultHeader("X-Internal-Token", internalApiProperties.getApiToken())
+        this.executorClient = RestClient.builder()
+                .baseUrl(stripTrailingSlash(properties.getAgentExecutorUri()))
+                .defaultHeader("X-Internal-Token", properties.getAgentExecutorToken())
                 .build();
     }
 
@@ -230,13 +228,13 @@ public class ProblemDraftTestcaseArtifactService {
     }
 
     private void downloadPackage(String fileId, Path temp) {
-        judgeWorkerClient.get()
+        executorClient.get()
                 .uri("/api/v1/internal/sandbox/files/{fileId}", fileId)
                 .header(HttpHeaders.ACCEPT, "application/octet-stream")
                 .exchange((request, response) -> {
                     if (!response.getStatusCode().is2xxSuccessful()) {
                         throw new DomainException(ErrorCode.INTERNAL_ERROR,
-                                "Failed to download official testcase package from judge-worker");
+                                "Failed to download official testcase package from agent-executor");
                     }
                     try (InputStream input = response.getBody()) {
                         if (input == null) {
@@ -257,7 +255,7 @@ public class ProblemDraftTestcaseArtifactService {
             return;
         }
         try {
-            judgeWorkerClient.post()
+            executorClient.post()
                     .uri("/api/v1/internal/sandbox/delete-file")
                     .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                     .body(java.util.Map.of("fileId", fileId))
@@ -335,7 +333,7 @@ public class ProblemDraftTestcaseArtifactService {
 
     private static String stripTrailingSlash(String value) {
         if (value == null || value.isBlank()) {
-            return "http://localhost:8203";
+            return "http://localhost:8205";
         }
         return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }

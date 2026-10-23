@@ -66,7 +66,8 @@ public class ProblemDraftExecutionService {
             DraftSandboxClient.CodeExecutionResult result = sandboxClient.executeCode(
                     normalizedLanguage, sourceCode, stdin,
                     clamp(timeLimitMillis, 50, 30_000, 2000),
-                    clamp(memoryLimitKb, 16 * 1024, 1024 * 1024, 262_144),
+                    clamp(memoryLimitKb, 16 * 1024, sandboxClient.maxMemoryLimitKb(),
+                            Math.min(262_144, sandboxClient.maxMemoryLimitKb())),
                     MAX_CAPTURE_BYTES
             );
             String stdout = result.stdout() == null ? "" : result.stdout();

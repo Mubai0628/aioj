@@ -48,19 +48,10 @@ aioj:
     stdout-max-collect-limit-bytes: ${JUDGE_STDOUT_MAX_COLLECT_LIMIT_BYTES:4194304}
     stderr-collect-limit-bytes: ${JUDGE_STDERR_COLLECT_LIMIT_BYTES:65536}
     max-source-bytes: ${JUDGE_MAX_SOURCE_BYTES:262144}
-    max-input-bytes: ${JUDGE_MAX_INPUT_BYTES:8388608}
-    max-batch-size: ${JUDGE_MAX_BATCH_SIZE:200}
-    max-batch-input-bytes: ${JUDGE_MAX_BATCH_INPUT_BYTES:33554432}
     max-run-time-limit-millis: ${JUDGE_MAX_RUN_TIME_LIMIT_MILLIS:30000}
     max-script-time-limit-millis: ${JUDGE_MAX_SCRIPT_TIME_LIMIT_MILLIS:180000}
     max-memory-limit-kb: ${JUDGE_MAX_MEMORY_LIMIT_KB:1048576}
     max-process-limit: ${JUDGE_MAX_PROCESS_LIMIT:80}
-    max-draft-package-bytes: ${JUDGE_MAX_DRAFT_PACKAGE_BYTES:52428800}
-    max-draft-package-uncompressed-bytes: ${JUDGE_MAX_DRAFT_PACKAGE_UNCOMPRESSED_BYTES:104857600}
-    max-draft-package-entry-bytes: ${JUDGE_MAX_DRAFT_PACKAGE_ENTRY_BYTES:8388608}
-    max-draft-package-entries: ${JUDGE_MAX_DRAFT_PACKAGE_ENTRIES:500}
-    max-draft-package-cases: ${JUDGE_MAX_DRAFT_PACKAGE_CASES:200}
-    max-draft-package-run-millis: ${JUDGE_MAX_DRAFT_PACKAGE_RUN_MILLIS:540000}
     compile-time-multiplier: ${JUDGE_COMPILE_TIME_MULTIPLIER:10}
     compile-max-time-millis: ${JUDGE_COMPILE_MAX_TIME_MILLIS:0}
     compile-memory-multiplier: ${JUDGE_COMPILE_MEMORY_MULTIPLIER:2}

@@ -1,5 +1,8 @@
 package com.aioj.next.ai.domain.problem;
 
+import com.aioj.next.agent.harness.sandbox.api.ExecutionFeedback;
+import com.aioj.next.agent.harness.sandbox.api.ExecutionLimits;
+import com.aioj.next.agent.harness.sandbox.api.ExecutionRequest;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
 import com.aioj.next.contract.problem.TestCaseDto;
 import org.junit.jupiter.api.Test;
@@ -7,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -14,16 +18,94 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class DraftSandboxClientTest {
     @Test
+    void aProblemLimitAboveTheSandboxCapIsAClearResultAndNothingIsSent() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        DraftSandboxClient client = new DraftSandboxClient(builder.build());
+        ProblemDraftResponse draft = draft("int main(){return 0;}", 524_288);
+
+        VerificationReport report = client.verifyDraft(draft, VerificationOptions.defaults(List.of()));
+        DraftSandboxClient.SampleExecutionResult samples = client.runSamples(draft);
+
+        String expected = "memoryLimitKb 524288 KB is above the draft sandbox's memory limit of 262144 KB, "
+                + "so this draft cannot be verified there";
+        assertThat(report.status()).isEqualTo("FAILED");
+        assertThat(report.errors()).singleElement().satisfies(error -> {
+            assertThat(error.code()).isEqualTo("SANDBOX_MEMORY_LIMIT_ABOVE_CAP");
+            assertThat(error.message()).isEqualTo(expected);
+        });
+        assertThat(samples.report().errorMessages()).containsExactly(expected);
+        server.verify();
+    }
+
+    @Test
+    void thePortCompilesAndRunsOnceWithMemoryCutToTheCap() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        DraftSandboxClient client = new DraftSandboxClient(builder.build());
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/compile"))
+                .andExpect(jsonPath("$.memoryLimitKb").value(262144))
+                .andExpect(jsonPath("$.timeLimitMillis").value(1500))
+                .andRespond(withSuccess("""
+                        {"code": 0, "message": "ok", "data": {"status": "ACCEPTED", "fileId": "compiled-main"}}
+                        """, MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-one"))
+                .andExpect(jsonPath("$.compiledFileId").value("compiled-main"))
+                .andExpect(jsonPath("$.stdin").value("1 2\n"))
+                .andExpect(jsonPath("$.memoryLimitKb").value(262144))
+                .andExpect(jsonPath("$.stdoutLimitBytes").value(4096))
+                .andRespond(withSuccess("""
+                        {"code": 0, "message": "ok", "data": {"status": "TIME_LIMIT_EXCEEDED",
+                         "stdout": "partial", "stderr": "", "timeMillis": 1500, "memoryKb": 2048}}
+                        """, MediaType.APPLICATION_JSON));
+        expectDeleteCompiled(server);
+
+        ExecutionFeedback feedback = client.execute(new ExecutionRequest("cpp", "int main(){}", "1 2\n",
+                new ExecutionLimits(Duration.ofMillis(1500), Duration.ofSeconds(3), 1L << 30, 4096)));
+
+        assertThat(feedback.status()).isEqualTo(ExecutionFeedback.Status.TIME_LIMIT);
+        assertThat(feedback.stdout()).isEqualTo("partial");
+        assertThat(feedback.cpuMillis()).isEqualTo(1500L);
+        assertThat(feedback.memoryBytes()).isEqualTo(2048L * 1024L);
+        server.verify();
+    }
+
+    @Test
+    void thePortFailsClosedWhenTheExecutorFailsOrRefuses() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        DraftSandboxClient client = new DraftSandboxClient(builder.build());
+        ExecutionRequest request = new ExecutionRequest("python", "print(1)", "",
+                new ExecutionLimits(Duration.ofSeconds(1), Duration.ofSeconds(2), 64L << 20, 4096));
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/compile"))
+                .andRespond(withServerError());
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/compile"))
+                .andRespond(withBadRequest().body("{\"code\":400,\"message\":\"Sandbox language is not enabled\"}")
+                        .contentType(MediaType.APPLICATION_JSON));
+
+        ExecutionFeedback unavailable = client.execute(request);
+        ExecutionFeedback rejected = client.execute(request);
+
+        assertThat(unavailable.status()).isEqualTo(ExecutionFeedback.Status.UNAVAILABLE);
+        assertThat(unavailable.stderr()).startsWith("agent-executor unavailable: ");
+        assertThat(rejected.status()).isEqualTo(ExecutionFeedback.Status.REJECTED);
+        assertThat(rejected.stderr()).contains("Sandbox language is not enabled");
+        server.verify();
+    }
+
+    @Test
     void verifyDraftReportsCompileFailure() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/compile"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/compile"))
                 .andRespond(withSuccess("""
                         {
                           "code": 0,
@@ -45,11 +127,11 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftReportsSampleMismatch() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/compile"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/compile"))
                 .andRespond(withSuccess("""
                         {
                           "code": 0,
@@ -61,7 +143,7 @@ class DraftSandboxClientTest {
                           }
                         }
                         """, MediaType.APPLICATION_JSON));
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-one"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-one"))
                 .andRespond(withSuccess("""
                         {
                           "code": 0,
@@ -84,16 +166,16 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftReportsGeneratorFailure() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
         expectCompileAccepted(server);
         expectRunAccepted(server, "3\n");
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andExpect(jsonPath("$.targetCaseCount").value(3))
                 .andExpect(jsonPath("$.timeLimitMillis").value(30000))
-                .andExpect(jsonPath("$.memoryLimitKb").value(524288))
+                .andExpect(jsonPath("$.memoryLimitKb").doesNotExist())
                 .andExpect(jsonPath("$.collectMode").value("OFFICIAL_PACKAGE"))
                 .andRespond(withSuccess("""
                         {
@@ -117,13 +199,13 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftReportsGeneratorFailureWithEnoughTracebackToDiagnoseExecutablePath() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
         expectCompileAccepted(server);
         expectRunAccepted(server, "3\n");
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andRespond(withSuccess("""
                         {
                           "code": 0,
@@ -151,16 +233,16 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftReportsMissingGeneratedInputs() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
         expectCompileAccepted(server);
         expectRunAccepted(server, "3\n");
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andExpect(jsonPath("$.targetCaseCount").value(3))
                 .andExpect(jsonPath("$.timeLimitMillis").value(30000))
-                .andExpect(jsonPath("$.memoryLimitKb").value(524288))
+                .andExpect(jsonPath("$.memoryLimitKb").doesNotExist())
                 .andExpect(jsonPath("$.collectMode").value("OFFICIAL_PACKAGE"))
                 .andRespond(withSuccess("""
                         {
@@ -193,13 +275,13 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftIncludesSandboxDetailWhenOfficialGeneratorPackageFails() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
         expectCompileAccepted(server);
         expectRunAccepted(server, "3\n");
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andRespond(withSuccess("""
                         {
                           "code": 0,
@@ -235,16 +317,16 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftSendsRequestedTargetHiddenCaseCount() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
         expectCompileAccepted(server);
         expectRunAccepted(server, "3\n");
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andExpect(jsonPath("$.targetCaseCount").value(5))
                 .andExpect(jsonPath("$.timeLimitMillis").value(50000))
-                .andExpect(jsonPath("$.memoryLimitKb").value(524288))
+                .andExpect(jsonPath("$.memoryLimitKb").doesNotExist())
                 .andExpect(jsonPath("$.collectMode").value("OFFICIAL_PACKAGE"))
                 .andRespond(withSuccess("""
                         {
@@ -271,7 +353,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftMarksExecutionVerifiedWhenSamplesAndHiddenCasesPass() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -290,14 +372,14 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftDoesNotWarnWhenThePackageVerifiedEveryGeneratedInput() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
         expectCompileAccepted(server);
         expectRunAccepted(server, "3\n");
         // Four generated inputs, all four verified in the package, although only three were asked for.
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andExpect(jsonPath("$.targetCaseCount").value(3))
                 .andRespond(withSuccess("""
                         {"code": 0, "message": "ok", "data": {"status": "ACCEPTED", "message": "Accepted",
@@ -324,7 +406,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftMaterializesOutputsWhenGeneratorOnlyCreatesInputs() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -342,7 +424,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftReportsStandardTleWhileMaterializingGeneratedInput() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -364,7 +446,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftReportsOfficialPackageTooLargeWithoutCopyOutLimitLeak() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -388,7 +470,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftDetailedRecordsComplexityBenchmarkWarnings() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -410,7 +492,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftDetailedWarnsWhenBenchmarkMetricsAreMissing() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -431,7 +513,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftDetailedFailsComplexityWhenNaiveLoopConflictsWithLargeConstraints() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -466,7 +548,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftDetailedFlagsLargeUnboundedRangeOutputAsSpecRisk() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -497,7 +579,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftDetailedRunsReferenceCrossCheckWhenEnabled() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -530,7 +612,7 @@ class DraftSandboxClientTest {
 
     @Test
     void verifyDraftDetailedReportsReferenceMismatch() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://judge");
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://executor");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         DraftSandboxClient client = new DraftSandboxClient(builder.build());
 
@@ -561,6 +643,10 @@ class DraftSandboxClientTest {
     }
 
     private ProblemDraftResponse draft(String code) {
+        return draft(code, 262144);
+    }
+
+    private ProblemDraftResponse draft(String code, int memoryLimitKb) {
         return new ProblemDraftResponse(
                 1L,
                 "PENDING_REVIEW",
@@ -577,7 +663,7 @@ class DraftSandboxClientTest {
                 List.of(),
                 List.of(new TestCaseDto("1 2\n", "3\n", true)),
                 1000,
-                262144,
+                memoryLimitKb,
                 null,
                 "mock",
                 1,
@@ -668,7 +754,7 @@ class DraftSandboxClientTest {
     }
 
     private void expectCompileAccepted(MockRestServiceServer server, String fileId) {
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/compile"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/compile"))
                 .andRespond(withSuccess("""
                         {
                           "code": 0,
@@ -695,7 +781,7 @@ class DraftSandboxClientTest {
         if (memoryKb != null) {
             metrics += ",\n                            \"memoryKb\": " + memoryKb;
         }
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-one"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-one"))
                 .andRespond(withSuccess("""
                         {
                           "code": 0,
@@ -710,7 +796,7 @@ class DraftSandboxClientTest {
     }
 
     private void expectDeleteCompiled(MockRestServiceServer server) {
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/delete-file"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/delete-file"))
                 .andRespond(withSuccess("""
                         {
                           "code": 0,
@@ -726,7 +812,7 @@ class DraftSandboxClientTest {
 
     private void expectGeneratedHiddenFiles(MockRestServiceServer server, int generatedInputCount,
                                             Long time1, Long time2, Long time3) {
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andExpect(jsonPath("$.targetCaseCount").value(3))
                 .andExpect(jsonPath("$.collectMode").value("OFFICIAL_PACKAGE"))
                 .andRespond(withSuccess("""
@@ -765,7 +851,7 @@ class DraftSandboxClientTest {
     }
 
     private void expectGeneratedHiddenFilesWithoutMetrics(MockRestServiceServer server) {
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andExpect(jsonPath("$.targetCaseCount").value(3))
                 .andExpect(jsonPath("$.collectMode").value("OFFICIAL_PACKAGE"))
                 .andRespond(withSuccess("""
@@ -800,7 +886,7 @@ class DraftSandboxClientTest {
     }
 
     private void expectGeneratedOfficialPackageFailure(MockRestServiceServer server, String code, String message) {
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andExpect(jsonPath("$.targetCaseCount").value(3))
                 .andExpect(jsonPath("$.collectMode").value("OFFICIAL_PACKAGE"))
                 .andRespond(withSuccess("""
@@ -824,7 +910,7 @@ class DraftSandboxClientTest {
     }
 
     private void expectGeneratedStressFiles(MockRestServiceServer server) {
-        server.expect(once(), requestTo("http://judge/api/v1/internal/sandbox/run-python-script"))
+        server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/run-python-script"))
                 .andExpect(jsonPath("$.targetCaseCount").value(3))
                 .andExpect(jsonPath("$.collectMode").value("PAIRED"))
                 .andRespond(withSuccess("""

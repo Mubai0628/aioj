@@ -83,8 +83,8 @@ class AiServiceArchitectureTest {
     }
 
     @Test
-    void aiServiceStartsNoProcesses() {
-        AiServiceArchitectureRules.noProcessExecution().check(MAIN);
+    void aiServiceRunsNoCodeInProcess() {
+        AiServiceArchitectureRules.noCodeRunsInProcess().check(MAIN);
     }
 
     @Test
@@ -138,9 +138,14 @@ class AiServiceArchitectureTest {
         assertThatThrownBy(() -> AiServiceArchitectureRules.internalPackagesStayInsideTheirOwner().check(fixture))
                 .hasMessageContaining("FixtureCaller")
                 .satisfies(error -> assertThat(error.getMessage()).doesNotContain("FixtureLeakyAdapter"));
-        assertThatThrownBy(() -> AiServiceArchitectureRules.noProcessExecution().check(fixture))
+        assertThatThrownBy(() -> AiServiceArchitectureRules.noCodeRunsInProcess().check(fixture))
                 .hasMessageContaining("FixtureProcessStarter.withBuilder")
-                .hasMessageContaining("FixtureProcessStarter.withRuntime");
+                .hasMessageContaining("FixtureProcessStarter.withRuntime")
+                .hasMessageContaining("FixtureCodeLoader.withScriptEngine")
+                .hasMessageContaining("FixtureCodeLoader.withCompiler")
+                .hasMessageContaining("FixtureCodeLoader.withDefineClass")
+                .hasMessageContaining("FixtureCodeLoader.withUrlClassLoader")
+                .hasMessageContaining("FixtureCodeLoader> is assignable to java.lang.ClassLoader");
     }
 
     private static void assertExactly(String what, Set<String> actual, Set<String> allowed) {

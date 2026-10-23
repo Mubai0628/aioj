@@ -12,7 +12,12 @@ public class AiProperties {
     private String apiKey = "";
     private String model = "deepseek-v4-pro";
     private String problemServiceUri = "http://localhost:8202";
-    private String judgeWorkerUri = "http://localhost:8203";
+    /** Plan T1.10: Agent tool execution goes to agent-executor, never to judge-worker or a sandbox. */
+    private String agentExecutorUri = "http://localhost:8205";
+    /** agent-executor's own inbound token; only ai-service holds it. */
+    private String agentExecutorToken = "";
+    /** agent-executor's cap on one program's memory; a draft above it is not verified there. */
+    private int agentExecutorMaxMemoryLimitKb = 262_144;
     private int problemServiceConnectTimeoutMs = 2000;
     private int problemServiceReadTimeoutMs = 5000;
     private long problemServiceGuardCacheTtlMs = 30000;
@@ -70,12 +75,28 @@ public class AiProperties {
         this.problemServiceUri = problemServiceUri;
     }
 
-    public String getJudgeWorkerUri() {
-        return judgeWorkerUri;
+    public String getAgentExecutorUri() {
+        return agentExecutorUri;
     }
 
-    public void setJudgeWorkerUri(String judgeWorkerUri) {
-        this.judgeWorkerUri = judgeWorkerUri;
+    public void setAgentExecutorUri(String agentExecutorUri) {
+        this.agentExecutorUri = agentExecutorUri;
+    }
+
+    public String getAgentExecutorToken() {
+        return agentExecutorToken;
+    }
+
+    public void setAgentExecutorToken(String agentExecutorToken) {
+        this.agentExecutorToken = agentExecutorToken;
+    }
+
+    public int getAgentExecutorMaxMemoryLimitKb() {
+        return agentExecutorMaxMemoryLimitKb;
+    }
+
+    public void setAgentExecutorMaxMemoryLimitKb(int agentExecutorMaxMemoryLimitKb) {
+        this.agentExecutorMaxMemoryLimitKb = agentExecutorMaxMemoryLimitKb;
     }
 
     public int getProblemServiceConnectTimeoutMs() {

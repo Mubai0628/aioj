@@ -20,19 +20,10 @@ public class JudgeWorkerProperties {
     private int stderrCollectLimitBytes = 64 * 1024;
     private Duration sandboxReadTimeout = Duration.ofSeconds(370);
     private int maxSourceBytes = 256 * 1024;
-    private int maxInputBytes = 8 * 1024 * 1024;
-    private int maxBatchSize = 200;
-    private long maxBatchInputBytes = 32L * 1024L * 1024L;
     private int maxRunTimeLimitMillis = 30_000;
     private int maxScriptTimeLimitMillis = 180_000;
     private int maxMemoryLimitKb = 1_048_576;
     private int maxProcessLimit = 80;
-    private long maxDraftPackageBytes = 50L * 1024L * 1024L;
-    private long maxDraftPackageUncompressedBytes = 100L * 1024L * 1024L;
-    private long maxDraftPackageEntryBytes = 8L * 1024L * 1024L;
-    private int maxDraftPackageEntries = 500;
-    private int maxDraftPackageCases = 200;
-    private long maxDraftPackageRunMillis = 540_000L;
     private long compileTimeMultiplier = 10L;
     /** Upper bound for compiler CPU time; 0 keeps the max script time limit as the bound. */
     private long compileMaxTimeMillis = 0L;
@@ -145,30 +136,6 @@ public class JudgeWorkerProperties {
         this.maxSourceBytes = maxSourceBytes;
     }
 
-    public int getMaxInputBytes() {
-        return maxInputBytes;
-    }
-
-    public void setMaxInputBytes(int maxInputBytes) {
-        this.maxInputBytes = maxInputBytes;
-    }
-
-    public int getMaxBatchSize() {
-        return maxBatchSize;
-    }
-
-    public void setMaxBatchSize(int maxBatchSize) {
-        this.maxBatchSize = maxBatchSize;
-    }
-
-    public long getMaxBatchInputBytes() {
-        return maxBatchInputBytes;
-    }
-
-    public void setMaxBatchInputBytes(long maxBatchInputBytes) {
-        this.maxBatchInputBytes = maxBatchInputBytes;
-    }
-
     public int getMaxRunTimeLimitMillis() {
         return maxRunTimeLimitMillis;
     }
@@ -199,54 +166,6 @@ public class JudgeWorkerProperties {
 
     public void setMaxProcessLimit(int maxProcessLimit) {
         this.maxProcessLimit = maxProcessLimit;
-    }
-
-    public long getMaxDraftPackageBytes() {
-        return maxDraftPackageBytes;
-    }
-
-    public void setMaxDraftPackageBytes(long maxDraftPackageBytes) {
-        this.maxDraftPackageBytes = maxDraftPackageBytes;
-    }
-
-    public long getMaxDraftPackageUncompressedBytes() {
-        return maxDraftPackageUncompressedBytes;
-    }
-
-    public void setMaxDraftPackageUncompressedBytes(long maxDraftPackageUncompressedBytes) {
-        this.maxDraftPackageUncompressedBytes = maxDraftPackageUncompressedBytes;
-    }
-
-    public long getMaxDraftPackageEntryBytes() {
-        return maxDraftPackageEntryBytes;
-    }
-
-    public void setMaxDraftPackageEntryBytes(long maxDraftPackageEntryBytes) {
-        this.maxDraftPackageEntryBytes = maxDraftPackageEntryBytes;
-    }
-
-    public int getMaxDraftPackageEntries() {
-        return maxDraftPackageEntries;
-    }
-
-    public void setMaxDraftPackageEntries(int maxDraftPackageEntries) {
-        this.maxDraftPackageEntries = maxDraftPackageEntries;
-    }
-
-    public int getMaxDraftPackageCases() {
-        return maxDraftPackageCases;
-    }
-
-    public void setMaxDraftPackageCases(int maxDraftPackageCases) {
-        this.maxDraftPackageCases = maxDraftPackageCases;
-    }
-
-    public long getMaxDraftPackageRunMillis() {
-        return maxDraftPackageRunMillis;
-    }
-
-    public void setMaxDraftPackageRunMillis(long maxDraftPackageRunMillis) {
-        this.maxDraftPackageRunMillis = maxDraftPackageRunMillis;
     }
 
     public long getCompileTimeMultiplier() {

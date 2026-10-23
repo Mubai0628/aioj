@@ -10,6 +10,8 @@ import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 
+import java.net.URLClassLoader;
+import java.security.SecureClassLoader;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
@@ -71,13 +73,28 @@ final class AiServiceArchitectureRules {
         });
     }
 
-    /** Plan §6.2: ai-service starts no processes; code runs only in a sandbox behind an HTTP API. */
-    static ArchRule noProcessExecution() {
-        return noClasses().should().dependOnClassesThat().belongToAnyOf(ProcessBuilder.class)
-                .orShould().callMethodWhere(DescribedPredicate.describe("Runtime.exec",
-                        (JavaMethodCall call) -> call.getTargetOwner().isEquivalentTo(Runtime.class)
-                                && call.getName().equals("exec")))
-                .because("code execution belongs in the sandbox, never in the ai-service process (plan §6.2)");
+    /** What running code in-process takes: processes, script engines, compilers, class loaders. */
+    static final DescribedPredicate<JavaClass> IN_PROCESS_EXECUTION_TYPES =
+            JavaClass.Predicates.belongToAnyOf(ProcessBuilder.class, URLClassLoader.class, SecureClassLoader.class)
+                    .or(resideInAnyPackage("javax.script..", "javax.tools..", "jdk.jshell..",
+                            "org.graalvm.polyglot..", "org.openjdk.nashorn..", "org.mozilla.javascript..",
+                            "groovy..", "org.codehaus.groovy..", "org.codehaus.janino.."))
+                    .as("process, script engine, compiler or class loader types");
+
+    /**
+     * Plan A4.1 (and §6.2): no user or model code runs in the ai-service process. It starts no
+     * processes, evaluates no scripts, compiles nothing and defines no classes; code runs only in
+     * agent-executor, behind the SandboxExecutor port.
+     */
+    static ArchRule noCodeRunsInProcess() {
+        return noClasses().should().dependOnClassesThat(IN_PROCESS_EXECUTION_TYPES)
+                .orShould().callMethodWhere(DescribedPredicate.describe("Runtime.exec or defineClass",
+                        (JavaMethodCall call) -> (call.getTargetOwner().isEquivalentTo(Runtime.class)
+                                && call.getName().equals("exec"))
+                                || call.getName().equals("defineClass")
+                                || call.getName().equals("defineHiddenClass")))
+                .orShould().beAssignableTo(ClassLoader.class)
+                .because("code runs in agent-executor, never in the ai-service process (plan A4.1)");
     }
 
     /** Outer classes with a direct dependency on the target, leaving out the excluded sources. */

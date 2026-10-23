@@ -1,7 +1,10 @@
 package com.aioj.next.ai.domain.problem;
 
+import com.aioj.next.agent.harness.sandbox.api.ExecutionFeedback;
+import com.aioj.next.agent.harness.sandbox.api.ExecutionLimits;
+import com.aioj.next.agent.harness.sandbox.api.ExecutionRequest;
+import com.aioj.next.agent.harness.sandbox.api.SandboxExecutor;
 import com.aioj.next.ai.config.AiProperties;
-import com.aioj.next.ai.config.InternalApiProperties;
 import com.aioj.next.ai.domain.ProblemDraftTestcaseArtifactService;
 import com.aioj.next.common.api.ApiResponse;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
@@ -11,6 +14,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -25,20 +29,20 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
-public class DraftSandboxClient {
+public class DraftSandboxClient implements SandboxExecutor {
     private static final int DEFAULT_HIDDEN_CASE_COUNT = 3;
     private static final int MAX_HIDDEN_CASE_COUNT = 20;
     private static final int DEFAULT_STRESS_CASE_COUNT = 10;
     private static final int MAX_STRESS_CASE_COUNT = 30;
     private static final int MIN_GENERATOR_TIME_LIMIT_MILLIS = 30_000;
     private static final int MAX_GENERATOR_TIME_LIMIT_MILLIS = 180_000;
-    private static final int MIN_GENERATOR_MEMORY_LIMIT_KB = 524_288;
     private static final int MATERIALIZED_OUTPUT_STDOUT_LIMIT_BYTES = 4 * 1024 * 1024;
     private static final double LOW_MARGIN_RATIO = 0.8d;
     private static final String COLLECT_MODE_PAIRED = "PAIRED";
     private static final String COLLECT_MODE_OFFICIAL_PACKAGE = "OFFICIAL_PACKAGE";
     private static final long DEFAULT_MAX_OFFICIAL_CASE_BYTES = 8L * 1024L * 1024L;
     private static final long DEFAULT_MAX_OFFICIAL_PACKAGE_BYTES = 50L * 1024L * 1024L;
+    private static final int DEFAULT_MAX_MEMORY_LIMIT_KB = 262_144;
     private static final Pattern BIG_NUMBER_PATTERN = Pattern.compile(
             "(?i)(?:1\\s*e\\s*5|2\\s*e\\s*5|5\\s*e\\s*4|10\\s*\\^\\s*5|2\\s*\\*\\s*10\\s*\\^\\s*5|100000|200000|50000)");
     private static final Pattern COMPLEXITY_PATTERN = Pattern.compile("(?i)O\\s*\\([^\\)]{1,80}\\)");
@@ -58,26 +62,36 @@ public class DraftSandboxClient {
     private final RestClient restClient;
     private final long maxOfficialCaseBytes;
     private final long maxOfficialPackageBytes;
+    private final int maxMemoryLimitKb;
     private ProblemDraftTestcaseArtifactService testcaseArtifactService;
 
     @Autowired
-    public DraftSandboxClient(AiProperties properties, InternalApiProperties internalApiProperties) {
+    public DraftSandboxClient(AiProperties properties) {
         this(RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getJudgeWorkerUri()))
-                .defaultHeader("X-Internal-Token", internalApiProperties.getApiToken())
+                .baseUrl(stripTrailingSlash(properties.getAgentExecutorUri()))
+                .defaultHeader("X-Internal-Token", properties.getAgentExecutorToken())
                 .build(),
                 properties.getProblemDraft().getMaxOfficialCaseBytes(),
-                properties.getProblemDraft().getMaxOfficialPackageBytes());
+                properties.getProblemDraft().getMaxOfficialPackageBytes(),
+                properties.getAgentExecutorMaxMemoryLimitKb());
     }
 
     DraftSandboxClient(RestClient restClient) {
-        this(restClient, DEFAULT_MAX_OFFICIAL_CASE_BYTES, DEFAULT_MAX_OFFICIAL_PACKAGE_BYTES);
+        this(restClient, DEFAULT_MAX_OFFICIAL_CASE_BYTES, DEFAULT_MAX_OFFICIAL_PACKAGE_BYTES,
+                DEFAULT_MAX_MEMORY_LIMIT_KB);
     }
 
-    DraftSandboxClient(RestClient restClient, long maxOfficialCaseBytes, long maxOfficialPackageBytes) {
+    DraftSandboxClient(RestClient restClient, long maxOfficialCaseBytes, long maxOfficialPackageBytes,
+                       int maxMemoryLimitKb) {
         this.restClient = restClient;
         this.maxOfficialCaseBytes = Math.max(1L, maxOfficialCaseBytes);
         this.maxOfficialPackageBytes = Math.max(1L, maxOfficialPackageBytes);
+        this.maxMemoryLimitKb = maxMemoryLimitKb > 0 ? maxMemoryLimitKb : DEFAULT_MAX_MEMORY_LIMIT_KB;
+    }
+
+    /** The most memory agent-executor gives one program; the model's own choice is cut to it. */
+    public int maxMemoryLimitKb() {
+        return maxMemoryLimitKb;
     }
 
     @Autowired(required = false)
@@ -102,6 +116,11 @@ public class DraftSandboxClient {
         CrossCheckReport crossCheckReport = null;
             if (draft == null) {
             errors.add(error("SANDBOX_NO_DRAFT", "draft is required", null));
+            return new DraftExecutionReport(report(errors, warnings), null);
+        }
+        VerificationError memoryCap = memoryCapError(draft);
+        if (memoryCap != null) {
+            errors.add(memoryCap);
             return new DraftExecutionReport(report(errors, warnings), null);
         }
         CompileResponse compile = null;
@@ -173,12 +192,71 @@ public class DraftSandboxClient {
         }
     }
 
+    /**
+     * The Harness port over agent-executor (plan T1.10): compile if the language needs it, then run once.
+     * It fails closed. An executor that cannot be reached is UNAVAILABLE and nothing runs anywhere else;
+     * a request the executor refuses is REJECTED. Memory above the executor's cap is cut to it first.
+     */
+    @Override
+    public ExecutionFeedback execute(ExecutionRequest request) {
+        ExecutionLimits limits = request.limits();
+        long memoryKb = Math.min(maxMemoryLimitKb, Math.max(1L, (limits.memoryBytes() + 1023L) / 1024L));
+        long cpuMillis = Math.min(Integer.MAX_VALUE, Math.max(1L, limits.cpuTime().toMillis()));
+        CodeExecutionResult result;
+        try {
+            result = executeCode(request.language(), request.source(), request.stdin(), (int) cpuMillis,
+                    (int) memoryKb, limits.maxOutputBytes());
+        } catch (HttpClientErrorException ex) {
+            return new ExecutionFeedback(ExecutionFeedback.Status.REJECTED, "",
+                    firstText(ex.getResponseBodyAsString(), ex.getMessage()), "", 0L, 0L, false);
+        } catch (RestClientException | IllegalStateException ex) {
+            return new ExecutionFeedback(ExecutionFeedback.Status.UNAVAILABLE, "",
+                    "agent-executor unavailable: " + firstText(ex.getMessage(), ex.getClass().getSimpleName()),
+                    "", 0L, 0L, false);
+        }
+        ExecutionFeedback.Status status = feedbackStatus(result.status());
+        boolean compileFailed = status == ExecutionFeedback.Status.COMPILE_ERROR;
+        return new ExecutionFeedback(status, result.stdout(), compileFailed ? "" : result.stderr(),
+                compileFailed ? firstText(result.stderr(), result.message()) : "",
+                result.timeMillis() == null ? 0L : result.timeMillis(),
+                result.memoryKb() == null ? 0L : result.memoryKb() * 1024L,
+                status == ExecutionFeedback.Status.OUTPUT_LIMIT);
+    }
+
+    private static ExecutionFeedback.Status feedbackStatus(String status) {
+        return switch (status == null ? "" : status) {
+            case "ACCEPTED" -> ExecutionFeedback.Status.OK;
+            case "COMPILE_ERROR" -> ExecutionFeedback.Status.COMPILE_ERROR;
+            case "RUNTIME_ERROR" -> ExecutionFeedback.Status.RUNTIME_ERROR;
+            case "TIME_LIMIT_EXCEEDED" -> ExecutionFeedback.Status.TIME_LIMIT;
+            case "MEMORY_LIMIT_EXCEEDED" -> ExecutionFeedback.Status.MEMORY_LIMIT;
+            case "OUTPUT_LIMIT_EXCEEDED" -> ExecutionFeedback.Status.OUTPUT_LIMIT;
+            default -> ExecutionFeedback.Status.UNAVAILABLE;
+        };
+    }
+
+    /** The sandbox cannot give a program more than its cap; say so rather than report a false MLE. */
+    private VerificationError memoryCapError(ProblemDraftResponse draft) {
+        Integer memory = draft.memoryLimitKb();
+        if (memory == null || memory <= maxMemoryLimitKb) {
+            return null;
+        }
+        return error("SANDBOX_MEMORY_LIMIT_ABOVE_CAP", "memoryLimitKb " + memory
+                + " KB is above the draft sandbox's memory limit of " + maxMemoryLimitKb
+                + " KB, so this draft cannot be verified there", "memoryLimitKb");
+    }
+
     /** Runs only the public samples and returns field-safe mismatch summaries. */
     public SampleExecutionResult runSamples(ProblemDraftResponse draft) {
         if (draft == null) {
             return new SampleExecutionResult(VerificationReport.of(List.of(
                     new VerificationError("SANDBOX_NO_DRAFT", "draft is required", null)), List.of()),
                     0, 0, null, null, null);
+        }
+        VerificationError memoryCap = memoryCapError(draft);
+        if (memoryCap != null) {
+            return new SampleExecutionResult(VerificationReport.of(List.of(memoryCap), List.of()), 0,
+                    draft.testCases() == null ? 0 : draft.testCases().size(), null, null, null);
         }
         CompileResponse compile = null;
         List<VerificationError> errors = new ArrayList<>();
@@ -250,7 +328,7 @@ public class DraftSandboxClient {
         PythonScriptResponse script = post("/api/v1/internal/sandbox/run-python-script", new PythonScriptRequest(
                 draft.testcaseGeneratorPython(),
                 generatorTimeLimitMillis(draft, targetCount),
-                generatorMemoryLimitKb(draft),
+                null,
                 targetCount,
                 COLLECT_MODE_OFFICIAL_PACKAGE,
                 defaultLanguage(draft.standardSolutionLanguage()),
@@ -446,7 +524,7 @@ public class DraftSandboxClient {
         PythonScriptResponse script = post("/api/v1/internal/sandbox/run-python-script", new PythonScriptRequest(
                 draft.stressTestcaseGeneratorPython(),
                 generatorTimeLimitMillis(draft, targetCount),
-                generatorMemoryLimitKb(draft),
+                null,
                 targetCount,
                 COLLECT_MODE_PAIRED
         ), PYTHON_SCRIPT_TYPE);
@@ -656,14 +734,6 @@ public class DraftSandboxClient {
         return (int) Math.min(MAX_GENERATOR_TIME_LIMIT_MILLIS, scaled);
     }
 
-    private int generatorMemoryLimitKb(ProblemDraftResponse draft) {
-        int memory = draft == null || draft.memoryLimitKb() == null || draft.memoryLimitKb() <= 0
-                ? 262_144
-                : draft.memoryLimitKb();
-        long doubled = (long) memory * 2L;
-        return (int) Math.max(MIN_GENERATOR_MEMORY_LIMIT_KB, Math.min(Integer.MAX_VALUE, doubled));
-    }
-
     private int crossCheckTimeLimitMillis(ProblemDraftResponse draft) {
         int problemLimit = draft == null || draft.timeLimitMillis() == null || draft.timeLimitMillis() <= 0
                 ? 1000
@@ -675,7 +745,7 @@ public class DraftSandboxClient {
         int memory = draft == null || draft.memoryLimitKb() == null || draft.memoryLimitKb() <= 0
                 ? 262_144
                 : draft.memoryLimitKb();
-        return Math.max(262_144, memory);
+        return Math.min(maxMemoryLimitKb, Math.max(262_144, memory));
     }
 
     private String missingGeneratedPairsMessage(String field, int actualPairs, int expectedPairs, PythonScriptResponse script) {
@@ -990,7 +1060,7 @@ public class DraftSandboxClient {
 
     private static String stripTrailingSlash(String value) {
         if (value == null || value.isBlank()) {
-            return "http://localhost:8203";
+            return "http://localhost:8205";
         }
         String trimmed = value.trim();
         return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;

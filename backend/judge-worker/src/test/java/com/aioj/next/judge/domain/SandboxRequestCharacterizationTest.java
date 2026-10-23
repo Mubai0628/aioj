@@ -21,7 +21,6 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -103,25 +102,6 @@ class SandboxRequestCharacterizationTest {
         SandboxExecutionClient execution = new SandboxExecutionClient(properties);
         scenarios.put("exec-compile-cpp", capture(() -> execution.compileSource("cpp", SOURCES.get("cpp"),
                 2_000_000_000L, 268_435_456L)));
-        scenarios.put("exec-run-cpp-with-temporary-compile", capture(() -> execution.runSource("cpp", SOURCES.get("cpp"),
-                null, "1 2", 1_000_000_000L, 268_435_456L, 0)));
-        scenarios.put("exec-run-java-precompiled", capture(() -> execution.runSource("java", SOURCES.get("java"),
-                "exe-java", "x", 1_000_000_000L, 268_435_456L, 4096)));
-        scenarios.put("exec-run-python", capture(() -> execution.runSource("python", SOURCES.get("python"),
-                null, "x", 1_000_000_000L, 268_435_456L, 0)));
-        scenarios.put("exec-python-script-paired", capture(() -> execution.runPythonScript("print('gen')",
-                5_000_000_000L, 536_870_912L, 0, 5, "PAIRED")));
-        scenarios.put("exec-python-script-official-inputs", capture(() -> execution.runPythonScript("print('gen')",
-                5_000_000_000L, 536_870_912L, 0, 4, "OFFICIAL_INPUTS")));
-        scenarios.put("exec-official-package", capture(() -> execution.runOfficialPackageScript("print('gen')", "cpp",
-                SOURCES.get("cpp"), 8_000_000_000L, 536_870_912L, 0, 6, 1_000_000_000L, 268_435_456L,
-                1_048_576L, 16_777_216L)));
-        scenarios.put("exec-download-and-delete", capture(() -> {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            execution.downloadCachedFile("zip-1", out);
-            assertThat(out.toString(StandardCharsets.UTF_8)).isEqualTo("cached-zip-bytes");
-            execution.deleteCachedFile("zip-1");
-        }));
 
         String actual = canonical.writeValueAsString(scenarios) + "\n";
         if ("true".equals(System.getenv("CHARACTERIZATION_RECORD"))) {

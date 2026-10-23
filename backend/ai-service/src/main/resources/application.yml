@@ -44,7 +44,10 @@ aioj:
     api-key: ${DEEPSEEK_API_KEY:}
     model: ${DEEPSEEK_MODEL:deepseek-v4-pro}
     problem-service-uri: ${PROBLEM_SERVICE_URI:http://localhost:8202}
-    judge-worker-uri: ${JUDGE_WORKER_URI:http://localhost:8203}
+    # Plan T1.10: Agent tool execution goes to agent-executor, never to judge-worker or a sandbox.
+    agent-executor-uri: ${AGENT_EXECUTOR_ENDPOINT:http://localhost:8205}
+    agent-executor-token: ${AGENT_EXECUTOR_INTERNAL_TOKEN:}
+    agent-executor-max-memory-limit-kb: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:262144}
     problem-draft:
       max-repair-attempts: ${AI_PROBLEM_DRAFT_MAX_REPAIR_ATTEMPTS:5}
       max-agent-steps: ${AI_PROBLEM_DRAFT_MAX_AGENT_STEPS:20}

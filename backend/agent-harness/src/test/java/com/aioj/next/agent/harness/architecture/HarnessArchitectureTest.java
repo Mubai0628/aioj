@@ -41,6 +41,11 @@ class HarnessArchitectureTest {
     }
 
     @Test
+    void theHarnessRunsNoCodeInProcess() {
+        HarnessArchitectureRules.runsNoCodeInProcess(BASE).check(MAIN);
+    }
+
+    @Test
     void theSourcesUseNoDomainWords() {
         Path sources = Path.of("src/main/java");
         assertThat(Files.isDirectory(sources)).as("run from the module directory").isTrue();
@@ -60,6 +65,12 @@ class HarnessArchitectureTest {
                 .satisfies(error -> assertThat(error.getMessage()).doesNotContain("FixtureToolSide"));
         assertThatThrownBy(() -> HarnessArchitectureRules.layersPointOneWay(FIXTURE).check(fixture))
                 .hasMessageContaining("FixtureToolSide");
+        assertThatThrownBy(() -> HarnessArchitectureRules.runsNoCodeInProcess(FIXTURE).check(fixture))
+                .hasMessageContaining("FixtureCodeRunner.withBuilder")
+                .hasMessageContaining("FixtureCodeRunner.withRuntime")
+                .hasMessageContaining("FixtureCodeRunner.withScriptEngine")
+                .hasMessageContaining("FixtureCodeRunner.withDefineClass")
+                .hasMessageContaining("FixtureCodeRunner> is assignable to java.lang.ClassLoader");
         assertThat(HarnessArchitectureRules.DOMAIN_WORDS.matcher("a Contest rule").find()).isTrue();
         assertThat(HarnessArchitectureRules.DOMAIN_WORDS.matcher("contested resources").find()).isTrue();
         assertThat(HarnessArchitectureRules.DOMAIN_WORDS.matcher("a sandbox run").find()).isFalse();
