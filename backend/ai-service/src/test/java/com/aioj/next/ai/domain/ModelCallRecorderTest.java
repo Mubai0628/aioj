@@ -10,11 +10,17 @@ import com.aioj.next.ai.persistence.mapper.AiModelCallMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -26,7 +32,8 @@ import static org.mockito.Mockito.when;
 class ModelCallRecorderTest {
     private final AiModelCallMapper mapper = mock(AiModelCallMapper.class);
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    private final ModelCallRecorder recorder = new ModelCallRecorder(mapper, registry);
+    private final RecordingTransactionManager transactions = new RecordingTransactionManager();
+    private final ModelCallRecorder recorder = new ModelCallRecorder(mapper, registry, transactions);
 
     @Test
     void writesOneRowWithTheUsageAndCountsTheCall() {
@@ -77,6 +84,24 @@ class ModelCallRecorderTest {
                 null, null, Instant.now()))).doesNotThrowAnyException();
     }
 
+    /** A memory job calls the model inside its transaction; its rollback must not take the row with it. */
+    @Test
+    void theRowIsWrittenInItsOwnTransaction() {
+        List<Boolean> insideTransaction = new ArrayList<>();
+        when(mapper.insert(any(AiModelCallEntity.class))).thenAnswer(invocation -> {
+            insideTransaction.add(TransactionSynchronizationManager.isActualTransactionActive());
+            return 1;
+        });
+
+        recorder.onFinish(new ModelCallRecord(ModelOperation.COMPLETE, "MEMORY_EXTRACTION",
+                "completion.memory_extraction", ProviderId.DEEPSEEK, "deepseek-v4-flash",
+                new ModelUsage(1100, 700, 0, true), 4000, 1, null, null, 7L, Instant.now()));
+
+        assertThat(insideTransaction).containsExactly(true);
+        assertThat(transactions.propagations).containsExactly(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        assertThat(transactions.commits).isEqualTo(1);
+    }
+
     /** Text-level checks of the additive V70 script: one new table, no column that could hold content. */
     @Test
     void v70CreatesOnlyTheObservationTableAndStoresNoContent() throws IOException {
@@ -91,5 +116,30 @@ class ModelCallRecorderTest {
         assertThat(ddl).contains("create table ai_model_calls");
         assertThat(ddl).doesNotContain("drop ", "alter table", "delete from", "insert into", "update ");
         assertThat(ddl).doesNotContain("prompt_text", "content", "reasoning", "message", "code ", "text ");
+    }
+
+    /** Begins nothing real, but remembers how each transaction was asked for. */
+    private static final class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+        private final List<Integer> propagations = new ArrayList<>();
+        private int commits;
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, TransactionDefinition definition) {
+            propagations.add(definition.getPropagationBehavior());
+        }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+            commits++;
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+        }
     }
 }
