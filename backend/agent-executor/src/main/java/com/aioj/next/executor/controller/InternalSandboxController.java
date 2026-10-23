@@ -39,6 +39,8 @@ public class InternalSandboxController {
     private static final String COLLECT_MODE_OFFICIAL_PACKAGE = "OFFICIAL_PACKAGE";
     private static final long DEFAULT_MAX_OFFICIAL_CASE_BYTES = 8L * 1024L * 1024L;
     private static final long DEFAULT_MAX_OFFICIAL_PACKAGE_BYTES = 50L * 1024L * 1024L;
+    private static final long DEFAULT_RUN_MEMORY_LIMIT_KB = 262_144L;
+    private static final long DEFAULT_COMPILE_MEMORY_LIMIT_KB = 393_216L;
 
     private final SandboxExecutionClient sandboxExecutionClient;
     private final AgentExecutorProperties properties;
@@ -68,8 +70,7 @@ public class InternalSandboxController {
                 language,
                 request.sourceCode(),
                 SandboxExecutionClient.millisToNanos(compileTimeLimitMillis),
-                SandboxExecutionClient.kbToBytes(Math.min(memoryLimitKb(request.memoryLimitKb(), 262_144L) * 2,
-                        positive(properties.getMaxMemoryLimitKb(), 1_048_576)))
+                SandboxExecutionClient.kbToBytes(compileMemoryLimitKb())
         );
         return ApiResponse.ok(new CompileResponse(
                 outcome.failed() ? "COMPILE_ERROR" : "ACCEPTED",
@@ -143,12 +144,13 @@ public class InternalSandboxController {
                 enabledLanguage(request.standardSolutionLanguage()),
                 boundedText(request.standardSolutionCode(), properties.getMaxSourceBytes(), "standardSolutionCode"),
                 SandboxExecutionClient.millisToNanos(scriptTimeLimitMillis(request.timeLimitMillis(), 30_000L)),
-                SandboxExecutionClient.kbToBytes(memoryLimitKb(request.memoryLimitKb(), 524_288L)),
+                SandboxExecutionClient.kbToBytes(scriptMemoryLimitKb(request.memoryLimitKb())),
                 Math.min(SCRIPT_STDOUT_LIMIT_BYTES,
                         positive(properties.getStdoutMaxCollectLimitBytes(), 4 * 1024 * 1024)),
                 targetCaseCount,
                 SandboxExecutionClient.millisToNanos(runTimeLimitMillis(request.standardTimeLimitMillis(), 1000L)),
-                SandboxExecutionClient.kbToBytes(memoryLimitKb(request.standardMemoryLimitKb(), 262_144L)),
+                SandboxExecutionClient.kbToBytes(runMemoryLimitKb(request.standardMemoryLimitKb(),
+                        "standardMemoryLimitKb")),
                 Math.min(limitOrDefault(request.maxCaseBytes(), DEFAULT_MAX_OFFICIAL_CASE_BYTES),
                         positive(properties.getMaxDraftPackageEntryBytes(), DEFAULT_MAX_OFFICIAL_CASE_BYTES)),
                 Math.min(limitOrDefault(request.maxPackageBytes(), DEFAULT_MAX_OFFICIAL_PACKAGE_BYTES),
@@ -157,7 +159,7 @@ public class InternalSandboxController {
                 : sandboxExecutionClient.runPythonScript(
                 request.script(),
                 SandboxExecutionClient.millisToNanos(scriptTimeLimitMillis(request.timeLimitMillis(), 30_000L)),
-                SandboxExecutionClient.kbToBytes(memoryLimitKb(request.memoryLimitKb(), 524_288L)),
+                SandboxExecutionClient.kbToBytes(scriptMemoryLimitKb(request.memoryLimitKb())),
                 Math.min(SCRIPT_STDOUT_LIMIT_BYTES,
                         positive(properties.getStdoutMaxCollectLimitBytes(), 4 * 1024 * 1024)),
                 targetCaseCount,
@@ -225,7 +227,7 @@ public class InternalSandboxController {
                 request.compiledFileId(),
                 request.stdin(),
                 SandboxExecutionClient.millisToNanos(runTimeLimitMillis(request.timeLimitMillis(), 1000L)),
-                SandboxExecutionClient.kbToBytes(memoryLimitKb(request.memoryLimitKb(), 262_144L)),
+                SandboxExecutionClient.kbToBytes(runMemoryLimitKb(request.memoryLimitKb(), "memoryLimitKb")),
                 Math.min(limitOrDefault(request.stdoutLimitBytes(), 65_536L).intValue(),
                         positive(properties.getStdoutMaxCollectLimitBytes(), 4 * 1024 * 1024))
         );
@@ -266,8 +268,34 @@ public class InternalSandboxController {
         return Math.min(limitOrDefault(value, fallback), positive(properties.getMaxScriptTimeLimitMillis(), 180_000));
     }
 
-    private long memoryLimitKb(Integer value, long fallback) {
-        return Math.min(limitOrDefault(value, fallback), positive(properties.getMaxMemoryLimitKb(), 1_048_576));
+    /** A program's memory: 256 MiB unless the caller asks for less; asking for more than the cap is rejected. */
+    private long runMemoryLimitKb(Integer value, String field) {
+        long cap = positive(properties.getMaxMemoryLimitKb(), DEFAULT_RUN_MEMORY_LIMIT_KB);
+        return withinCap(value, Math.min(DEFAULT_RUN_MEMORY_LIMIT_KB, cap), cap, field);
+    }
+
+    /**
+     * Compilers need about the same memory whatever the program's limit (g++ with bits/stdc++.h peaked at
+     * 171-215 MiB in agent-sandbox, plan T1.10), so a compile always gets the compile cap.
+     */
+    private long compileMemoryLimitKb() {
+        return positive(properties.getMaxCompileMemoryLimitKb(), DEFAULT_COMPILE_MEMORY_LIMIT_KB);
+    }
+
+    /** A generator script compiles and runs the standard solution in its own run, so it shares the compile cap. */
+    private long scriptMemoryLimitKb(Integer value) {
+        long cap = compileMemoryLimitKb();
+        return withinCap(value, cap, cap, "memoryLimitKb");
+    }
+
+    private long withinCap(Integer value, long fallback, long cap, String field) {
+        if (value == null || value <= 0) {
+            return fallback;
+        }
+        if (value > cap) {
+            throw badRequest(field + " " + value + " KB is above this executor's limit of " + cap + " KB");
+        }
+        return value;
     }
 
     private String boundedText(String value, long maxBytes, String field) {

@@ -41,7 +41,8 @@ aioj:
     max-batch-input-bytes: ${AGENT_EXECUTOR_MAX_BATCH_INPUT_BYTES:33554432}
     max-run-time-limit-millis: ${AGENT_EXECUTOR_MAX_RUN_TIME_LIMIT_MILLIS:30000}
     max-script-time-limit-millis: ${AGENT_EXECUTOR_MAX_SCRIPT_TIME_LIMIT_MILLIS:180000}
-    max-memory-limit-kb: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:1048576}
+    max-memory-limit-kb: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:262144}
+    max-compile-memory-limit-kb: ${AGENT_EXECUTOR_MAX_COMPILE_MEMORY_LIMIT_KB:393216}
     max-process-limit: ${AGENT_EXECUTOR_MAX_PROCESS_LIMIT:80}
     max-draft-package-bytes: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_BYTES:52428800}
     max-draft-package-uncompressed-bytes: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_UNCOMPRESSED_BYTES:104857600}

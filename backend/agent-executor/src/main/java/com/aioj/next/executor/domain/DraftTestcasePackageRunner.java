@@ -87,7 +87,7 @@ public class DraftTestcasePackageRunner {
             ValidatedPackage testcasePackage = validateAndExtract(stored.path(), workDir.resolve("contents"), request);
 
             SandboxExecutionClient.CompileOutcome primaryCompile = compileIfRequired(
-                    request.language(), request.sourceCode(), request.timeLimitMillis(), request.memoryLimitKb());
+                    request.language(), request.sourceCode(), request.timeLimitMillis());
             if (primaryCompile.failed()) {
                 return failed(stored, testcasePackage.cases().size(), "COMPILE_ERROR",
                         "Standard solution compilation failed", Map.of("COMPILE_ERROR", testcasePackage.cases().size()),
@@ -99,8 +99,7 @@ public class DraftTestcasePackageRunner {
             boolean referenceRequested = StringUtils.hasText(request.referenceSourceCode());
             if (referenceRequested) {
                 SandboxExecutionClient.CompileOutcome referenceCompile = compileIfRequired(
-                        request.referenceLanguage(), request.referenceSourceCode(), request.timeLimitMillis(),
-                        request.memoryLimitKb());
+                        request.referenceLanguage(), request.referenceSourceCode(), request.timeLimitMillis());
                 if (referenceCompile.failed()) {
                     return failed(stored, testcasePackage.cases().size(), "REFERENCE_COMPILE_ERROR",
                             "Reference solution compilation failed",
@@ -366,14 +365,13 @@ public class DraftTestcasePackageRunner {
         }
     }
 
+    /** Compiling gets the compile cap whatever the program's own limit; see InternalSandboxController. */
     private SandboxExecutionClient.CompileOutcome compileIfRequired(String language, String sourceCode,
-                                                                     Integer timeLimitMillis,
-                                                                     Integer memoryLimitKb) {
+                                                                     Integer timeLimitMillis) {
         return sandboxExecutionClient.compileSource(language, sourceCode,
                 SandboxExecutionClient.millisToNanos(Math.min(safeMultiply(timeLimit(timeLimitMillis), 10L),
                         positive(properties.getMaxScriptTimeLimitMillis(), 180_000))),
-                SandboxExecutionClient.kbToBytes(Math.min(safeMultiply(memoryLimit(memoryLimitKb), 2L),
-                        positive(properties.getMaxMemoryLimitKb(), 1_048_576))));
+                SandboxExecutionClient.kbToBytes(positive(properties.getMaxCompileMemoryLimitKb(), 393_216)));
     }
 
     private DraftTestcasePackageRunResponse failed(StoredPackage stored, int caseCount, String errorCode,
@@ -465,6 +463,11 @@ public class DraftTestcasePackageRunner {
             throw badRequest("Unsupported draft solution language");
         }
         requireSource(request.sourceCode(), "sourceCode");
+        int memoryCap = positive(properties.getMaxMemoryLimitKb(), 262_144);
+        if (request.memoryLimitKb() != null && request.memoryLimitKb() > memoryCap) {
+            throw badRequest("memoryLimitKb " + request.memoryLimitKb() + " KB is above this executor's limit of "
+                    + memoryCap + " KB");
+        }
         boolean hasReferenceSource = StringUtils.hasText(request.referenceSourceCode());
         boolean hasReferenceLanguage = StringUtils.hasText(request.referenceLanguage());
         if (hasReferenceSource != hasReferenceLanguage) {
@@ -502,8 +505,8 @@ public class DraftTestcasePackageRunner {
     }
 
     private long memoryLimit(Integer value) {
-        long requested = value == null || value <= 0 ? 262_144L : value.longValue();
-        return Math.min(requested, positive(properties.getMaxMemoryLimitKb(), 1_048_576));
+        long cap = positive(properties.getMaxMemoryLimitKb(), 262_144);
+        return value == null || value <= 0 ? Math.min(262_144L, cap) : value.longValue();
     }
 
     private void cleanupSandboxFile(String fileId) {

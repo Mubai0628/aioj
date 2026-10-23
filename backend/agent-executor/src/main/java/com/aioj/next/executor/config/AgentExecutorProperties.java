@@ -32,7 +32,10 @@ public class AgentExecutorProperties {
     private long maxBatchInputBytes = 32L * 1024L * 1024L;
     private int maxRunTimeLimitMillis = 30_000;
     private int maxScriptTimeLimitMillis = 180_000;
-    private int maxMemoryLimitKb = 1_048_576;
+    /** Memory one program run may ask for; a request above it is rejected. */
+    private int maxMemoryLimitKb = 262_144;
+    /** Memory for compiling and for generator scripts, which compile the standard solution in the same run. */
+    private int maxCompileMemoryLimitKb = 393_216;
     private int maxProcessLimit = 80;
     private long maxDraftPackageBytes = 50L * 1024L * 1024L;
     private long maxDraftPackageUncompressedBytes = 100L * 1024L * 1024L;
@@ -191,6 +194,14 @@ public class AgentExecutorProperties {
 
     public void setMaxMemoryLimitKb(int maxMemoryLimitKb) {
         this.maxMemoryLimitKb = maxMemoryLimitKb;
+    }
+
+    public int getMaxCompileMemoryLimitKb() {
+        return maxCompileMemoryLimitKb;
+    }
+
+    public void setMaxCompileMemoryLimitKb(int maxCompileMemoryLimitKb) {
+        this.maxCompileMemoryLimitKb = maxCompileMemoryLimitKb;
     }
 
     public int getMaxProcessLimit() {

@@ -30,6 +30,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class DraftTestcasePackageRunnerTest {
@@ -133,6 +134,24 @@ class DraftTestcasePackageRunnerTest {
         assertThatThrownBy(() -> runner(sandbox).run(file(zip), badSha))
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("SHA-256");
+    }
+
+    @Test
+    void rejectsAMemoryLimitAboveTheRunCapBeforeStoringThePackage() throws Exception {
+        SandboxExecutionClient sandbox = mock(SandboxExecutionClient.class);
+        byte[] zip = packageZip(Map.of(
+                "manifest.json", manifest("tests/001.in", "tests/001.out"),
+                "tests/001.in", "1\n",
+                "tests/001.out", "2\n"
+        ));
+        DraftTestcasePackageRunRequest tooMuch = new DraftTestcasePackageRunRequest(
+                sha256(zip), (long) zip.length, "python", "print(2)", null, null,
+                1000, 524_288, 10);
+
+        assertThatThrownBy(() -> runner(sandbox).run(file(zip), tooMuch))
+                .isInstanceOf(DomainException.class)
+                .hasMessage("memoryLimitKb 524288 KB is above this executor's limit of 262144 KB");
+        verifyNoInteractions(sandbox);
     }
 
     @Test

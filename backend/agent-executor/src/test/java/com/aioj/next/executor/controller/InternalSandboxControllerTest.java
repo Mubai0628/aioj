@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class InternalSandboxControllerTest {
@@ -80,7 +81,46 @@ class InternalSandboxControllerTest {
     }
 
     @Test
-    void runOneClampsTimeMemoryAndStdoutBudgets() {
+    void compilingAlwaysGetsTheCompileCapWhateverTheProgramsLimit() {
+        SandboxExecutionClient client = mock(SandboxExecutionClient.class);
+        when(client.compileSource(eq("cpp"), eq("int main(){}"), anyLong(), anyLong()))
+                .thenReturn(new SandboxExecutionClient.CompileOutcome(false, "compiled", "Accepted", 1L, 1L, "", 0, 1L));
+        InternalSandboxController controller = controller(client);
+
+        controller.compile(TOKEN, new InternalSandboxController.CompileRequest("cpp", "int main(){}", 1000, 65_536));
+
+        ArgumentCaptor<Long> memory = ArgumentCaptor.forClass(Long.class);
+        verify(client).compileSource(eq("cpp"), eq("int main(){}"), anyLong(), memory.capture());
+        assertThat(memory.getValue()).isEqualTo(SandboxExecutionClient.kbToBytes(393_216));
+    }
+
+    @Test
+    void aMemoryLimitAboveItsCapIsRejectedBeforeAnythingRuns() {
+        SandboxExecutionClient client = mock(SandboxExecutionClient.class);
+        InternalSandboxController controller = controller(client);
+
+        assertThatThrownBy(() -> controller.runOne(TOKEN, new InternalSandboxController.RunRequest(
+                "python", "print(1)", null, "", 1000, 262_145, 65_536)))
+                .isInstanceOfSatisfying(DomainException.class, ex -> {
+                    assertThat(ex.errorCode()).isEqualTo(ErrorCode.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo(
+                            "memoryLimitKb 262145 KB is above this executor's limit of 262144 KB");
+                });
+        assertThatThrownBy(() -> controller.runBatch(TOKEN, new InternalSandboxController.RunBatchRequest(
+                "python", "print(1)", null, List.of("1\n"), 1000, 1_048_576, 65_536)))
+                .hasMessageContaining("above this executor's limit");
+        assertThatThrownBy(() -> controller.runPythonScript(TOKEN, new InternalSandboxController.PythonScriptRequest(
+                "script", 30_000, 393_217, 3)))
+                .hasMessage("memoryLimitKb 393217 KB is above this executor's limit of 393216 KB");
+        assertThatThrownBy(() -> controller.runPythonScript(TOKEN, new InternalSandboxController.PythonScriptRequest(
+                "script", 30_000, null, 3, "OFFICIAL_PACKAGE", "cpp", "int main(){}", 1000, 524_288,
+                null, null)))
+                .hasMessage("standardMemoryLimitKb 524288 KB is above this executor's limit of 262144 KB");
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void runOneClampsTimeAndStdoutBudgetsAndDefaultsMemory() {
         SandboxExecutionClient client = mock(SandboxExecutionClient.class);
         when(client.runSource(eq("python"), eq("print(1)"), eq(null), eq(""), anyLong(), anyLong(), anyInt()))
                 .thenReturn(new SandboxExecutionClient.RunOutcome(
@@ -90,7 +130,7 @@ class InternalSandboxControllerTest {
 
         InternalSandboxController.RunResponse response = controller.runOne(TOKEN,
                 new InternalSandboxController.RunRequest("python", "print(1)", null, "",
-                        Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE)).data();
+                        Integer.MAX_VALUE, null, Integer.MAX_VALUE)).data();
 
         ArgumentCaptor<Long> cpu = ArgumentCaptor.forClass(Long.class);
         ArgumentCaptor<Long> memory = ArgumentCaptor.forClass(Long.class);
@@ -98,7 +138,7 @@ class InternalSandboxControllerTest {
         verify(client).runSource(eq("python"), eq("print(1)"), eq(null), eq(""), cpu.capture(), memory.capture(),
                 stdout.capture());
         assertThat(cpu.getValue()).isEqualTo(SandboxExecutionClient.millisToNanos(30_000));
-        assertThat(memory.getValue()).isEqualTo(SandboxExecutionClient.kbToBytes(1_048_576));
+        assertThat(memory.getValue()).isEqualTo(SandboxExecutionClient.kbToBytes(262_144));
         assertThat(stdout.getValue()).isEqualTo(4 * 1024 * 1024);
         assertThat(response.status()).isEqualTo("ACCEPTED");
         assertThat(response.procPeak()).isEqualTo(1);
@@ -164,7 +204,7 @@ class InternalSandboxControllerTest {
 
         controller.runPythonScript(
                 TOKEN,
-                new InternalSandboxController.PythonScriptRequest("script", 30_000, 524_288, 3,
+                new InternalSandboxController.PythonScriptRequest("script", 30_000, 300_000, 3,
                         "OFFICIAL_INPUTS")
         );
 
@@ -173,7 +213,7 @@ class InternalSandboxControllerTest {
         verify(client).runPythonScript(eq("script"), cpuLimitCaptor.capture(), memoryLimitCaptor.capture(), anyInt(),
                 eq(3), eq("OFFICIAL_INPUTS"));
         assertThat(cpuLimitCaptor.getValue()).isEqualTo(SandboxExecutionClient.millisToNanos(30_000L));
-        assertThat(memoryLimitCaptor.getValue()).isEqualTo(SandboxExecutionClient.kbToBytes(524_288L));
+        assertThat(memoryLimitCaptor.getValue()).isEqualTo(SandboxExecutionClient.kbToBytes(300_000L));
     }
 
     @Test
@@ -194,7 +234,7 @@ class InternalSandboxControllerTest {
         InternalSandboxController.PythonScriptResponse response = controller.runPythonScript(
                 TOKEN,
                 new InternalSandboxController.PythonScriptRequest(
-                        "script", 30_000, 524_288, 3, "OFFICIAL_PACKAGE",
+                        "script", 30_000, 393_216, 3, "OFFICIAL_PACKAGE",
                         "cpp", "int main(){}", 1000, 262_144,
                         8L * 1024L * 1024L, 50L * 1024L * 1024L
                 )
