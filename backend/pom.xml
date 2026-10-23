@@ -37,7 +37,6 @@
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <jjwt.version>0.12.6</jjwt.version>
         <archunit.version>1.5.1</archunit.version>
-        <spring-ai.version>2.0.2</spring-ai.version>
         <!-- Override of a Boot 4.1.2-managed version with known vulnerabilities (OSV, 2026-10-23).
              Remove it once the Boot version in use manages a fixed release. Boot 4.2 renames the
              property to rabbitmq-client.version, so this override stops applying there. -->
@@ -91,32 +90,6 @@
                 <groupId>com.tngtech.archunit</groupId>
                 <artifactId>archunit</artifactId>
                 <version>${archunit.version}</version>
-            </dependency>
-            <!-- Spring AI gate trial only (plan T1.2a, §3.2.2); never on a runtime classpath
-                 unless T1.2b adopts it for a Provider. spring-ai-model declares an older
-                 swagger-annotations-jakarta than springdoc needs; without the exclusion Maven's
-                 nearest-wins rule would downgrade the runtime copy even from test scope. -->
-            <dependency>
-                <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-deepseek</artifactId>
-                <version>${spring-ai.version}</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>io.swagger.core.v3</groupId>
-                        <artifactId>swagger-annotations-jakarta</artifactId>
-                    </exclusion>
-                </exclusions>
-            </dependency>
-            <dependency>
-                <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-openai</artifactId>
-                <version>${spring-ai.version}</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>io.swagger.core.v3</groupId>
-                        <artifactId>swagger-annotations-jakarta</artifactId>
-                    </exclusion>
-                </exclusions>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -63,11 +63,13 @@ class AiServiceArchitectureTest {
     /**
      * Plan §3.2.1 rule 1: Provider HTTP calls happen only in the model call package.
      * A Provider call needs its API key, so key reads mark where calls can happen:
-     * today the three legacy clients, the agent adapters, the config resolver and
-     * the admin connectivity test. After T1.3 only the model package and the
-     * ModelConfigSource implementation remain.
+     * the model package's client and its ModelConfigSource implementation (T1.2b),
+     * and until T1.3 the three legacy clients, the agent adapters, the config
+     * resolver and the admin connectivity test.
      */
     private static final Set<String> PROVIDER_API_KEY_READERS = Set.of(
+            "com.aioj.next.ai.model.DefaultModelClient",
+            "com.aioj.next.ai.domain.AiModelConfigEndpointSource",
             "com.aioj.next.ai.agent.model.AbstractOpenAiToolCallAdapter",
             "com.aioj.next.ai.domain.AiModelCatalogClient",
             "com.aioj.next.ai.domain.AiModelCompletionClient",
