@@ -35,7 +35,7 @@ class AiMemoryServiceTest {
     @Mock
     private AiUserMemoryMapper memoryMapper;
     @Mock
-    private AiProvider aiProvider;
+    private PromptChatService aiProvider;
     @Mock
     private AiRetrievalService retrievalService;
     @Mock

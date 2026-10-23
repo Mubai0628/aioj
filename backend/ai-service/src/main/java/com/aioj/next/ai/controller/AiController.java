@@ -7,7 +7,6 @@ import com.aioj.next.ai.domain.AiChatContext;
 import com.aioj.next.ai.domain.AiConversationService;
 import com.aioj.next.ai.domain.AiMemoryService;
 import com.aioj.next.ai.domain.AiLearningProfileService;
-import com.aioj.next.ai.domain.AiProvider;
 import com.aioj.next.ai.domain.AiQuotaService;
 import com.aioj.next.ai.domain.AccountImportParseService;
 import com.aioj.next.ai.domain.ProblemDraftGenerationJobService;
@@ -103,7 +102,6 @@ public class AiController {
     private static final Logger log = LoggerFactory.getLogger(AiController.class);
     private static final long DRAFT_STREAM_HEARTBEAT_INTERVAL_MILLIS = 1_000L;
 
-    private final AiProvider aiProvider;
     private final AgentChatFacade agentChatFacade;
     private final AiQuotaService aiQuotaService;
     private final AccountImportParseService accountImportParseService;
@@ -124,7 +122,6 @@ public class AiController {
     private com.aioj.next.ai.agent.runtime.PseudoStreamReplayer pseudoStreamReplayer;
 
     AiController(
-            AiProvider aiProvider,
             AgentChatFacade agentChatFacade,
             AiQuotaService aiQuotaService,
             AccountImportParseService accountImportParseService,
@@ -139,7 +136,7 @@ public class AiController {
             AiAssistantResponseNormalizer responseNormalizer,
             ObjectMapper objectMapper
     ) {
-        this(aiProvider, agentChatFacade, aiQuotaService, accountImportParseService, aiConversationService,
+        this(agentChatFacade, aiQuotaService, accountImportParseService, aiConversationService,
                 contextDebugService, aiMemoryService, aiLearningProfileService, aiMemoryCandidateService,
                 aiMemoryDebugService, aiMemoryReviewService, problemDraftStore, responseNormalizer, objectMapper,
                 Runnable::run);
@@ -147,7 +144,6 @@ public class AiController {
 
     @Autowired
     public AiController(
-            AiProvider aiProvider,
             AgentChatFacade agentChatFacade,
             AiQuotaService aiQuotaService,
             AccountImportParseService accountImportParseService,
@@ -163,7 +159,6 @@ public class AiController {
             ObjectMapper objectMapper,
             @Qualifier("aiProblemDraftExecutor") Executor problemDraftExecutor
     ) {
-        this.aiProvider = aiProvider;
         this.agentChatFacade = agentChatFacade;
         this.aiQuotaService = aiQuotaService;
         this.accountImportParseService = accountImportParseService;

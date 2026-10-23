@@ -11,7 +11,7 @@ import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.agent.tool.ToolStatus;
-import com.aioj.next.ai.domain.OpenAiCompatibleProvider;
+import com.aioj.next.ai.domain.TextEmbeddings;
 import com.aioj.next.ai.persistence.entity.AiRetrievalChunkEntity;
 import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiRetrievalChunkMapper;
@@ -61,15 +61,15 @@ public class ContextSearchDigestsTool implements AgentTool {
 
     private final AiTurnDigestMapper digestMapper;
     private final AiRetrievalChunkMapper chunkMapper;
-    private final OpenAiCompatibleProvider provider;
+    private final TextEmbeddings embeddings;
     private final ObjectMapper objectMapper;
     private final ToolDescriptor descriptor;
 
     public ContextSearchDigestsTool(AiTurnDigestMapper digestMapper, AiRetrievalChunkMapper chunkMapper,
-                                    OpenAiCompatibleProvider provider, ObjectMapper objectMapper) {
+                                    TextEmbeddings embeddings, ObjectMapper objectMapper) {
         this.digestMapper = digestMapper;
         this.chunkMapper = chunkMapper;
-        this.provider = provider;
+        this.embeddings = embeddings;
         this.objectMapper = objectMapper;
         this.descriptor = new ToolDescriptor(
                 "context.search_digests",
@@ -137,7 +137,7 @@ public class ContextSearchDigestsTool implements AgentTool {
         }
         Map<Long, Double> semanticScores = Map.of();
         if (semanticRequested) {
-            Optional<List<Double>> queryVector = provider.embed(query);
+            Optional<List<Double>> queryVector = embeddings.embed(query);
             if (queryVector.isPresent()) {
                 semanticScores = loadSemanticScores(context.userId(), candidates, queryVector.get());
                 if (semanticScores.isEmpty()) {

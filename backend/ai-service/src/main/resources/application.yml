@@ -84,9 +84,11 @@ aioj:
         - 数据结构
     daily-limit: ${AI_DAILY_LIMIT:50}
     monthly-limit: ${AI_MONTHLY_LIMIT:1000}
-    http:
-      connect-timeout-ms: ${AI_HTTP_CONNECT_TIMEOUT_MS:10000}
-      read-timeout-ms: ${AI_HTTP_READ_TIMEOUT_MS:300000}
+    model-client:
+      # Every Provider call goes through the model call package (plan T1.3); these keep
+      # the two timeouts the deploy files already set. One attempt may take total-timeout.
+      connect-timeout: ${AI_HTTP_CONNECT_TIMEOUT_MS:10000}ms
+      total-timeout: ${AI_HTTP_READ_TIMEOUT_MS:300000}ms
     capacity:
       chat-core-pool-size: ${AI_CHAT_CORE_POOL_SIZE:4}
       chat-max-pool-size: ${AI_CHAT_MAX_POOL_SIZE:8}

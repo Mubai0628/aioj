@@ -5,7 +5,7 @@ import com.aioj.next.ai.agent.context.ContextManifestService;
 import com.aioj.next.ai.domain.AiModelConfigService;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
-import com.aioj.next.ai.domain.OpenAiCompatibleProvider;
+import com.aioj.next.ai.domain.TextEmbeddings;
 import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
 import com.aioj.next.ai.persistence.entity.AiRetrievalChunkEntity;
 import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
@@ -42,20 +42,20 @@ public class TurnDigestEmbedHandler implements AgentAsyncJobHandler {
 
     private final AiTurnDigestMapper digestMapper;
     private final AiRetrievalChunkMapper chunkMapper;
-    private final OpenAiCompatibleProvider provider;
+    private final TextEmbeddings embeddings;
     private final AiModelConfigService configService;
     private final ObjectMapper objectMapper;
 
     public TurnDigestEmbedHandler(
             AiTurnDigestMapper digestMapper,
             AiRetrievalChunkMapper chunkMapper,
-            OpenAiCompatibleProvider provider,
+            TextEmbeddings embeddings,
             AiModelConfigService configService,
             ObjectMapper objectMapper
     ) {
         this.digestMapper = digestMapper;
         this.chunkMapper = chunkMapper;
-        this.provider = provider;
+        this.embeddings = embeddings;
         this.configService = configService;
         this.objectMapper = objectMapper;
     }
@@ -100,7 +100,7 @@ public class TurnDigestEmbedHandler implements AgentAsyncJobHandler {
             return; // identical text already embedded: idempotent no-op
         }
 
-        Optional<List<Double>> embedding = provider.embed(embedText);
+        Optional<List<Double>> embedding = embeddings.embed(embedText);
         if (embedding.isEmpty()) {
             // Transient provider failure: throw so the async-job worker retries with backoff.
             throw new IllegalStateException("embedding provider returned no vector for digest " + digestId);

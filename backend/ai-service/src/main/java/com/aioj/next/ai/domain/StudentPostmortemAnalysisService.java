@@ -22,14 +22,14 @@ public class StudentPostmortemAnalysisService {
     /** A problem solved in the end is weaker evidence of a weakness than one left unsolved. */
     private static final double SOLVED_REVIEW_CONFIDENCE = 0.62;
 
-    private final AiProvider aiProvider;
+    private final PromptChatService promptChat;
     private final AiQuotaService aiQuotaService;
     private final AiCapacityService aiCapacityService;
     private final ObjectMapper objectMapper;
 
-    public StudentPostmortemAnalysisService(AiProvider aiProvider, AiQuotaService aiQuotaService,
+    public StudentPostmortemAnalysisService(PromptChatService promptChat, AiQuotaService aiQuotaService,
                                             AiCapacityService aiCapacityService, ObjectMapper objectMapper) {
-        this.aiProvider = aiProvider;
+        this.promptChat = promptChat;
         this.aiQuotaService = aiQuotaService;
         this.aiCapacityService = aiCapacityService;
         this.objectMapper = objectMapper;
@@ -42,7 +42,7 @@ public class StudentPostmortemAnalysisService {
         try {
             AiCompletion completion = aiCapacityService.call(
                     AiCapacityService.AiWorkload.BATCH_REPORT,
-                    () -> aiProvider.chat(new AiChatRequest(
+                    () -> promptChat.chat(new AiChatRequest(
                             null,
                             null,
                             buildUserPrompt(request),
@@ -60,9 +60,9 @@ public class StudentPostmortemAnalysisService {
                     completion.provider(), completion.model(), completion.promptTokens(), completion.completionTokens(),
                     true, null);
         } catch (RuntimeException ex) {
-            aiQuotaService.record(actorUserId, aiProvider.providerName(), aiProvider.model(), 0, 0, false);
-            return new StudentPostmortemAnalysisResponse(null, candidates, practice, aiProvider.providerName(),
-                    aiProvider.model(), 0, 0, false, summarize(ex.getMessage(), 300));
+            aiQuotaService.record(actorUserId, promptChat.providerName(), promptChat.model(), 0, 0, false);
+            return new StudentPostmortemAnalysisResponse(null, candidates, practice, promptChat.providerName(),
+                    promptChat.model(), 0, 0, false, summarize(ex.getMessage(), 300));
         }
     }
 

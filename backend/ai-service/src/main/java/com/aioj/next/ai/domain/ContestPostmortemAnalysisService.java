@@ -11,13 +11,13 @@ public class ContestPostmortemAnalysisService {
     private static final int MAX_STATISTICS_CHARS = 18000;
     private static final int MAX_SUMMARY_CHARS = 6000;
 
-    private final AiProvider aiProvider;
+    private final PromptChatService promptChat;
     private final AiQuotaService aiQuotaService;
     private final AiCapacityService aiCapacityService;
 
-    public ContestPostmortemAnalysisService(AiProvider aiProvider, AiQuotaService aiQuotaService,
+    public ContestPostmortemAnalysisService(PromptChatService promptChat, AiQuotaService aiQuotaService,
                                             AiCapacityService aiCapacityService) {
-        this.aiProvider = aiProvider;
+        this.promptChat = promptChat;
         this.aiQuotaService = aiQuotaService;
         this.aiCapacityService = aiCapacityService;
     }
@@ -27,7 +27,7 @@ public class ContestPostmortemAnalysisService {
         try {
             AiCompletion completion = aiCapacityService.call(
                     AiCapacityService.AiWorkload.BATCH_REPORT,
-                    () -> aiProvider.chat(new AiChatRequest(
+                    () -> promptChat.chat(new AiChatRequest(
                             null,
                             null,
                             buildUserPrompt(request),
@@ -44,8 +44,8 @@ public class ContestPostmortemAnalysisService {
             return new ContestPostmortemAnalysisResponse(completion.content(), completion.provider(), completion.model(),
                     completion.promptTokens(), completion.completionTokens(), true, null);
         } catch (RuntimeException ex) {
-            aiQuotaService.record(actorUserId, aiProvider.providerName(), aiProvider.model(), 0, 0, false);
-            return new ContestPostmortemAnalysisResponse(null, aiProvider.providerName(), aiProvider.model(),
+            aiQuotaService.record(actorUserId, promptChat.providerName(), promptChat.model(), 0, 0, false);
+            return new ContestPostmortemAnalysisResponse(null, promptChat.providerName(), promptChat.model(),
                     0, 0, false, summarize(ex.getMessage(), 300));
         }
     }

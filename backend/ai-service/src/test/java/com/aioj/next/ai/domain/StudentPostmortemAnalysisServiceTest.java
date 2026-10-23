@@ -21,7 +21,7 @@ class StudentPostmortemAnalysisServiceTest {
 
     @Test
     void successfulAnalysisKeepsDeterministicCandidatesAndRecordsUsage() {
-        AiProvider provider = mock(AiProvider.class);
+        PromptChatService provider = mock(PromptChatService.class);
         AiQuotaService quotaService = mock(AiQuotaService.class);
         when(provider.chat(any(AiChatRequest.class), any(AiChatContext.class), eq(AiModelScope.REPORT_ANALYSIS)))
                 .thenReturn(new AiCompletion("## 个人成绩概览\n本场需要继续复盘二分。", "mock", "mock-model", 80, 32));
@@ -44,7 +44,7 @@ class StudentPostmortemAnalysisServiceTest {
 
     @Test
     void providerFailureStillReturnsCandidatesAndPracticeSuggestions() {
-        AiProvider provider = mock(AiProvider.class);
+        PromptChatService provider = mock(PromptChatService.class);
         AiQuotaService quotaService = mock(AiQuotaService.class);
         when(provider.providerName()).thenReturn("mock");
         when(provider.model()).thenReturn("mock-model");
@@ -65,7 +65,7 @@ class StudentPostmortemAnalysisServiceTest {
 
     @Test
     void acmAnalysisIncludesRepresentativeCodeAndAvoidsScoreInstructions() {
-        AiProvider provider = mock(AiProvider.class);
+        PromptChatService provider = mock(PromptChatService.class);
         AiQuotaService quotaService = mock(AiQuotaService.class);
         when(provider.chat(any(AiChatRequest.class), any(AiChatContext.class), eq(AiModelScope.REPORT_ANALYSIS)))
                 .thenReturn(new AiCompletion("## 个人成绩概览\n已通过 A 题。", "mock", "mock-model", 60, 20));
@@ -140,7 +140,7 @@ class StudentPostmortemAnalysisServiceTest {
     }
 
     private StudentPostmortemAnalysisResponse analyzeStatistics(String mode, String statisticsJson) {
-        AiProvider provider = mock(AiProvider.class);
+        PromptChatService provider = mock(PromptChatService.class);
         when(provider.chat(any(AiChatRequest.class), any(AiChatContext.class), eq(AiModelScope.REPORT_ANALYSIS)))
                 .thenReturn(new AiCompletion("ok", "mock", "mock-model", 1, 1));
         StudentPostmortemAnalysisService service = new StudentPostmortemAnalysisService(provider, mock(AiQuotaService.class),

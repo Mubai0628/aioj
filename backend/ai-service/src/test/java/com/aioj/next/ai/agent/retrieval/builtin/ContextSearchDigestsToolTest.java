@@ -24,8 +24,8 @@ class ContextSearchDigestsToolTest {
     private final AiTurnDigestMapper digestMapper = mock(AiTurnDigestMapper.class);
     private final com.aioj.next.ai.persistence.mapper.AiRetrievalChunkMapper chunkMapper =
             mock(com.aioj.next.ai.persistence.mapper.AiRetrievalChunkMapper.class);
-    private final com.aioj.next.ai.domain.OpenAiCompatibleProvider provider =
-            mock(com.aioj.next.ai.domain.OpenAiCompatibleProvider.class);
+    private final com.aioj.next.ai.domain.TextEmbeddings provider =
+            mock(com.aioj.next.ai.domain.TextEmbeddings.class);
     private final ContextSearchDigestsTool tool = new ContextSearchDigestsTool(
             digestMapper, chunkMapper, provider, new ObjectMapper());
 

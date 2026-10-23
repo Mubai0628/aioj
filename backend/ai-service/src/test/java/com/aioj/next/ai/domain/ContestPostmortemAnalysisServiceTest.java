@@ -14,7 +14,7 @@ import static org.mockito.Mockito.when;
 class ContestPostmortemAnalysisServiceTest {
     @Test
     void successfulAnalysisRecordsUsageAndReturnsMarkdown() {
-        AiProvider provider = mock(AiProvider.class);
+        PromptChatService provider = mock(PromptChatService.class);
         AiQuotaService quotaService = mock(AiQuotaService.class);
         when(provider.chat(any(AiChatRequest.class), any(AiChatContext.class), eq(AiModelScope.REPORT_ANALYSIS)))
                 .thenReturn(new AiCompletion("## 赛况总览\n整体完成度较高。", "mock", "mock-model", 42, 16));
@@ -30,7 +30,7 @@ class ContestPostmortemAnalysisServiceTest {
 
     @Test
     void providerFailureKeepsStructuredFailedResponse() {
-        AiProvider provider = mock(AiProvider.class);
+        PromptChatService provider = mock(PromptChatService.class);
         AiQuotaService quotaService = mock(AiQuotaService.class);
         when(provider.providerName()).thenReturn("mock");
         when(provider.model()).thenReturn("mock-model");

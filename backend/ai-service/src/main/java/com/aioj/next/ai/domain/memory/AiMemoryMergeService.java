@@ -2,12 +2,12 @@ package com.aioj.next.ai.domain.memory;
 
 import com.aioj.next.ai.domain.AiCapacityService;
 import com.aioj.next.ai.domain.AiMemoryService;
-import com.aioj.next.ai.domain.AiModelCompletionClient;
 import com.aioj.next.ai.domain.AiModelConfigResolver;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.domain.AiQuotaService;
 import com.aioj.next.ai.domain.AiRetrievalService;
+import com.aioj.next.ai.domain.ModelCompletions;
 import com.aioj.next.ai.persistence.entity.AiMemoryCandidateEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryClaimEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryEvidenceEntity;
@@ -78,7 +78,7 @@ public class AiMemoryMergeService {
     private final AiMemoryEventPayloadSanitizer sanitizer;
     private final ObjectMapper objectMapper;
     private final AiModelConfigResolver configResolver;
-    private final AiModelCompletionClient completionClient;
+    private final ModelCompletions completionClient;
     private final AiQuotaService quotaService;
     private final AiCapacityService capacityService;
 
@@ -93,7 +93,7 @@ public class AiMemoryMergeService {
             AiMemoryEventPayloadSanitizer sanitizer,
             ObjectMapper objectMapper,
             AiModelConfigResolver configResolver,
-            AiModelCompletionClient completionClient,
+            ModelCompletions completionClient,
             AiQuotaService quotaService,
             AiCapacityService capacityService
     ) {
@@ -357,7 +357,7 @@ public class AiMemoryMergeService {
         AiModelEffectiveConfig config = configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION);
         return capacityService.call(AiCapacityService.AiWorkload.INTENT_MEMORY, () -> {
             quotaService.assertMonthlyAvailable(userId);
-            AiModelCompletionClient.CompletionResult result = completionClient.complete(
+            ModelCompletions.Result result = completionClient.complete(
                     config,
                     List.of(
                             message("system", """

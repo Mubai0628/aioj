@@ -41,20 +41,20 @@ public class AiRetrievalService {
     private static final int MAX_METADATA_STRING_LENGTH = 300;
 
     private final AiRetrievalChunkMapper chunkMapper;
-    private final AiProvider aiProvider;
+    private final TextEmbeddings embeddings;
     private final AiCapacityService aiCapacityService;
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
 
     public AiRetrievalService(
             AiRetrievalChunkMapper chunkMapper,
-            AiProvider aiProvider,
+            TextEmbeddings embeddings,
             AiCapacityService aiCapacityService,
             AiProperties properties,
             ObjectMapper objectMapper
     ) {
         this.chunkMapper = chunkMapper;
-        this.aiProvider = aiProvider;
+        this.embeddings = embeddings;
         this.aiCapacityService = aiCapacityService;
         this.properties = properties;
         this.objectMapper = objectMapper;
@@ -292,7 +292,7 @@ public class AiRetrievalService {
         try {
             return aiCapacityService.call(
                     AiCapacityService.AiWorkload.INTENT_MEMORY,
-                    () -> aiProvider.embed(input)
+                    () -> embeddings.embed(input)
             );
         } catch (DomainException ex) {
             if (ex.errorCode() == ErrorCode.TOO_MANY_REQUESTS) {

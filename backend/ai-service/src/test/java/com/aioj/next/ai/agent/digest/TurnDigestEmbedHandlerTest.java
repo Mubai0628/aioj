@@ -3,7 +3,7 @@ package com.aioj.next.ai.agent.digest;
 import com.aioj.next.ai.domain.AiModelConfigService;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
-import com.aioj.next.ai.domain.OpenAiCompatibleProvider;
+import com.aioj.next.ai.domain.TextEmbeddings;
 import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
 import com.aioj.next.ai.persistence.entity.AiRetrievalChunkEntity;
 import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
@@ -31,7 +31,7 @@ class TurnDigestEmbedHandlerTest {
 
     private final AiTurnDigestMapper digestMapper = mock(AiTurnDigestMapper.class);
     private final AiRetrievalChunkMapper chunkMapper = mock(AiRetrievalChunkMapper.class);
-    private final OpenAiCompatibleProvider provider = mock(OpenAiCompatibleProvider.class);
+    private final TextEmbeddings provider = mock(TextEmbeddings.class);
     private final AiModelConfigService configService = mock(AiModelConfigService.class);
     private final TurnDigestEmbedHandler handler = new TurnDigestEmbedHandler(
             digestMapper, chunkMapper, provider, configService, new ObjectMapper());

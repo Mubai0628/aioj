@@ -1,11 +1,11 @@
 package com.aioj.next.ai.architecture;
 
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -19,11 +19,10 @@ import static org.assertj.core.api.Assertions.fail;
  * <p>The model call package {@value #MODEL_PACKAGE} arrived in T1.2b; the fixture
  * test proves its rules catch violations.
  *
- * <p>Today's code is frozen in explicit allowlists. A class that is not listed
- * fails the build, and so does a listed class that no longer needs the entry:
- * the lists only shrink while T1.1–T1.3 move callers onto ModelClient. Never
- * add an entry to make a build pass; route the new code through the model
- * package instead.
+ * <p>T1.3 moved every caller onto ModelClient and deleted the legacy paths; the
+ * key-reader allowlist is exact. A class that is not listed fails the build, and
+ * so does a listed class that no longer needs the entry. Never add an entry to
+ * make a build pass; route the new code through the model package instead.
  */
 class AiServiceArchitectureTest {
     static final String MODEL_PACKAGE = "com.aioj.next.ai.model";
@@ -32,43 +31,30 @@ class AiServiceArchitectureTest {
             .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
             .importPackages("com.aioj.next.ai");
 
-    /** Plan §1.2: the three legacy model call paths, frozen until T1.3 deletes them (§3.2.1 rule 3). */
-    private static final Map<String, Set<String>> LEGACY_MODEL_PATH_CALLERS = Map.of(
-            "com.aioj.next.ai.domain.AiProvider", Set.of(
-                    "com.aioj.next.ai.controller.AiController",
-                    "com.aioj.next.ai.domain.AiMemoryService",
-                    "com.aioj.next.ai.domain.AiRetrievalService",
-                    "com.aioj.next.ai.domain.ContestPostmortemAnalysisService",
-                    "com.aioj.next.ai.domain.PlagiarismAnalysisService",
-                    "com.aioj.next.ai.domain.ProblemDraftStore",
-                    "com.aioj.next.ai.domain.StudentPostmortemAnalysisService",
-                    "com.aioj.next.ai.domain.embedding.AiEmbeddingService"),
-            "com.aioj.next.ai.domain.OpenAiCompatibleProvider", Set.of(
-                    "com.aioj.next.ai.agent.digest.TurnDigestEmbedHandler",
-                    "com.aioj.next.ai.agent.retrieval.builtin.ContextSearchDigestsTool"),
-            "com.aioj.next.ai.domain.AiModelCompletionClient", Set.of(
-                    "com.aioj.next.ai.domain.AccountImportParseService",
-                    "com.aioj.next.ai.domain.AiModelConfigService",
-                    "com.aioj.next.ai.domain.AiStructuredSubmissionAnalysisService",
-                    "com.aioj.next.ai.domain.memory.AiMemoryMergeService"),
-            "com.aioj.next.ai.domain.AiModelCatalogClient", Set.of(
-                    "com.aioj.next.ai.domain.AiModelConfigService"));
+    /**
+     * Plan §1.2: the legacy model call paths that T1.3 replaced with the model call
+     * package. They must not come back, under these names or as a second HTTP path.
+     */
+    private static final Set<String> RETIRED_MODEL_PATHS = Set.of(
+            "com.aioj.next.ai.agent.model.ModelGateway",
+            "com.aioj.next.ai.domain.AiProvider",
+            "com.aioj.next.ai.domain.OpenAiCompatibleProvider",
+            "com.aioj.next.ai.domain.AiModelCompletionClient",
+            "com.aioj.next.ai.domain.AiModelCatalogClient");
 
     /**
      * Plan §3.2.1 rule 1: Provider HTTP calls happen only in the model call package.
      * A Provider call needs its API key, so key reads mark where calls can happen:
-     * the model package's client and its ModelConfigSource implementation (T1.2b),
-     * and until T1.3 finishes the three legacy clients, the config resolver and
-     * the admin connectivity test.
+     * the model package's client and its ModelConfigSource implementation, the
+     * config resolution that finds the keys, and the admin model catalog, which
+     * builds the endpoint it asks the model package to list.
      */
     private static final Set<String> PROVIDER_API_KEY_READERS = Set.of(
             "com.aioj.next.ai.model.DefaultModelClient",
             "com.aioj.next.ai.domain.AiModelConfigEndpointSource",
-            "com.aioj.next.ai.domain.AiModelCatalogClient",
-            "com.aioj.next.ai.domain.AiModelCompletionClient",
             "com.aioj.next.ai.domain.AiModelConfigService",
             "com.aioj.next.ai.domain.EnvironmentAiModelConfigResolver",
-            "com.aioj.next.ai.domain.OpenAiCompatibleProvider");
+            "com.aioj.next.ai.domain.ModelCatalogService");
 
     @Test
     void theModelPackageDependsOnNoPersistenceHarnessOrOtherAiServiceCode() {
@@ -91,10 +77,14 @@ class AiServiceArchitectureTest {
     }
 
     @Test
-    void legacyModelPathsTakeNoNewCallers() {
-        // The legacy classes depend on each other; only callers from elsewhere count.
-        LEGACY_MODEL_PATH_CALLERS.forEach((legacy, allowed) -> assertExactly("callers of " + legacy,
-                AiServiceArchitectureRules.dependentsOf(MAIN, legacy, LEGACY_MODEL_PATH_CALLERS.keySet()), allowed));
+    void retiredModelPathsAreGone() {
+        Set<String> present = new TreeSet<>();
+        for (JavaClass type : MAIN) {
+            if (RETIRED_MODEL_PATHS.contains(type.getName())) {
+                present.add(type.getName());
+            }
+        }
+        assertThat(present).as("legacy model call paths (plan §3.2.1 rule 3)").isEmpty();
     }
 
     @Test

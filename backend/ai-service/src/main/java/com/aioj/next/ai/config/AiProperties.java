@@ -20,7 +20,6 @@ public class AiProperties {
     private long rollingLimit = 50;
     private int rollingWindowHours = 2;
     private long monthlyLimit = 1000;
-    private Http http = new Http();
     private DeepSeek deepseek = new DeepSeek();
     private Intent intent = new Intent();
     private Embedding embedding = new Embedding();
@@ -133,14 +132,6 @@ public class AiProperties {
 
     public void setMonthlyLimit(long monthlyLimit) {
         this.monthlyLimit = monthlyLimit;
-    }
-
-    public Http getHttp() {
-        return http;
-    }
-
-    public void setHttp(Http http) {
-        this.http = http == null ? new Http() : http;
     }
 
     public DeepSeek getDeepseek() {
@@ -647,27 +638,6 @@ public class AiProperties {
 
         public void setAllowedTags(List<String> allowedTags) {
             this.allowedTags = allowedTags == null ? new ArrayList<>() : new ArrayList<>(allowedTags);
-        }
-    }
-
-    public static class Http {
-        private int connectTimeoutMs = 10000;
-        private int readTimeoutMs = 180000;
-
-        public int getConnectTimeoutMs() {
-            return connectTimeoutMs;
-        }
-
-        public void setConnectTimeoutMs(int connectTimeoutMs) {
-            this.connectTimeoutMs = connectTimeoutMs;
-        }
-
-        public int getReadTimeoutMs() {
-            return readTimeoutMs;
-        }
-
-        public void setReadTimeoutMs(int readTimeoutMs) {
-            this.readTimeoutMs = readTimeoutMs;
         }
     }
 

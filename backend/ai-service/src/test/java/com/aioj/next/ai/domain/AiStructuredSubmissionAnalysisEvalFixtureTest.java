@@ -36,7 +36,7 @@ class AiStructuredSubmissionAnalysisEvalFixtureTest {
     void structuredSubmissionAnalysisFixturesStayStable(SubmissionAnalysisFixture fixture) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         AiModelConfigResolver configResolver = mock(AiModelConfigResolver.class);
-        AiModelCompletionClient completionClient = mock(AiModelCompletionClient.class);
+        ModelCompletions completionClient = mock(ModelCompletions.class);
         AiQuotaService quotaService = mock(AiQuotaService.class);
         AiStructuredSubmissionAnalysisService service = new AiStructuredSubmissionAnalysisService(
                 objectMapper,
@@ -51,7 +51,7 @@ class AiStructuredSubmissionAnalysisEvalFixtureTest {
         if (useModel) {
             String content = fixture.modelJson() == null ? fixture.modelContent() : objectMapper.writeValueAsString(fixture.modelJson());
             when(completionClient.complete(any(), anyList(), anyDouble(), anyInt(), eq(true)))
-                    .thenReturn(new AiModelCompletionClient.CompletionResult(content, "mock", "mock-16k", 17, 9));
+                    .thenReturn(new ModelCompletions.Result(content, "mock", "mock-16k", 17, 9));
         }
 
         AiStructuredSubmissionAnalysisService.AnalysisResult result = service.analyze(

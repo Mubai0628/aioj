@@ -49,7 +49,6 @@ class AiMemoryCandidateControllerTest {
                 null,
                 null,
                 null,
-                null,
                 candidateService,
                 null,
                 reviewService,

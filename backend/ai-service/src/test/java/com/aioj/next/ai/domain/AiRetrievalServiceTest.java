@@ -33,7 +33,7 @@ class AiRetrievalServiceTest {
     @Mock
     private AiRetrievalChunkMapper chunkMapper;
     @Mock
-    private AiProvider aiProvider;
+    private TextEmbeddings aiProvider;
     @Mock
     private AiCapacityService aiCapacityService;
 

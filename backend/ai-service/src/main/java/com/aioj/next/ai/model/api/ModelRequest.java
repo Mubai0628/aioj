@@ -12,10 +12,12 @@ import java.util.List;
  *                         resolves {@code scope} through the {@link ModelConfigSource}
  * @param thinkingDisabled the controlled standard fallback: thinking off for this call only,
  *                         without touching the stored configuration
+ * @param temperature      overrides the endpoint's and the profile's temperature; {@code null} keeps them
+ * @param maxTokens        overrides the endpoint's and the profile's token limit; {@code null} keeps them
  */
 public record ModelRequest(String scope, ModelEndpointConfig endpoint, List<ChatMessage> messages,
                            List<ToolSpec> tools, ToolChoice toolChoice, ResponseFormat responseFormat,
-                           CallProfile profile, boolean thinkingDisabled) {
+                           CallProfile profile, boolean thinkingDisabled, Double temperature, Integer maxTokens) {
 
     public ModelRequest {
         if (scope == null || scope.isBlank()) {
@@ -33,11 +35,13 @@ public record ModelRequest(String scope, ModelEndpointConfig endpoint, List<Chat
     }
 
     public ModelRequest withEndpoint(ModelEndpointConfig value) {
-        return new ModelRequest(scope, value, messages, tools, toolChoice, responseFormat, profile, thinkingDisabled);
+        return new ModelRequest(scope, value, messages, tools, toolChoice, responseFormat, profile, thinkingDisabled,
+                temperature, maxTokens);
     }
 
     public ModelRequest withThinkingDisabled() {
-        return new ModelRequest(scope, endpoint, messages, tools, toolChoice, responseFormat, profile, true);
+        return new ModelRequest(scope, endpoint, messages, tools, toolChoice, responseFormat, profile, true,
+                temperature, maxTokens);
     }
 
     public static final class Builder {
@@ -49,6 +53,8 @@ public record ModelRequest(String scope, ModelEndpointConfig endpoint, List<Chat
         private ResponseFormat responseFormat = ResponseFormat.text();
         private CallProfile profile = CallProfile.CHAT_STREAM;
         private boolean thinkingDisabled;
+        private Double temperature;
+        private Integer maxTokens;
 
         private Builder(String scope) {
             this.scope = scope;
@@ -94,9 +100,19 @@ public record ModelRequest(String scope, ModelEndpointConfig endpoint, List<Chat
             return this;
         }
 
+        public Builder temperature(Double value) {
+            this.temperature = value;
+            return this;
+        }
+
+        public Builder maxTokens(Integer value) {
+            this.maxTokens = value;
+            return this;
+        }
+
         public ModelRequest build() {
             return new ModelRequest(scope, endpoint, messages, tools, toolChoice, responseFormat, profile,
-                    thinkingDisabled);
+                    thinkingDisabled, temperature, maxTokens);
         }
     }
 }

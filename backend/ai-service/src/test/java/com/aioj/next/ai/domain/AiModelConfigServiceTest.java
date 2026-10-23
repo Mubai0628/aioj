@@ -128,7 +128,7 @@ class AiModelConfigServiceTest {
     void disabledProblemDraftTestInheritsDefaultTextGenerationConfig() {
         Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
         when(fixture.completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("{\"ok\":true}", "deepseek", "deepseek-v4-pro", 12, 6));
+                .thenReturn(new ModelCompletions.Result("{\"ok\":true}", "deepseek", "deepseek-v4-pro", 12, 6));
 
         var response = fixture.service.testConfig("PROBLEM_DRAFT", new AiModelConfigTestRequest(
                 false,
@@ -435,8 +435,8 @@ class AiModelConfigServiceTest {
     private static final class Fixture {
         final AiProperties properties = new AiProperties();
         final AiModelConfigMapper mapper = mock(AiModelConfigMapper.class);
-        final AiModelCompletionClient completionClient = mock(AiModelCompletionClient.class);
-        final AiModelCatalogClient modelCatalogClient = mock(AiModelCatalogClient.class);
+        final ModelCompletions completionClient = mock(ModelCompletions.class);
+        final ModelCatalogService modelCatalogClient = mock(ModelCatalogService.class);
         final AiQuotaService quotaService = mock(AiQuotaService.class);
         final Map<String, AiModelConfigEntity> rows = new HashMap<>();
         final Map<String, String> env = new HashMap<>();

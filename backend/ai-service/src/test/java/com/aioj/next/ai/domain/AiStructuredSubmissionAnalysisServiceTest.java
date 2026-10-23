@@ -27,14 +27,14 @@ import static org.mockito.Mockito.when;
 
 class AiStructuredSubmissionAnalysisServiceTest {
     private AiModelConfigResolver configResolver;
-    private AiModelCompletionClient completionClient;
+    private ModelCompletions completionClient;
     private AiQuotaService quotaService;
     private AiStructuredSubmissionAnalysisService service;
 
     @BeforeEach
     void setUp() {
         configResolver = mock(AiModelConfigResolver.class);
-        completionClient = mock(AiModelCompletionClient.class);
+        completionClient = mock(ModelCompletions.class);
         quotaService = mock(AiQuotaService.class);
         service = new AiStructuredSubmissionAnalysisService(
                 new ObjectMapper(),
@@ -50,7 +50,7 @@ class AiStructuredSubmissionAnalysisServiceTest {
         AiModelEffectiveConfig config = config(true, true);
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config);
         when(completionClient.complete(any(), anyList(), anyDouble(), anyInt(), eq(true)))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "summary":"二分答案 check 单调性判断错误。",
                           "rootCauseTags":["wrong_answer"],
@@ -124,7 +124,7 @@ class AiStructuredSubmissionAnalysisServiceTest {
         AiModelEffectiveConfig config = config(true, true);
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config);
         when(completionClient.complete(any(), anyList(), anyDouble(), anyInt(), eq(true)))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "summary":"学生解释了 check 单调性和边界。",
                           "rootCauseTags":["accepted"],
@@ -173,7 +173,7 @@ class AiStructuredSubmissionAnalysisServiceTest {
     void malformedJsonFallsBackWithoutLeakingUnsafeText() {
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config(true, true));
         when(completionClient.complete(any(), anyList(), anyDouble(), anyInt(), eq(true)))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("not json", "mock", "mock-16k", 11, 3));
+                .thenReturn(new ModelCompletions.Result("not json", "mock", "mock-16k", 11, 3));
 
         AiStructuredSubmissionAnalysisService.AnalysisResult result = service.analyze(
                 7L,

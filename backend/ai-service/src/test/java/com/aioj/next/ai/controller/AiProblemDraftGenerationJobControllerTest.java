@@ -59,7 +59,6 @@ class AiProblemDraftGenerationJobControllerTest {
                 null,
                 null,
                 null,
-                null,
                 JsonMapper.builderWithJackson2Defaults().build()
         );
         controller.setProblemDraftGenerationJobService(jobService);

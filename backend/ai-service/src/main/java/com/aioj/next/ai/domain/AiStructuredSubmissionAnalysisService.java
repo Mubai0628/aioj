@@ -24,14 +24,14 @@ public class AiStructuredSubmissionAnalysisService {
 
     private final ObjectMapper objectMapper;
     private final AiModelConfigResolver configResolver;
-    private final AiModelCompletionClient completionClient;
+    private final ModelCompletions completionClient;
     private final AiQuotaService quotaService;
     private final AiCapacityService capacityService;
 
     public AiStructuredSubmissionAnalysisService(
             ObjectMapper objectMapper,
             AiModelConfigResolver configResolver,
-            AiModelCompletionClient completionClient,
+            ModelCompletions completionClient,
             AiQuotaService quotaService,
             AiCapacityService capacityService
     ) {
@@ -52,7 +52,7 @@ public class AiStructuredSubmissionAnalysisService {
             return capacityService.call(AiCapacityService.AiWorkload.INTENT_MEMORY, () -> {
                 quotaService.assertMonthlyAvailable(userId);
                 try {
-                    AiModelCompletionClient.CompletionResult result = completionClient.complete(
+                    ModelCompletions.Result result = completionClient.complete(
                             config,
                             List.of(
                                     message("system", "你是 AI-OJ 的提交分析结构化器。只输出严格 JSON 对象，不要输出 Markdown 或 JSON 外文本。"),

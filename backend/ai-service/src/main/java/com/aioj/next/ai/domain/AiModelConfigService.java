@@ -36,8 +36,8 @@ public class AiModelConfigService implements AiModelConfigResolver {
     private static final ZoneId ZONE = ZoneId.systemDefault();
 
     private final AiModelConfigMapper mapper;
-    private final AiModelCompletionClient completionClient;
-    private final AiModelCatalogClient modelCatalogClient;
+    private final ModelCompletions completionClient;
+    private final ModelCatalogService modelCatalogClient;
     private final AiQuotaService aiQuotaService;
     private final EnvironmentAiModelConfigResolver environmentResolver;
     private final Map<AiModelScope, CacheEntry> cache = new ConcurrentHashMap<>();
@@ -48,8 +48,8 @@ public class AiModelConfigService implements AiModelConfigResolver {
     public AiModelConfigService(
             AiProperties properties,
             AiModelConfigMapper mapper,
-            AiModelCompletionClient completionClient,
-            AiModelCatalogClient modelCatalogClient,
+            ModelCompletions completionClient,
+            ModelCatalogService modelCatalogClient,
             AiQuotaService aiQuotaService
     ) {
         this(properties, mapper, completionClient, modelCatalogClient, aiQuotaService, System::getenv);
@@ -58,8 +58,8 @@ public class AiModelConfigService implements AiModelConfigResolver {
     AiModelConfigService(
             AiProperties properties,
             AiModelConfigMapper mapper,
-            AiModelCompletionClient completionClient,
-            AiModelCatalogClient modelCatalogClient,
+            ModelCompletions completionClient,
+            ModelCatalogService modelCatalogClient,
             AiQuotaService aiQuotaService,
             Function<String, String> envLookup
     ) {
@@ -167,13 +167,13 @@ public class AiModelConfigService implements AiModelConfigResolver {
             if (scope == AiModelScope.EMBEDDING) {
                 // Embeddings endpoints reject chat completion payloads; probe with a real
                 // embeddings request instead.
-                AiModelCompletionClient.EmbeddingProbeResult probe = completionClient.embedProbe(config, prompt);
+                ModelCompletions.EmbeddingProbe probe = completionClient.embedProbe(config, prompt);
                 long elapsed = elapsedMillis(start);
                 aiQuotaService.record(userId, config.provider(), config.model(), probe.promptTokens(), 0, true);
                 return new AiModelConfigTestResponse(true, config.provider(), config.model(), elapsed,
                         probe.promptTokens(), 0, "Embedding OK, vector dimension " + probe.dimension(), null);
             }
-            AiModelCompletionClient.CompletionResult result = completionClient.complete(
+            ModelCompletions.Result result = completionClient.complete(
                     config,
                     List.of(
                             message("system", strictJsonTest ? "Return a strict JSON object only." : "Reply briefly for an AI model connectivity test."),

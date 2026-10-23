@@ -21,14 +21,14 @@ public class AccountImportParseService {
 
     private final ObjectMapper objectMapper;
     private final AiModelConfigResolver configResolver;
-    private final AiModelCompletionClient completionClient;
+    private final ModelCompletions completionClient;
     private final AiQuotaService aiQuotaService;
     private final AiCapacityService capacityService;
 
     public AccountImportParseService(
             ObjectMapper objectMapper,
             AiModelConfigResolver configResolver,
-            AiModelCompletionClient completionClient,
+            ModelCompletions completionClient,
             AiQuotaService aiQuotaService,
             AiCapacityService capacityService
     ) {
@@ -58,7 +58,7 @@ public class AccountImportParseService {
         }
         try {
             aiQuotaService.assertMonthlyAvailable(userId);
-            AiModelCompletionClient.CompletionResult result = completionClient.complete(
+            ModelCompletions.Result result = completionClient.complete(
                     config,
                     List.of(
                             message("system", """

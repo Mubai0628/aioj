@@ -2,7 +2,7 @@ package com.aioj.next.ai.domain.memory;
 
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.AiCapacityService;
-import com.aioj.next.ai.domain.AiModelCompletionClient;
+import com.aioj.next.ai.domain.ModelCompletions;
 import com.aioj.next.ai.domain.AiModelConfigResolver;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
@@ -71,7 +71,7 @@ class AiMemoryMergeServiceTest {
     @Mock
     private AiModelConfigResolver configResolver;
     @Mock
-    private AiModelCompletionClient completionClient;
+    private ModelCompletions completionClient;
     @Mock
     private AiQuotaService quotaService;
 
@@ -265,7 +265,7 @@ class AiMemoryMergeServiceTest {
         when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(target));
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "decision":"MERGE",
                           "targetMemoryId":300,
@@ -322,7 +322,7 @@ class AiMemoryMergeServiceTest {
         when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(target, duplicate));
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "decision":"MERGE",
                           "targetMemoryId":300,
@@ -372,7 +372,7 @@ class AiMemoryMergeServiceTest {
         when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(target));
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         ```json
                         {
                           "decision":"MERGE",
@@ -418,7 +418,7 @@ class AiMemoryMergeServiceTest {
         when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(target));
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         分析元信息：{"note":"not the final decision"}
                         ```json
                         {
@@ -460,7 +460,7 @@ class AiMemoryMergeServiceTest {
         when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(target));
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         [{"结果":{
                           "决定":"合并",
                           "目标记忆ID":"300",
@@ -503,7 +503,7 @@ class AiMemoryMergeServiceTest {
         when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(broad));
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "actions":[
                             {"action":"SUPERSEDE","targetMemoryId":300,"confidence":0.9,"reason":"旧记忆包含相互冲突的多个子概念"},
@@ -563,7 +563,7 @@ class AiMemoryMergeServiceTest {
         when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(target));
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "actions":[
                             {"action":"WEAKEN","targetMemoryId":300,"canonicalText":"用户喜欢吃香蕉，但存在一次临时反证，需后续确认。","confidence":0.35,"supportDelta":0,"contradictionDelta":1,"evidenceItems":["用户说现在不想吃香蕉"],"reason":"temporary wording"}
@@ -650,7 +650,7 @@ class AiMemoryMergeServiceTest {
         when(claimMapper.selectOne(any(QueryWrapper.class))).thenReturn(distrusted);
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "decision":"MERGE",
                           "targetMemoryId":300,
@@ -694,7 +694,7 @@ class AiMemoryMergeServiceTest {
         when(claimMapper.selectOne(any(QueryWrapper.class))).thenReturn(distrusted);
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "decision":"MERGE",
                           "targetMemoryId":300,
@@ -732,7 +732,7 @@ class AiMemoryMergeServiceTest {
         when(claimMapper.selectOne(any(QueryWrapper.class))).thenReturn(distrusted);
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "decision":"MERGE",
                           "targetMemoryId":300,
@@ -774,7 +774,7 @@ class AiMemoryMergeServiceTest {
         when(claimMapper.selectOne(any(QueryWrapper.class))).thenReturn(distrusted);
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "decision":"MERGE",
                           "targetMemoryId":300,
@@ -817,7 +817,7 @@ class AiMemoryMergeServiceTest {
         when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(target, duplicate));
         when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
         when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
-                .thenReturn(new AiModelCompletionClient.CompletionResult("""
+                .thenReturn(new ModelCompletions.Result("""
                         {
                           "decision":"MERGE",
                           "targetMemoryId":300,

@@ -21,7 +21,13 @@ public enum CallProfile {
      * answers. Thinking can burn the whole max_tokens budget on hard turns and
      * return empty content.
      */
-    RECOVERY_ANSWER(true, 4096, 0.3, false);
+    RECOVERY_ANSWER(true, 4096, 0.3, false),
+    /**
+     * One-off completions outside the Agent loop (analysis, import parsing, memory
+     * merge, connectivity tests): thinking and output format as configured; the
+     * caller usually sets temperature and token limit on the request.
+     */
+    COMPLETION(false, 4096, 0.3, false);
 
     /** Minimum max_tokens while thinking stays on: small budgets are eaten by reasoning. */
     public static final int MIN_MAX_TOKENS_WHEN_THINKING = 2_000;

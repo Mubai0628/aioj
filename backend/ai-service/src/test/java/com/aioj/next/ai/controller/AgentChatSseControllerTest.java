@@ -8,7 +8,6 @@ import com.aioj.next.ai.domain.AiCompletion;
 import com.aioj.next.ai.domain.AiConversationService;
 import com.aioj.next.ai.domain.AiLearningProfileService;
 import com.aioj.next.ai.domain.AiMemoryService;
-import com.aioj.next.ai.domain.AiProvider;
 import com.aioj.next.ai.domain.AiQuotaService;
 import com.aioj.next.ai.domain.ProblemDraftStore;
 import com.aioj.next.ai.domain.memory.AiMemoryCandidateService;
@@ -74,8 +73,6 @@ class AgentChatSseControllerTest {
     private static final String CONVERSATION_ID = "c-agent-sse";
 
     @Mock
-    private AiProvider aiProvider;
-    @Mock
     private AgentChatFacade agentChatFacade;
     @Mock
     private AiQuotaService aiQuotaService;
@@ -106,7 +103,6 @@ class AgentChatSseControllerTest {
     @BeforeEach
     void setUp() {
         AiController controller = new AiController(
-                aiProvider,
                 agentChatFacade,
                 aiQuotaService,
                 accountImportParseService,

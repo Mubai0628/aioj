@@ -20,7 +20,7 @@ class AccountImportParseServiceTest {
         AccountImportParseService service = new AccountImportParseService(
                 new ObjectMapper(),
                 configResolver,
-                mock(AiModelCompletionClient.class),
+                mock(ModelCompletions.class),
                 mock(AiQuotaService.class),
                 new AiCapacityService(new AiProperties())
         );

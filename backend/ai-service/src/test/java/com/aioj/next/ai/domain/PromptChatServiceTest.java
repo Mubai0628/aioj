@@ -4,7 +4,6 @@ import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.clarification.ClarificationSchemaRepairer;
 import com.aioj.next.ai.domain.context.AiIntentAnalysis;
 import com.aioj.next.contract.ai.AiChatRequest;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,22 +15,29 @@ import org.springframework.mock.env.MockEnvironment;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-class OpenAiCompatibleProviderDeepSeekResponseTest {
+/** The pre-V3 prompt pipeline: intent fallback, prompt assembly and degrade-to-empty memory extraction. */
+class PromptChatServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private OpenAiCompatibleProvider provider;
+    private PromptChatService provider;
 
     @BeforeEach
     void setUp() {
-        provider = new OpenAiCompatibleProvider(
-                new AiProperties(),
-                objectMapper,
-                new ClarificationSchemaRepairer()
-        );
+        AiProperties properties = new AiProperties();
+        provider = new PromptChatService(properties, objectMapper, new ClarificationSchemaRepairer(),
+                scope -> null, mock(ModelCompletions.class), new AiCapacityService(properties));
+        AiFailureMetrics.reset();
     }
 
     @Test
@@ -65,33 +71,8 @@ class OpenAiCompatibleProviderDeepSeekResponseTest {
     }
 
     @Test
-    void visibleContentIgnoresKimiReasoningContent() throws Exception {
-        Method method = OpenAiCompatibleProvider.class.getDeclaredMethod("visibleAssistantContent", JsonNode.class);
-        method.setAccessible(true);
-        JsonNode root = objectMapper.readTree("""
-                {
-                  "choices": [
-                    {
-                      "message": {
-                        "role": "assistant",
-                        "reasoning_content": "hidden chain of thought",
-                        "content": "{\\"teachingDecision\\":\\"DIRECT\\",\\"content\\":\\"visible answer\\",\\"clarification\\":{\\"options\\":[]}}"
-                      }
-                    }
-                  ],
-                  "usage": {"prompt_tokens": 5, "completion_tokens": 7}
-                }
-                """);
-
-        String visible = (String) method.invoke(provider, root);
-
-        assertThat(visible).contains("visible answer");
-        assertThat(visible).doesNotContain("hidden chain of thought");
-    }
-
-    @Test
     void fallbackIntentDetectsCompositeCodeAndExplanationRequest() throws Exception {
-        Method method = OpenAiCompatibleProvider.class.getDeclaredMethod("fallbackIntentAnalysis", AiChatRequest.class);
+        Method method = PromptChatService.class.getDeclaredMethod("fallbackIntentAnalysis", AiChatRequest.class);
         method.setAccessible(true);
 
         AiIntentAnalysis analysis = (AiIntentAnalysis) method.invoke(provider,
@@ -105,9 +86,9 @@ class OpenAiCompatibleProviderDeepSeekResponseTest {
 
     @Test
     void dynamicPromptCarriesIntentAnalysisAsHiddenInstruction() throws Exception {
-        Method intentMethod = OpenAiCompatibleProvider.class.getDeclaredMethod("fallbackIntentAnalysis", AiChatRequest.class);
+        Method intentMethod = PromptChatService.class.getDeclaredMethod("fallbackIntentAnalysis", AiChatRequest.class);
         intentMethod.setAccessible(true);
-        Method promptMethod = OpenAiCompatibleProvider.class.getDeclaredMethod("chatUserPrompt", AiChatRequest.class, AiChatContext.class, AiIntentAnalysis.class);
+        Method promptMethod = PromptChatService.class.getDeclaredMethod("chatUserPrompt", AiChatRequest.class, AiChatContext.class, AiIntentAnalysis.class);
         promptMethod.setAccessible(true);
         AiChatRequest request = new AiChatRequest("c1", 1L, "能给我这道题你的解题思路和代码吗？按照你的思路讲解你的代码", "hint", null, null, null);
         AiIntentAnalysis analysis = (AiIntentAnalysis) intentMethod.invoke(provider, request);
@@ -122,12 +103,12 @@ class OpenAiCompatibleProviderDeepSeekResponseTest {
 
     @Test
     void contestPolicyPromptRemainsVisibleAlongsideCodeFirstIntent() throws Exception {
-        Field systemPromptField = OpenAiCompatibleProvider.class.getDeclaredField("CHAT_SYSTEM_PROMPT");
+        Field systemPromptField = PromptChatService.class.getDeclaredField("CHAT_SYSTEM_PROMPT");
         systemPromptField.setAccessible(true);
         String systemPrompt = (String) systemPromptField.get(null);
-        Method intentMethod = OpenAiCompatibleProvider.class.getDeclaredMethod("fallbackIntentAnalysis", AiChatRequest.class);
+        Method intentMethod = PromptChatService.class.getDeclaredMethod("fallbackIntentAnalysis", AiChatRequest.class);
         intentMethod.setAccessible(true);
-        Method promptMethod = OpenAiCompatibleProvider.class.getDeclaredMethod("chatUserPrompt", AiChatRequest.class, AiChatContext.class, AiIntentAnalysis.class);
+        Method promptMethod = PromptChatService.class.getDeclaredMethod("chatUserPrompt", AiChatRequest.class, AiChatContext.class, AiIntentAnalysis.class);
         promptMethod.setAccessible(true);
         AiChatRequest request = new AiChatRequest("c1", 1L, "比赛中也请先给我完整代码和讲解", "hint", null, null, null);
         AiIntentAnalysis analysis = (AiIntentAnalysis) intentMethod.invoke(provider, request);
@@ -157,105 +138,24 @@ class OpenAiCompatibleProviderDeepSeekResponseTest {
                 .contains("不能提供完整可提交代码");
     }
 
+    /** W1.6: a failing memory extraction is counted and still degrades to no memories. */
     @Test
-    void deepSeekJsonBodyAddsResponseFormatAndDisablesThinkingByDefault() {
-        Map<String, Object> body = provider.completionBody(
-                List.of(Map.of("role", "user", "content", "return json")),
-                0.2,
-                100,
-                "deepseek-v4-pro",
-                "https://api.deepseek.com/chat/completions",
-                true
-        );
-
-        assertThat(body).containsEntry("model", "deepseek-v4-pro");
-        assertThat(body).containsEntry("max_tokens", 100);
-        assertThat(body.get("response_format")).isEqualTo(Map.of("type", "json_object"));
-        assertThat(body.get("thinking")).isEqualTo(Map.of("type", "disabled"));
-        assertThat(body).doesNotContainKey("reasoning_effort");
-        assertThat(body).containsEntry("temperature", 0.2);
-    }
-
-    @Test
-    void deepSeekThinkingCanBeEnabledWithReasoningEffort() {
+    void extractMemoriesFailureIsCountedAndStillReturnsEmpty() {
         AiProperties properties = new AiProperties();
-        properties.getDeepseek().setThinkingEnabled(true);
-        properties.getDeepseek().setReasoningEffort("max");
-        OpenAiCompatibleProvider thinkingProvider = new OpenAiCompatibleProvider(
-                properties,
-                objectMapper,
-                new ClarificationSchemaRepairer()
-        );
+        ModelCompletions completions = mock(ModelCompletions.class);
+        when(completions.complete(any(), anyList(), anyDouble(), anyInt(), anyBoolean()))
+                .thenThrow(new RuntimeException("provider boom"));
+        PromptChatService failing = new PromptChatService(properties, objectMapper, new ClarificationSchemaRepairer(),
+                scope -> memoryConfig(), completions, new AiCapacityService(properties));
 
-        Map<String, Object> body = thinkingProvider.completionBody(
-                List.of(Map.of("role", "user", "content", "return json")),
-                0.2,
-                100,
-                "deepseek-v4-pro",
-                "https://api.deepseek.com/chat/completions",
-                true
-        );
-
-        assertThat(body.get("thinking")).isEqualTo(Map.of("type", "enabled"));
-        assertThat(body).containsEntry("reasoning_effort", "max");
-        assertThat(body).doesNotContainKey("temperature");
+        assertThat(failing.extractMemories("请记住我习惯用 Java 刷题。", "好的，已记住。")).isEmpty();
+        assertThat(AiFailureMetrics.memoryExtractionFailures()).isEqualTo(1);
     }
 
-    @Test
-    void moonshotV1JsonBodyDoesNotSendThinkingOptions() {
-        Map<String, Object> body = provider.completionBody(
-                List.of(Map.of("role", "user", "content", "return json")),
-                0.2,
-                100,
-                "moonshot-v1-32k",
-                "https://api.moonshot.ai/v1/chat/completions",
-                true
-        );
-
-        assertThat(body.get("response_format")).isEqualTo(Map.of("type", "json_object"));
-        assertThat(body).doesNotContainKey("thinking");
-        assertThat(body).doesNotContainKey("reasoning_effort");
-        assertThat(body).containsEntry("temperature", 0.2);
-    }
-
-    @Test
-    void kimiThinkingModelUsesKimiThinkingShapeWithoutEffort() {
-        AiProperties properties = new AiProperties();
-        properties.getDeepseek().setThinkingEnabled(true);
-        OpenAiCompatibleProvider kimiProvider = new OpenAiCompatibleProvider(
-                properties,
-                objectMapper,
-                new ClarificationSchemaRepairer()
-        );
-
-        Map<String, Object> body = kimiProvider.completionBody(
-                List.of(Map.of("role", "user", "content", "return json")),
-                0.2,
-                100,
-                "kimi-k2.6",
-                "https://api.moonshot.ai/v1/chat/completions",
-                true
-        );
-
-        assertThat(body.get("response_format")).isEqualTo(Map.of("type", "json_object"));
-        assertThat(body.get("thinking")).isEqualTo(Map.of("type", "enabled"));
-        assertThat(body).doesNotContainKey("reasoning_effort");
-        assertThat(body).containsEntry("temperature", 1.0);
-    }
-
-    @Test
-    void embeddingDoesNotUseGlobalDeepSeekApiKey() {
-        AiProperties properties = new AiProperties();
-        properties.setApiKey("deepseek-key");
-        OpenAiCompatibleProvider embeddingProvider = new OpenAiCompatibleProvider(
-                properties,
-                objectMapper,
-                new ClarificationSchemaRepairer(),
-                new EnvironmentAiModelConfigResolver(properties, ignored -> ""),
-                new AiModelCompletionClient(objectMapper, properties)
-        );
-
-        assertThat(embeddingProvider.embed("test text")).isEmpty();
+    private static AiModelEffectiveConfig memoryConfig() {
+        return new AiModelEffectiveConfig(AiModelScope.MEMORY_EXTRACTION, true, false, "test", "deepseek",
+                "http://127.0.0.1:1", "test-key", "", "", "", "chat-model", true, false, "high", null, null, null,
+                Instant.now(), null);
     }
 
     private MockEnvironment environmentFromApplicationYaml() throws IOException {

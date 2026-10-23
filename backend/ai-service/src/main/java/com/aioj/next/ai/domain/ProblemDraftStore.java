@@ -62,7 +62,7 @@ public class ProblemDraftStore {
     private static final int DEFAULT_TIME_LIMIT_MILLIS = 1000;
     private static final int DEFAULT_MEMORY_LIMIT_KB = 262144;
 
-    private final AiProvider aiProvider;
+    private final AiModelConfigResolver configResolver;
     private final ProblemDraftMapper problemDraftMapper;
     private final ProblemServiceClient problemServiceClient;
     private final ObjectMapper objectMapper;
@@ -75,7 +75,7 @@ public class ProblemDraftStore {
     private ProblemDraftReviewRiskService reviewRiskService;
 
     public ProblemDraftStore(
-            AiProvider aiProvider,
+            AiModelConfigResolver configResolver,
             ProblemDraftMapper problemDraftMapper,
             ProblemServiceClient problemServiceClient,
             ObjectMapper objectMapper,
@@ -84,7 +84,7 @@ public class ProblemDraftStore {
             ProblemDraftStaticValidator problemDraftStaticValidator,
             DraftSandboxClient draftSandboxClient
     ) {
-        this.aiProvider = aiProvider;
+        this.configResolver = configResolver;
         this.problemDraftMapper = problemDraftMapper;
         this.problemServiceClient = problemServiceClient;
         this.objectMapper = objectMapper;
@@ -194,7 +194,7 @@ public class ProblemDraftStore {
                 limitOrDefault(request.timeLimitMillis(), timeLimitMillis),
                 limitOrDefault(request.memoryLimitKb(), memoryLimitKb),
                 draft.getImportedProblemId(),
-                nonBlank(draft.getModel(), aiProvider.model()),
+                nonBlank(draft.getModel(), defaultModel()),
                 currentPayload.promptTokens(),
                 currentPayload.completionTokens(),
                 draft.getCreatedAt() == null ? Instant.now() : draft.getCreatedAt().atZone(ZONE).toInstant(),
@@ -286,7 +286,7 @@ public class ProblemDraftStore {
             problemDraftMapper.updateById(existing);
             return toResponse(existing);
         }
-        ProblemDraftResponse response = state.toResponse(candidateDraftId, nonBlank(model, aiProvider.model()),
+        ProblemDraftResponse response = state.toResponse(candidateDraftId, nonBlank(model, defaultModel()),
                 Math.max(0, promptTokens), Math.max(0, completionTokens));
         response = new ProblemDraftResponse(
                 response.id(), STATUS_PENDING_REVIEW, response.title(), response.difficulty(), response.statement(),
@@ -369,7 +369,7 @@ public class ProblemDraftStore {
                 ? VerificationReport.of(List.of(new VerificationError(
                         "STATIC_NOT_RUN", "Static validation is required", null)), List.of())
                 : staticReport;
-        ProblemDraftResponse base = state.toResponse(candidateDraftId, nonBlank(model, aiProvider.model()), 0, 0);
+        ProblemDraftResponse base = state.toResponse(candidateDraftId, nonBlank(model, defaultModel()), 0, 0);
         ProblemDraftResponse response = new ProblemDraftResponse(
                 base.id(), STATUS_PENDING_REVIEW, base.title(), base.difficulty(), base.statement(), base.notes(),
                 base.standardSolutionLanguage(), base.standardSolutionCode(), base.referenceSolutionLanguage(),
@@ -922,6 +922,12 @@ public class ProblemDraftStore {
         } catch (JacksonException ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Unable to serialize problem draft");
         }
+    }
+
+    /** The configured text model, for drafts that do not name the model that wrote them. */
+    private String defaultModel() {
+        AiModelEffectiveConfig config = configResolver.effectiveConfig(AiModelScope.TEXT_GENERATION);
+        return config == null ? null : config.model();
     }
 
     private String nonBlank(String value, String fallback) {

@@ -1,7 +1,6 @@
 package com.aioj.next.ai.domain;
 
 import com.aioj.next.ai.config.AiProperties;
-import com.aioj.next.ai.domain.AiModelCompletionClient.CompletionResult;
 import com.aioj.next.ai.domain.clarification.ClarificationSchemaRepairer;
 import com.aioj.next.ai.domain.context.AiIntentAnalysis;
 import com.aioj.next.common.error.DomainException;
@@ -11,23 +10,22 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
+/**
+ * The pre-V3 prompt pipeline, kept for the callers that still use it (plan T1.3):
+ * teacher and student post-mortem reports and plagiarism analysis go through
+ * {@link #chat} (intent analysis, then the tutoring prompt and its JSON answer),
+ * and conversation memory extraction through {@link #extractMemories}. The model
+ * calls go through {@link ModelCompletions}; nothing here talks HTTP.
+ */
 @Component
-public class OpenAiCompatibleProvider implements AiProvider {
-    private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleProvider.class);
-    static final int PROBLEM_DRAFT_FINAL_MAX_TOKENS = 6400;
+public class PromptChatService {
+    private static final Logger log = LoggerFactory.getLogger(PromptChatService.class);
 
     private static final String CHAT_SYSTEM_PROMPT = """
             你是 AI-OJ 的算法学习导师。你的目标是帮助学生真正理解算法题，而不是默认替学生完成答案。
@@ -95,53 +93,32 @@ public class OpenAiCompatibleProvider implements AiProvider {
 
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
-    private final RestClient restClient;
     private final ClarificationSchemaRepairer clarificationSchemaRepairer;
     private final AiModelConfigResolver configResolver;
-    private final AiModelCompletionClient completionClient;
+    private final ModelCompletions completionClient;
     private final AiCapacityService aiCapacityService;
 
-    public OpenAiCompatibleProvider(AiProperties properties, ObjectMapper objectMapper, ClarificationSchemaRepairer clarificationSchemaRepairer) {
-        this(properties, objectMapper, clarificationSchemaRepairer,
-                new EnvironmentAiModelConfigResolver(properties),
-                new AiModelCompletionClient(objectMapper, properties),
-                new AiCapacityService(properties));
-    }
-
-    public OpenAiCompatibleProvider(AiProperties properties, ObjectMapper objectMapper,
-                                    ClarificationSchemaRepairer clarificationSchemaRepairer,
-                                    AiModelConfigResolver configResolver,
-                                    AiModelCompletionClient completionClient) {
-        this(properties, objectMapper, clarificationSchemaRepairer, configResolver, completionClient,
-                new AiCapacityService(properties));
-    }
-
-    @Autowired
-    public OpenAiCompatibleProvider(AiProperties properties, ObjectMapper objectMapper,
-                                    ClarificationSchemaRepairer clarificationSchemaRepairer,
-                                    AiModelConfigResolver configResolver,
-                                    AiModelCompletionClient completionClient,
-                                    AiCapacityService aiCapacityService) {
+    public PromptChatService(AiProperties properties, ObjectMapper objectMapper,
+                             ClarificationSchemaRepairer clarificationSchemaRepairer,
+                             AiModelConfigResolver configResolver,
+                             ModelCompletions completionClient,
+                             AiCapacityService aiCapacityService) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.restClient = AiHttpClients.create(properties);
         this.clarificationSchemaRepairer = clarificationSchemaRepairer;
         this.configResolver = configResolver;
         this.completionClient = completionClient;
         this.aiCapacityService = aiCapacityService;
     }
 
-    @Override
     public AiCompletion chat(AiChatRequest request) {
         return chat(request, AiChatContext.empty());
     }
 
-    @Override
     public AiCompletion chat(AiChatRequest request, AiChatContext context) {
         return chat(request, context, AiModelScope.TEXT_GENERATION);
     }
 
-    @Override
     public String assistantInputPreview(AiChatRequest request, AiChatContext context) {
         if (request == null) {
             return "";
@@ -149,7 +126,6 @@ public class OpenAiCompatibleProvider implements AiProvider {
         return chatUserPrompt(request, context == null ? AiChatContext.empty() : context);
     }
 
-    @Override
     public AiCompletion chat(AiChatRequest request, AiChatContext context, AiModelScope scope) {
         AiModelEffectiveConfig config = configResolver.effectiveConfig(scope == null ? AiModelScope.TEXT_GENERATION : scope);
         if (!config.hasApiKey()) {
@@ -157,24 +133,21 @@ public class OpenAiCompatibleProvider implements AiProvider {
         }
         AiIntentAnalysis intent = analyzeIntent(request, context);
         String prompt = chatUserPrompt(request, context, intent);
-        CompletionResult result = complete(config, List.of(
+        ModelCompletions.Result result = complete(config, List.of(
                 message("system", CHAT_SYSTEM_PROMPT),
                 message("user", prompt)
         ), 0.3);
         return parseChatCompletion(result);
     }
 
-    @Override
     public String providerName() {
         return configResolver.effectiveConfig(AiModelScope.TEXT_GENERATION).provider();
     }
 
-    @Override
     public String model() {
         return configResolver.effectiveConfig(AiModelScope.TEXT_GENERATION).model();
     }
 
-    @Override
     public List<AiCompletion.MemorySignal> extractMemories(String userMessage, String assistantMessage) {
         AiModelEffectiveConfig config = configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION);
         if (!config.hasApiKey()) {
@@ -218,7 +191,7 @@ public class OpenAiCompatibleProvider implements AiProvider {
                 </ASSISTANT_MESSAGE>
                 """.formatted(safeBlock(userMessage, 2000), safeBlock(assistantMessage, 3000));
         try {
-            CompletionResult result = completeJson(config, List.of(
+            ModelCompletions.Result result = completeJson(config, List.of(
                     message("system", "你是 AI-OJ 的学习记忆整理器。只保存用户长期稳定偏好和画像；不要保存算法事实、AI 建议或单次题目分析。只输出 JSON 对象。"),
                     message("user", prompt)
             ), 0.1);
@@ -230,110 +203,23 @@ public class OpenAiCompatibleProvider implements AiProvider {
         }
     }
 
-    @Override
-    public Optional<List<Double>> embed(String input) {
-        AiModelEffectiveConfig embedding = configResolver.effectiveConfig(AiModelScope.EMBEDDING);
-        if (!embedding.enabled() || !embedding.hasApiKey() || input == null || input.isBlank()) {
-            return Optional.empty();
-        }
-        Map<String, Object> body = new HashMap<>();
-        body.put("model", embedding.model());
-        body.put("input", safeBlock(input, 8000));
-        body.put("encoding_format", "float");
-        if (embedding.embeddingDimension() != null && embedding.embeddingDimension() > 0) {
-            body.put("dimensions", embedding.embeddingDimension());
-        }
-        try {
-            String response = restClient.post()
-                    .uri(completionClient.normalizeEmbeddingUrl(embedding.baseUrl()))
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + embedding.apiKey())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .body(String.class);
-            JsonNode node = objectMapper.readTree(response)
-                    .path("data")
-                    .path(0)
-                    .path("embedding");
-            if (!node.isArray()) {
-                return Optional.empty();
-            }
-            List<Double> values = new ArrayList<>();
-            node.forEach(item -> values.add(item.asDouble(0.0)));
-            return values.isEmpty() ? Optional.empty() : Optional.of(values);
-        } catch (Exception ex) {
-            AiFailureMetrics.incrementEmbeddingFailure();
-            log.error("embedding request failed; continuing without dense vector", ex);
-            return Optional.empty();
-        }
-    }
-
-    private CompletionResult complete(AiModelEffectiveConfig config, List<Map<String, String>> messages, double temperature) {
+    private ModelCompletions.Result complete(AiModelEffectiveConfig config, List<Map<String, String>> messages, double temperature) {
         return complete(config, messages, temperature, 0);
     }
 
-    private CompletionResult complete(AiModelEffectiveConfig config, List<Map<String, String>> messages, double temperature, int maxTokens) {
+    private ModelCompletions.Result complete(AiModelEffectiveConfig config, List<Map<String, String>> messages, double temperature, int maxTokens) {
         return completionClient.complete(config, messages, temperature, maxTokens, false);
     }
 
-    private CompletionResult completeJson(AiModelEffectiveConfig config, List<Map<String, String>> messages, double temperature) {
+    private ModelCompletions.Result completeJson(AiModelEffectiveConfig config, List<Map<String, String>> messages, double temperature) {
         return completeJson(config, messages, temperature, 0);
     }
 
-    private CompletionResult completeJson(AiModelEffectiveConfig config, List<Map<String, String>> messages, double temperature, int maxTokens) {
+    private ModelCompletions.Result completeJson(AiModelEffectiveConfig config, List<Map<String, String>> messages, double temperature, int maxTokens) {
         return completionClient.complete(config, messages, temperature, maxTokens, true);
     }
 
-    private AiModelEffectiveConfig inlineConfig(String model, String baseUrl) {
-        AiProperties.DeepSeek deepSeek = properties.getDeepseek();
-        return new AiModelEffectiveConfig(
-                AiModelScope.TEXT_GENERATION,
-                true,
-                false,
-                "INLINE",
-                providerFor(model, baseUrl),
-                baseUrl,
-                "test-key",
-                "",
-                "INLINE",
-                "INLINE",
-                model,
-                true,
-                deepSeek != null && deepSeek.isThinkingEnabled(),
-                deepSeek != null && "max".equalsIgnoreCase(deepSeek.getReasoningEffort()) ? "max" : "high",
-                null,
-                null,
-                null,
-                null,
-                null
-        );
-    }
-
-    private String providerFor(String model, String baseUrl) {
-        if (containsIgnoreCase(model, "deepseek") || containsIgnoreCase(baseUrl, "api.deepseek.com")) {
-            return "deepseek";
-        }
-        if (containsIgnoreCase(model, "kimi") || containsIgnoreCase(baseUrl, "api.moonshot.")) {
-            return "moonshot";
-        }
-        return providerName();
-    }
-
-    private boolean containsIgnoreCase(String value, String needle) {
-        return value != null && needle != null && value.toLowerCase().contains(needle.toLowerCase());
-    }
-
-    Map<String, Object> completionBody(List<Map<String, String>> messages, double temperature, int maxTokens,
-                                       String model, String baseUrl, boolean jsonOutput) {
-        return completionClient.completionBody(messages, temperature, maxTokens, inlineConfig(model, baseUrl), jsonOutput);
-    }
-
-    private String visibleAssistantContent(JsonNode root) {
-        return completionClient.visibleAssistantContent(root);
-    }
-
-    private AiCompletion parseChatCompletion(CompletionResult result) {
+    private AiCompletion parseChatCompletion(ModelCompletions.Result result) {
         try {
             JsonNode root = objectMapper.readTree(extractJson(result.content()));
             String content = text(root, "content");
@@ -356,7 +242,7 @@ public class OpenAiCompatibleProvider implements AiProvider {
         }
     }
 
-    private AiCompletion rawChatCompletion(CompletionResult result) {
+    private AiCompletion rawChatCompletion(ModelCompletions.Result result) {
         return new AiCompletion(result.content(), result.provider(), result.model(), result.promptTokens(), result.completionTokens());
     }
 
@@ -368,7 +254,7 @@ public class OpenAiCompatibleProvider implements AiProvider {
             return fallback;
         }
         try {
-            CompletionResult result = aiCapacityService.call(
+            ModelCompletions.Result result = aiCapacityService.call(
                     AiCapacityService.AiWorkload.INTENT_MEMORY,
                     () -> completeJson(
                             config,

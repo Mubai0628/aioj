@@ -54,7 +54,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ProblemDraftStoreLifecycleTest {
     @Mock
-    private AiProvider aiProvider;
+    private AiModelConfigResolver aiProvider;
     @Mock
     private ProblemDraftMapper problemDraftMapper;
     @Mock

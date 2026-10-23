@@ -3,7 +3,7 @@ package com.aioj.next.ai.domain.embedding;
 import com.aioj.next.ai.domain.AiCapacityService;
 import com.aioj.next.ai.domain.AiModelConfigResolver;
 import com.aioj.next.ai.domain.AiModelScope;
-import com.aioj.next.ai.domain.AiProvider;
+import com.aioj.next.ai.domain.TextEmbeddings;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.AiEmbeddingRequest;
@@ -27,14 +27,14 @@ public class AiEmbeddingService {
     static final int MAX_INPUT_CHARS = 8000;
     private static final Set<String> PURPOSES = Set.of("PROBLEM_INDEX", "PROBLEM_QUERY");
 
-    private final AiProvider aiProvider;
+    private final TextEmbeddings embeddings;
     private final AiCapacityService capacityService;
     private final AiModelConfigResolver configResolver;
     private final MeterRegistry meterRegistry;
 
-    public AiEmbeddingService(AiProvider aiProvider, AiCapacityService capacityService,
+    public AiEmbeddingService(TextEmbeddings embeddings, AiCapacityService capacityService,
                               AiModelConfigResolver configResolver, MeterRegistry meterRegistry) {
-        this.aiProvider = aiProvider;
+        this.embeddings = embeddings;
         this.capacityService = capacityService;
         this.configResolver = configResolver;
         this.meterRegistry = meterRegistry;
@@ -48,7 +48,7 @@ public class AiEmbeddingService {
         String outcome = "unavailable";
         try {
             Optional<List<Double>> vector = capacityService.call(AiCapacityService.AiWorkload.INTENT_MEMORY,
-                    () -> aiProvider.embed(text));
+                    () -> embeddings.embed(text));
             if (vector.isEmpty() || vector.get().isEmpty()) {
                 throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "Embedding provider unavailable");
             }

@@ -5,7 +5,7 @@ import com.aioj.next.ai.domain.AiCapacityService;
 import com.aioj.next.ai.domain.AiModelConfigResolver;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
-import com.aioj.next.ai.domain.AiProvider;
+import com.aioj.next.ai.domain.TextEmbeddings;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.AiEmbeddingRequest;
@@ -23,7 +23,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AiEmbeddingServiceTest {
-    private final AiProvider provider = mock(AiProvider.class);
+    private final TextEmbeddings provider = mock(TextEmbeddings.class);
     private final AiModelConfigResolver configResolver = mock(AiModelConfigResolver.class);
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     private final AiEmbeddingService service = new AiEmbeddingService(provider,

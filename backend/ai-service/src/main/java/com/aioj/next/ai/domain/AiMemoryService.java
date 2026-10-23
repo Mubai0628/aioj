@@ -88,7 +88,7 @@ public class AiMemoryService {
     );
 
     private final AiUserMemoryMapper memoryMapper;
-    private final AiProvider aiProvider;
+    private final PromptChatService promptChat;
     private final AiCapacityService aiCapacityService;
     private final AiRetrievalService retrievalService;
     private final MemoryQualityGate memoryQualityGate;
@@ -100,7 +100,7 @@ public class AiMemoryService {
 
     public AiMemoryService(
             AiUserMemoryMapper memoryMapper,
-            AiProvider aiProvider,
+            PromptChatService promptChat,
             AiCapacityService aiCapacityService,
             AiRetrievalService retrievalService,
             MemoryQualityGate memoryQualityGate,
@@ -111,7 +111,7 @@ public class AiMemoryService {
             AiProperties properties
     ) {
         this.memoryMapper = memoryMapper;
-        this.aiProvider = aiProvider;
+        this.promptChat = promptChat;
         this.aiCapacityService = aiCapacityService;
         this.retrievalService = retrievalService;
         this.memoryQualityGate = memoryQualityGate;
@@ -655,7 +655,7 @@ public class AiMemoryService {
         try {
             addSignals(signals, aiCapacityService.call(
                     AiCapacityService.AiWorkload.INTENT_MEMORY,
-                    () -> aiProvider.extractMemories(userMessage, assistantMessage)
+                    () -> promptChat.extractMemories(userMessage, assistantMessage)
             ));
         } catch (DomainException ex) {
             if (ex.errorCode() == ErrorCode.TOO_MANY_REQUESTS) {

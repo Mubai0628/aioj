@@ -21,13 +21,17 @@ public record CallSettings(boolean thinking, String reasoningEffort, double temp
                                        ProviderCapabilities capabilities) {
         CallProfile profile = request.profile();
         boolean thinking = capabilities.thinks(endpoint, profile, request.thinkingDisabled());
-        int maxTokens = endpoint.maxTokens() == null || endpoint.maxTokens() <= 0
-                ? profile.defaultMaxTokens()
-                : endpoint.maxTokens();
+        int maxTokens = request.maxTokens() != null && request.maxTokens() > 0
+                ? request.maxTokens()
+                : endpoint.maxTokens() == null || endpoint.maxTokens() <= 0
+                        ? profile.defaultMaxTokens()
+                        : endpoint.maxTokens();
         if (thinking) {
             maxTokens = Math.max(maxTokens, CallProfile.MIN_MAX_TOKENS_WHEN_THINKING);
         }
-        double temperature = endpoint.temperature() == null ? profile.defaultTemperature() : endpoint.temperature();
+        double temperature = request.temperature() != null
+                ? request.temperature()
+                : endpoint.temperature() == null ? profile.defaultTemperature() : endpoint.temperature();
         String effort = endpoint.reasoningEffort() != null
                 && "max".equals(endpoint.reasoningEffort().trim().toLowerCase(Locale.ROOT)) ? "max" : "high";
         ResponseFormat format = request.responseFormat();

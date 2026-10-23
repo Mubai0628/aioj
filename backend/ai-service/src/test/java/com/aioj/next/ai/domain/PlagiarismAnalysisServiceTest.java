@@ -16,7 +16,7 @@ import static org.mockito.Mockito.when;
 class PlagiarismAnalysisServiceTest {
     @Test
     void successfulAnalysisRecordsUsageAndKeepsConclusionBounded() {
-        AiProvider provider = mock(AiProvider.class);
+        PromptChatService provider = mock(PromptChatService.class);
         AiQuotaService quotaService = mock(AiQuotaService.class);
         when(provider.chat(any(AiChatRequest.class), any(AiChatContext.class), eq(AiModelScope.REPORT_ANALYSIS)))
                 .thenReturn(new AiCompletion("这是风险线索，需要人工复核。", "mock", "mock-model", 20, 8));
@@ -32,7 +32,7 @@ class PlagiarismAnalysisServiceTest {
 
     @Test
     void providerFailureReturnsStructuredFailedResponse() {
-        AiProvider provider = mock(AiProvider.class);
+        PromptChatService provider = mock(PromptChatService.class);
         AiQuotaService quotaService = mock(AiQuotaService.class);
         when(provider.providerName()).thenReturn("mock");
         when(provider.model()).thenReturn("mock-model");

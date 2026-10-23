@@ -6,7 +6,6 @@ import com.aioj.next.ai.domain.AccountImportParseService;
 import com.aioj.next.ai.domain.AiConversationService;
 import com.aioj.next.ai.domain.AiLearningProfileService;
 import com.aioj.next.ai.domain.AiMemoryService;
-import com.aioj.next.ai.domain.AiProvider;
 import com.aioj.next.ai.domain.AiQuotaService;
 import com.aioj.next.ai.domain.ProblemDraftStore;
 import com.aioj.next.ai.domain.memory.AiMemoryCandidateService;
@@ -24,7 +23,6 @@ import static org.mockito.Mockito.mock;
 
 class AiControllerConstructorInjectionTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withBean(AiProvider.class, () -> mock(AiProvider.class))
             .withBean(AgentChatFacade.class, () -> mock(AgentChatFacade.class))
             .withBean(AiQuotaService.class, () -> mock(AiQuotaService.class))
             .withBean(AccountImportParseService.class, () -> mock(AccountImportParseService.class))

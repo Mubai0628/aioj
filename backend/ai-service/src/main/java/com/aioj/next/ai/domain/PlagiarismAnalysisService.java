@@ -14,13 +14,13 @@ import java.util.stream.Collectors;
 public class PlagiarismAnalysisService {
     private static final int MAX_FRAGMENT_CHARS = 900;
 
-    private final AiProvider aiProvider;
+    private final PromptChatService promptChat;
     private final AiQuotaService aiQuotaService;
     private final AiCapacityService aiCapacityService;
 
-    public PlagiarismAnalysisService(AiProvider aiProvider, AiQuotaService aiQuotaService,
+    public PlagiarismAnalysisService(PromptChatService promptChat, AiQuotaService aiQuotaService,
                                      AiCapacityService aiCapacityService) {
-        this.aiProvider = aiProvider;
+        this.promptChat = promptChat;
         this.aiQuotaService = aiQuotaService;
         this.aiCapacityService = aiCapacityService;
     }
@@ -30,7 +30,7 @@ public class PlagiarismAnalysisService {
         try {
             AiCompletion completion = aiCapacityService.call(
                     AiCapacityService.AiWorkload.BATCH_REPORT,
-                    () -> aiProvider.chat(new AiChatRequest(
+                    () -> promptChat.chat(new AiChatRequest(
                             null,
                             null,
                             buildUserPrompt(request),
@@ -47,8 +47,8 @@ public class PlagiarismAnalysisService {
             return new PlagiarismAnalysisResponse(completion.content(), completion.provider(), completion.model(),
                     completion.promptTokens(), completion.completionTokens(), true, null);
         } catch (RuntimeException ex) {
-            aiQuotaService.record(actorUserId, aiProvider.providerName(), aiProvider.model(), 0, 0, false);
-            return new PlagiarismAnalysisResponse(null, aiProvider.providerName(), aiProvider.model(),
+            aiQuotaService.record(actorUserId, promptChat.providerName(), promptChat.model(), 0, 0, false);
+            return new PlagiarismAnalysisResponse(null, promptChat.providerName(), promptChat.model(),
                     0, 0, false, summarize(ex.getMessage(), 300));
         }
     }
