@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.context;
 
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.ChatMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,10 +24,10 @@ class ContextBudgetAllocatorTest {
     @Test
     void overBudgetDropsOldestRecentTurnsFirst() {
         String longText = "x".repeat(4000); // ~1000 tokens each
-        List<GatewayMessage> turns = List.of(
-                GatewayMessage.user("oldest " + longText),
-                GatewayMessage.assistant("oldest answer " + longText, List.of()),
-                GatewayMessage.user("newest question"));
+        List<ChatMessage> turns = List.of(
+                ChatMessage.user("oldest " + longText),
+                ChatMessage.assistant("oldest answer " + longText, List.of()),
+                ChatMessage.user("newest question"));
         List<ContextSection> sections = List.of(
                 ContextSection.text(ContextSectionType.SYSTEM_POLICY, 10, true, TrustLevel.SYSTEM_POLICY, "sys"),
                 ContextSection.conversation(ContextSectionType.RECENT_TURNS, 40, TrustLevel.USER_PROVIDED, turns, List.of()),
@@ -52,7 +52,7 @@ class ContextBudgetAllocatorTest {
 
     @Test
     void extremeOverflowDropsWholeRecentSectionAndWarns() {
-        List<GatewayMessage> turns = List.of(GatewayMessage.user("x".repeat(8000)));
+        List<ChatMessage> turns = List.of(ChatMessage.user("x".repeat(8000)));
         List<ContextSection> sections = List.of(
                 ContextSection.text(ContextSectionType.SYSTEM_POLICY, 10, true, TrustLevel.SYSTEM_POLICY, "sys"),
                 ContextSection.conversation(ContextSectionType.RECENT_TURNS, 40, TrustLevel.USER_PROVIDED, turns, List.of()),
@@ -65,10 +65,10 @@ class ContextBudgetAllocatorTest {
     @Test
     void overBudgetDropsFocusBeforeTrimmingRecentTurns() {
         String longText = "x".repeat(4000); // ~1000 tokens each
-        List<GatewayMessage> turns = List.of(
-                GatewayMessage.user("oldest " + longText),
-                GatewayMessage.assistant("oldest answer " + longText, List.of()),
-                GatewayMessage.user("newest question"));
+        List<ChatMessage> turns = List.of(
+                ChatMessage.user("oldest " + longText),
+                ChatMessage.assistant("oldest answer " + longText, List.of()),
+                ChatMessage.user("newest question"));
         List<ContextSection> sections = List.of(
                 ContextSection.text(ContextSectionType.SYSTEM_POLICY, 10, true, TrustLevel.SYSTEM_POLICY, "sys"),
                 ContextSection.conversation(ContextSectionType.RECENT_TURNS, 40, TrustLevel.USER_PROVIDED, turns, List.of()),

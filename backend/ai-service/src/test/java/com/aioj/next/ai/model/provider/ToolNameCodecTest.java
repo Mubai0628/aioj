@@ -1,4 +1,4 @@
-package com.aioj.next.ai.agent.tool;
+package com.aioj.next.ai.model.provider;
 
 import org.junit.jupiter.api.Test;
 

@@ -1,9 +1,10 @@
 package com.aioj.next.ai.agent.telemetry;
 
-import com.aioj.next.ai.agent.model.CallProfile;
-import com.aioj.next.ai.agent.model.GatewayRequest;
-import com.aioj.next.ai.agent.model.GatewayResponse;
-import com.aioj.next.ai.agent.model.ModelGateway;
+import com.aioj.next.ai.model.api.CallProfile;
+import com.aioj.next.ai.model.api.ModelRequest;
+import com.aioj.next.ai.agent.TestModelResponses;
+import com.aioj.next.ai.model.api.ModelResponse;
+import com.aioj.next.ai.model.api.ModelClient;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import tools.jackson.databind.ObjectMapper;
@@ -21,19 +22,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ContestAssistanceIntentJudgeTest {
-    private final ModelGateway modelGateway = mock(ModelGateway.class);
+    private final ModelClient modelClient = mock(ModelClient.class);
     private final AiModelEffectiveConfig config = mock(AiModelEffectiveConfig.class);
     private ContestAssistanceIntentJudge judge;
 
     @BeforeEach
     void setUp() {
-        judge = new ContestAssistanceIntentJudge(modelGateway, new ObjectMapper());
-        when(modelGateway.configFor(AiModelScope.INTENT)).thenReturn(config);
+        judge = new ContestAssistanceIntentJudge(modelClient, new ObjectMapper());
     }
 
     @Test
     void privateQuestionWinsWhenBothFlagsAreReturnedAndRecordsProviderUsage() {
-        when(modelGateway.call(eq(config), any(GatewayRequest.class))).thenReturn(response(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(response(
                 "{\"privateContestQuestion\":true,\"publicFullCodeRequest\":true}"));
 
         ContestAssistanceIntentJudge.Judgement judgement = judge.assess("please solve it", List.of(
@@ -50,7 +50,7 @@ class ContestAssistanceIntentJudgeTest {
 
     @Test
     void publicIdeaRequestIsNotCountedAndOnlySanitizedMetadataIsSent() {
-        when(modelGateway.call(eq(config), any(GatewayRequest.class))).thenReturn(response(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(response(
                 "{\"privateContestQuestion\":false,\"publicFullCodeRequest\":false}"));
 
         ContestAssistanceIntentJudge.Judgement judgement = judge.assess("explain the idea", List.of(
@@ -58,8 +58,8 @@ class ContestAssistanceIntentJudgeTest {
         ));
 
         assertThat(judgement.interceptType()).isEqualTo(ContestAssistanceIntentJudge.InterceptType.NONE);
-        ArgumentCaptor<GatewayRequest> request = ArgumentCaptor.forClass(GatewayRequest.class);
-        verify(modelGateway).call(eq(config), request.capture());
+        ArgumentCaptor<ModelRequest> request = ArgumentCaptor.forClass(ModelRequest.class);
+        verify(modelClient).complete(request.capture(), any());
         assertThat(request.getValue().profile()).isEqualTo(CallProfile.STRUCTURED_SMALL);
         String prompt = request.getValue().messages().get(1).content();
         assertThat(prompt).contains("visibility=PUBLIC");
@@ -68,7 +68,7 @@ class ContestAssistanceIntentJudgeTest {
 
     @Test
     void publicFullCodeRequestIsCountedOnceForTheTurn() {
-        when(modelGateway.call(eq(config), any(GatewayRequest.class))).thenReturn(response(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(response(
                 "{\"privateContestQuestion\":false,\"publicFullCodeRequest\":true}"));
 
         ContestAssistanceIntentJudge.Judgement judgement = judge.assess("give me complete code", List.of(
@@ -82,7 +82,7 @@ class ContestAssistanceIntentJudgeTest {
 
     @Test
     void invalidOrUnavailableJudgementDoesNotCreateAnInterception() {
-        when(modelGateway.call(eq(config), any(GatewayRequest.class)))
+        when(modelClient.complete(any(ModelRequest.class), any()))
                 .thenThrow(new RuntimeException("provider unavailable"));
 
         ContestAssistanceIntentJudge.Judgement judgement = judge.assess("give me complete code", List.of(
@@ -94,7 +94,7 @@ class ContestAssistanceIntentJudgeTest {
         assertThat(judgement.usage()).isNull();
     }
 
-    private GatewayResponse response(String content) {
-        return new GatewayResponse(content, List.of(), "stop", 11, 7, 0, "deepseek", "deepseek-intent");
+    private ModelResponse response(String content) {
+        return TestModelResponses.response(content, List.of(), "stop", 11, 7, 0, "deepseek", "deepseek-intent");
     }
 }

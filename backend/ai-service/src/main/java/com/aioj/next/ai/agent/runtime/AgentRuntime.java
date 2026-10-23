@@ -6,16 +6,20 @@ import com.aioj.next.ai.agent.context.ContextSection;
 import com.aioj.next.ai.agent.context.ContextSectionRenderer;
 import com.aioj.next.ai.agent.guard.ContextFingerprintGuard;
 import com.aioj.next.ai.agent.guard.GuardVerdict;
-import com.aioj.next.ai.agent.model.CallProfile;
-import com.aioj.next.ai.agent.model.GatewayMessage;
-import com.aioj.next.ai.agent.model.GatewayRequest;
-import com.aioj.next.ai.agent.model.GatewayResponse;
-import com.aioj.next.ai.agent.model.GatewayToolCall;
-import com.aioj.next.ai.agent.model.ModelGateway;
-import com.aioj.next.ai.agent.model.ModelUsage;
-import com.aioj.next.ai.agent.model.ToolChoiceMode;
-import com.aioj.next.ai.agent.model.ThinkingModeUnavailableException;
-import com.aioj.next.ai.agent.model.UsageMeter;
+import com.aioj.next.ai.model.api.CallProfile;
+import com.aioj.next.ai.model.api.ChatMessage;
+import com.aioj.next.ai.model.api.ModelRequest;
+import com.aioj.next.ai.model.api.ModelResponse;
+import com.aioj.next.ai.model.api.ToolCall;
+import com.aioj.next.ai.model.api.ToolSpec;
+import com.aioj.next.ai.model.api.CallOptions;
+import com.aioj.next.ai.model.api.ModelClient;
+import com.aioj.next.ai.model.api.ModelEndpointConfig;
+import com.aioj.next.ai.model.api.ProviderCapabilities;
+import com.aioj.next.ai.agent.runtime.ProviderUsage;
+import com.aioj.next.ai.model.api.ToolChoice;
+import com.aioj.next.ai.model.api.ModelErrorKind;
+import com.aioj.next.ai.model.api.ModelException;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.tool.ToolBroker;
 import com.aioj.next.ai.agent.tool.ToolDescriptor;
@@ -23,7 +27,6 @@ import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolRegistry;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.config.AiProperties;
-import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.persistence.entity.AiAgentRunEntity;
 import com.aioj.next.common.error.DomainException;
@@ -78,7 +81,7 @@ public class AgentRuntime {
 
     private static final Logger log = LoggerFactory.getLogger(AgentRuntime.class);
 
-    private final ModelGateway modelGateway;
+    private final ModelClient modelClient;
     private final ToolRegistry toolRegistry;
     private final ToolBroker toolBroker;
     private final ContextSectionRenderer renderer;
@@ -88,11 +91,11 @@ public class AgentRuntime {
     private final ContextFingerprintGuard contextGuard;
     private final ExecutorService boundedModelExecutor;
 
-    public AgentRuntime(ModelGateway modelGateway, ToolRegistry toolRegistry, ToolBroker toolBroker,
+    public AgentRuntime(ModelClient modelClient, ToolRegistry toolRegistry, ToolBroker toolBroker,
                         ContextSectionRenderer renderer, ContextManifestService manifestService,
                         AgentRunStateMachine stateMachine, ObjectMapper objectMapper,
                         ContextFingerprintGuard contextGuard, AiProperties aiProperties) {
-        this.modelGateway = modelGateway;
+        this.modelClient = modelClient;
         this.toolRegistry = toolRegistry;
         this.toolBroker = toolBroker;
         this.renderer = renderer;
@@ -118,7 +121,7 @@ public class AgentRuntime {
             /** P3-4: the L3 message-layer verdict; its problems seed the context layer's constrained set. */
             GuardVerdict messageLayerVerdict,
             /** Optional observer for one actual provider invocation; it must never affect the loop. */
-            Consumer<ModelUsage> usageObserver,
+            Consumer<ProviderUsage> usageObserver,
             /** DB-backed model scope; existing tutor runs default to TEXT_GENERATION. */
             AiModelScope modelScope,
             /** Trusted resource bindings injected into tool context, never model arguments. */
@@ -139,7 +142,7 @@ public class AgentRuntime {
                                Set<String> grantedScopes, List<ContextSection> sections, boolean requireToolCall,
                                String outputMode, CallProfile profile, LoopBudget budget,
                                ContestPolicyView contestPolicy, GuardVerdict messageLayerVerdict,
-                               Consumer<ModelUsage> usageObserver) {
+                               Consumer<ProviderUsage> usageObserver) {
             this(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections, requireToolCall,
                     outputMode, profile, budget, contestPolicy, messageLayerVerdict, usageObserver,
                     AiModelScope.TEXT_GENERATION, Map.of(), false, AgentCompletionPolicy.none());
@@ -263,7 +266,8 @@ public class AgentRuntime {
     }
 
     public AgentRunResult run(AgentRunRequest spec) {
-        AiModelEffectiveConfig config = modelGateway.configFor(spec.modelScope());
+        ModelEndpointConfig config = modelClient.resolve(spec.modelScope().name());
+        ProviderCapabilities capabilities = modelClient.capabilities(config);
         List<ToolDescriptor> tools = toolRegistry.descriptorsForScopes(spec.grantedScopes());
         // C5 (frozen): problem.search only exists for contest participants — its search
         // space is the running-contest snapshot set. Non-participants never see the tool.
@@ -275,7 +279,7 @@ public class AgentRuntime {
         }
         LoopBudget budget = spec.budget();
         AiAgentRunEntity run = stateMachine.start(spec.turnId(), spec.conversationId(), spec.userId(),
-                config.provider(), config.model(), spec.policySnapshotId(), spec.outputMode(), budget);
+                config.provider().configName(), config.model(), spec.policySnapshotId(), spec.outputMode(), budget);
         stateMachine.bindWorkspace(run.getId(), spec.serverBindings().get("workspaceId"), budget.maxRunDuration());
         UsageMeter usage = new UsageMeter();
         List<String> warnings = new ArrayList<>();
@@ -294,13 +298,13 @@ public class AgentRuntime {
         boolean toolBudgetExhausted = false;
         boolean completionToolSucceeded = false;
         String finalContent = null;
-        String provider = config.provider();
+        String provider = config.provider().configName();
         String model = config.model();
         boolean fallbackAllowed = spec.allowStandardToolFallback() || spec.profile() == CallProfile.PROBLEM_DRAFT;
-        boolean standardFallback = fallbackAllowed && !modelGateway.usesThinking(config, spec.profile());
+        boolean standardFallback = fallbackAllowed && !capabilities.thinks(config, spec.profile(), false);
         AgentExecutionMode executionMode = standardFallback
                 ? AgentExecutionMode.STANDARD_TOOL_FALLBACK
-                : (modelGateway.usesThinking(config, spec.profile())
+                : (capabilities.thinks(config, spec.profile(), false)
                     ? AgentExecutionMode.THINKING
                     : AgentExecutionMode.STANDARD);
         if (standardFallback) {
@@ -308,7 +312,7 @@ public class AgentRuntime {
         }
         long deadlineNanos = deadlineNanos(budget);
 
-        List<GatewayMessage> messages = new ArrayList<>(renderer.render(spec.sections()));
+        List<ChatMessage> messages = new ArrayList<>(renderer.render(spec.sections()));
         int bootstrapMessageCount = messages.size();
         // L3 second layer state (§5.3, P3-4): problems already constrained by the
         // message layer (or an earlier step of this layer) are not re-injected.
@@ -323,7 +327,10 @@ public class AgentRuntime {
         }
         String toolDefinitionsHash = ContextManifestService.sha256(
                 tools.stream().map(ToolDescriptor::name).collect(Collectors.joining(",")));
-        boolean nativeRequired = modelGateway.capabilities(config).toolChoiceRequiredNative();
+        boolean nativeRequired = capabilities.toolChoiceRequiredNative();
+        List<ToolSpec> toolSpecs = toolSpecs(tools);
+        CallOptions callOptions = CallOptions.of("agent." + spec.profile().name().toLowerCase(java.util.Locale.ROOT))
+                .withCorrelation(spec.turnId(), spec.userId());
         Map<String, String> toolBindings = new java.util.LinkedHashMap<>(spec.serverBindings());
         toolBindings.put("agentRunId", String.valueOf(run.getId()));
         ToolExecutionContext toolContext = new ToolExecutionContext(spec.userId(), spec.conversationId(),
@@ -336,19 +343,19 @@ public class AgentRuntime {
                 ensureBeforeDeadline(deadlineNanos);
                 steps = step;
                 stateMachine.advance(run.getId(), AgentRunStateMachine.STATUS_GENERATING);
-                ToolChoiceMode choice = spec.requireToolCall() && !anyToolCallExecuted && nativeRequired
-                        ? ToolChoiceMode.REQUIRED
-                        : ToolChoiceMode.AUTO;
+                ToolChoice choice = spec.requireToolCall() && !anyToolCallExecuted && nativeRequired
+                        ? ToolChoice.REQUIRED
+                        : ToolChoice.AUTO;
                 contestGuardVerdict = applyContextLayerGuard(spec, contestPolicy, constrainedProblemIds,
                         contestGuardVerdict, messages, bootstrapMessageCount, step);
                 boolean draftGateStillOpen = spec.completionPolicy().isRequired() && !completionToolSucceeded;
                 CallProfile loopProfile = emptyRecoveryUsed && !draftGateStillOpen
                         ? CallProfile.RECOVERY_ANSWER : spec.profile();
-                GatewayRequest request = new GatewayRequest(List.copyOf(messages), tools, choice, loopProfile);
+                ModelRequest request = modelRequest(spec, config, messages, toolSpecs, choice, loopProfile);
                 recordManifest(spec, run.getId(), ++manifestSeq, config, request, toolDefinitionsHash, warnings);
-                ModelCallOutcome modelCall = callModel(config, request, standardFallback, fallbackAllowed,
+                ModelCallOutcome modelCall = callModel(request, callOptions, standardFallback, fallbackAllowed,
                         remainingDuration(deadlineNanos));
-                GatewayResponse response = modelCall.response();
+                ModelResponse response = modelCall.response();
                 if (modelCall.fallbackActivated()) {
                     standardFallback = true;
                     executionMode = AgentExecutionMode.STANDARD_TOOL_FALLBACK;
@@ -359,7 +366,7 @@ public class AgentRuntime {
                 usage.add(response);
                 observeUsage(spec, response);
                 if (response.provider() != null) {
-                    provider = response.provider();
+                    provider = response.provider().configName();
                 }
                 if (response.model() != null) {
                     model = response.model();
@@ -378,7 +385,7 @@ public class AgentRuntime {
                                 }
                                 log.warn("Agent run got an empty pre-finalization completion turn={} run={} step={} finishReason={}",
                                         spec.turnId(), run.getId(), step, response.finishReason());
-                                messages.add(GatewayMessage.system(completionRecoveryInstruction(
+                                messages.add(ChatMessage.system(completionRecoveryInstruction(
                                         spec.completionPolicy().requiredSuccessfulToolName(), true)));
                                 continue;
                             }
@@ -399,14 +406,14 @@ public class AgentRuntime {
                         if (!warnings.contains("premature_completion_recovered")) {
                             warnings.add("premature_completion_recovered");
                         }
-                        messages.add(GatewayMessage.system(completionRecoveryInstruction(
+                        messages.add(ChatMessage.system(completionRecoveryInstruction(
                                 spec.completionPolicy().requiredSuccessfulToolName(), false)));
                         continue;
                     }
                     if (spec.requireToolCall() && !anyToolCallExecuted && !simulatedRetryUsed && !nativeRequired) {
                         simulatedRetryUsed = true;
-                        messages.add(GatewayMessage.assistant(response.content(), response.reasoningContent(), List.of()));
-                        messages.add(GatewayMessage.system(
+                        messages.add(ChatMessage.assistant(response.content(), response.reasoningContent(), List.of()));
+                        messages.add(ChatMessage.system(
                                 "Server policy requires at least one relevant tool call before the final answer "
                                         + "for this turn. Call the most relevant tool now."));
                         continue;
@@ -420,7 +427,7 @@ public class AgentRuntime {
                             warnings.add("empty_completion_recovery");
                             log.warn("Agent run got an empty completion turn={} run={} step={} finishReason={}",
                                     spec.turnId(), run.getId(), step, response.finishReason());
-                            messages.add(GatewayMessage.system(
+                            messages.add(ChatMessage.system(
                                     "Your previous reply was empty. Provide the complete final answer "
                                             + "to the user now, in the user's language."));
                             continue;
@@ -432,9 +439,9 @@ public class AgentRuntime {
                     break;
                 }
 
-                messages.add(GatewayMessage.assistant(response.content(), response.reasoningContent(), response.toolCalls()));
+                messages.add(ChatMessage.assistant(response.content(), response.reasoningContent(), response.toolCalls()));
                 stateMachine.advance(run.getId(), AgentRunStateMachine.STATUS_TOOL_CALLING);
-                for (GatewayToolCall call : response.toolCalls()) {
+                for (ToolCall call : response.toolCalls()) {
                     if (toolCallCount >= budget.maxToolCalls()) {
                         toolBudgetExhausted = true;
                         break;
@@ -442,11 +449,11 @@ public class AgentRuntime {
                     ensureBeforeDeadline(deadlineNanos);
                     if (budget.categoryExhausted(call.name(), searchCalls, fetchCalls,
                             sandboxCalls, testcaseGenerations, testcasePackageRuns)) {
-                        messages.add(GatewayMessage.toolResult(call.callId(), budgetExceededPayload(call.name())));
+                        messages.add(ChatMessage.toolResult(call.id(), budgetExceededPayload(call.name())));
                         continue;
                     }
                     ToolResult<String> result = toolBroker.execute(toolContext, run.getId(), ++toolSeq,
-                            call.callId(), call.name(), call.argumentsJson(), remainingDuration(deadlineNanos));
+                            call.id(), call.name(), call.argumentsJson(), remainingDuration(deadlineNanos));
                     toolCallCount++;
                     anyToolCallExecuted = true;
                     if (result.ok() && spec.completionPolicy().isRequired()
@@ -468,7 +475,7 @@ public class AgentRuntime {
                         default -> {
                         }
                     }
-                    messages.add(GatewayMessage.toolResult(call.callId(), result.data()));
+                    messages.add(ChatMessage.toolResult(call.id(), result.data()));
                 }
                 stateMachine.recordProgress(run.getId(), step, toolCallCount);
                 if (toolBudgetExhausted) {
@@ -485,7 +492,7 @@ public class AgentRuntime {
                 }
                 if (spec.completionPolicy().isRequired() && !completionToolSucceeded) {
                     warnings.add("required_completion_tool_missing");
-                    messages.add(GatewayMessage.system(
+                    messages.add(ChatMessage.system(
                             "The controlled run budget ended before the required tool "
                                     + spec.completionPolicy().requiredSuccessfulToolName()
                                     + " succeeded. Do not continue designing the problem and do not expose private reasoning. "
@@ -494,12 +501,12 @@ public class AgentRuntime {
                 stateMachine.advance(run.getId(), AgentRunStateMachine.STATUS_GENERATING);
                 contestGuardVerdict = applyContextLayerGuard(spec, contestPolicy, constrainedProblemIds,
                         contestGuardVerdict, messages, bootstrapMessageCount, steps + 1);
-                GatewayRequest finalRequest = new GatewayRequest(List.copyOf(messages), List.of(),
-                        ToolChoiceMode.AUTO, CallProfile.RECOVERY_ANSWER);
+                ModelRequest finalRequest = modelRequest(spec, config, messages, List.of(),
+                        ToolChoice.AUTO, CallProfile.RECOVERY_ANSWER);
                 recordManifest(spec, run.getId(), ++manifestSeq, config, finalRequest, toolDefinitionsHash, warnings);
-                ModelCallOutcome finalModelCall = callModel(config, finalRequest, standardFallback, fallbackAllowed,
+                ModelCallOutcome finalModelCall = callModel(finalRequest, callOptions, standardFallback, fallbackAllowed,
                         remainingDuration(deadlineNanos));
-                GatewayResponse finalResponse = finalModelCall.response();
+                ModelResponse finalResponse = finalModelCall.response();
                 if (finalModelCall.fallbackActivated()) {
                     standardFallback = true;
                     executionMode = AgentExecutionMode.STANDARD_TOOL_FALLBACK;
@@ -510,7 +517,7 @@ public class AgentRuntime {
                 usage.add(finalResponse);
                 observeUsage(spec, finalResponse);
                 if (finalResponse.provider() != null) {
-                    provider = finalResponse.provider();
+                    provider = finalResponse.provider().configName();
                 }
                 if (finalResponse.model() != null) {
                     model = finalResponse.model();
@@ -565,7 +572,7 @@ public class AgentRuntime {
      */
     private GuardVerdict applyContextLayerGuard(AgentRunRequest spec, ContestPolicyView contestPolicy,
                                                 Set<Long> constrainedProblemIds, GuardVerdict mergedVerdict,
-                                                List<GatewayMessage> messages, int bootstrapMessageCount,
+                                                List<ChatMessage> messages, int bootstrapMessageCount,
                                                 int agentStep) {
         ContextFingerprintGuard.Evaluation evaluation = contextGuard.evaluate(spec.turnId(), spec.userId(),
                 spec.conversationId(), contestPolicy, constrainedProblemIds, messages, bootstrapMessageCount, agentStep);
@@ -573,34 +580,34 @@ public class AgentRuntime {
             return mergedVerdict;
         }
         if (evaluation.injectionText() != null) {
-            messages.add(GatewayMessage.system(evaluation.injectionText()));
+            messages.add(ChatMessage.system(evaluation.injectionText()));
             constrainedProblemIds.addAll(evaluation.newlyMatchedProblemIds());
         }
         return mergedVerdict == null ? evaluation.verdict() : mergedVerdict.mergedWith(evaluation.verdict());
     }
 
-    private void observeUsage(AgentRunRequest spec, GatewayResponse response) {
+    private void observeUsage(AgentRunRequest spec, ModelResponse response) {
         if (spec.usageObserver() == null) {
             return;
         }
         try {
-            spec.usageObserver().accept(ModelUsage.from(response));
+            spec.usageObserver().accept(ProviderUsage.from(response));
         } catch (RuntimeException ex) {
             // Statistical observation must never change the Agent's control flow.
             log.warn("agent model-usage observer failed turn={} error={}", spec.turnId(), ex.toString());
         }
     }
 
-    private ModelCallOutcome callModel(AiModelEffectiveConfig config, GatewayRequest request,
+    private ModelCallOutcome callModel(ModelRequest request, CallOptions options,
                                        boolean standardFallback, boolean fallbackAllowed,
                                        Duration remainingRunTime) {
         if (remainingRunTime == null) {
-            return callModelUnbounded(config, request, standardFallback, fallbackAllowed);
+            return callModelUnbounded(request, options, standardFallback, fallbackAllowed);
         }
         Future<ModelCallOutcome> future;
         try {
             future = boundedModelExecutor.submit(() ->
-                    callModelUnbounded(config, request, standardFallback, fallbackAllowed));
+                    callModelUnbounded(request, options, standardFallback, fallbackAllowed));
         } catch (RejectedExecutionException ex) {
             throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "AI model capacity saturated; retry later");
         }
@@ -622,21 +629,35 @@ public class AgentRuntime {
         }
     }
 
-    private ModelCallOutcome callModelUnbounded(AiModelEffectiveConfig config, GatewayRequest request,
+    private ModelCallOutcome callModelUnbounded(ModelRequest request, CallOptions options,
                                                 boolean standardFallback, boolean fallbackAllowed) {
         if (standardFallback) {
-            return new ModelCallOutcome(modelGateway.callWithoutThinking(config, request), false);
+            return new ModelCallOutcome(modelClient.complete(request.withThinkingDisabled(), options), false);
         }
         try {
-            return new ModelCallOutcome(modelGateway.call(config, request), false);
-        } catch (ThinkingModeUnavailableException ex) {
-            if (!fallbackAllowed) {
+            return new ModelCallOutcome(modelClient.complete(request, options), false);
+        } catch (ModelException ex) {
+            if (ex.kind() != ModelErrorKind.THINKING_UNAVAILABLE || !fallbackAllowed) {
                 throw ex;
             }
             // Exactly one controlled downgrade. The original provider body and
             // reasoning are neither logged nor persisted.
-            return new ModelCallOutcome(modelGateway.callWithoutThinking(config, request), true);
+            return new ModelCallOutcome(modelClient.complete(request.withThinkingDisabled(), options), true);
         }
+    }
+
+    /** Every call of one run goes to the endpoint resolved at its start. */
+    private static ModelRequest modelRequest(AgentRunRequest spec, ModelEndpointConfig endpoint,
+                                             List<ChatMessage> messages, List<ToolSpec> tools, ToolChoice choice,
+                                             CallProfile profile) {
+        return ModelRequest.builder(spec.modelScope().name()).endpoint(endpoint).messages(List.copyOf(messages))
+                .tools(tools).toolChoice(choice).profile(profile).build();
+    }
+
+    private static List<ToolSpec> toolSpecs(List<ToolDescriptor> tools) {
+        return tools.stream()
+                .map(descriptor -> new ToolSpec(descriptor.name(), descriptor.description(), descriptor.inputSchema()))
+                .toList();
     }
 
     private long deadlineNanos(LoopBudget budget) {
@@ -670,7 +691,7 @@ public class AgentRuntime {
         }
     }
 
-    private record ModelCallOutcome(GatewayResponse response, boolean fallbackActivated) {
+    private record ModelCallOutcome(ModelResponse response, boolean fallbackActivated) {
     }
 
     @PreDestroy
@@ -691,11 +712,11 @@ public class AgentRuntime {
                 new ThreadPoolExecutor.AbortPolicy());
     }
 
-    private void recordManifest(AgentRunRequest spec, long runId, int callSeq, AiModelEffectiveConfig config,
-                                GatewayRequest request, String toolDefinitionsHash, List<String> warnings) {
+    private void recordManifest(AgentRunRequest spec, long runId, int callSeq, ModelEndpointConfig config,
+                                ModelRequest request, String toolDefinitionsHash, List<String> warnings) {
         StringBuilder contextMaterial = new StringBuilder();
-        for (GatewayMessage message : request.messages()) {
-            contextMaterial.append(message.role()).append('\n');
+        for (ChatMessage message : request.messages()) {
+            contextMaterial.append(message.role().wireName()).append('\n');
             if (message.content() != null) {
                 contextMaterial.append(message.content());
             }

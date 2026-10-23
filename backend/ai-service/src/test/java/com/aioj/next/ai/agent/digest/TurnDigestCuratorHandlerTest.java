@@ -1,9 +1,10 @@
 package com.aioj.next.ai.agent.digest;
 
 import com.aioj.next.ai.agent.memory.MemoryCandidateIngestionService;
-import com.aioj.next.ai.agent.model.GatewayRequest;
-import com.aioj.next.ai.agent.model.GatewayResponse;
-import com.aioj.next.ai.agent.model.ModelGateway;
+import com.aioj.next.ai.model.api.ModelRequest;
+import com.aioj.next.ai.agent.TestModelResponses;
+import com.aioj.next.ai.model.api.ModelResponse;
+import com.aioj.next.ai.model.api.ModelClient;
 import com.aioj.next.ai.agent.profile.ProfileAggregateJobProducer;
 import com.aioj.next.ai.agent.profile.ProfileSignalIngestionService;
 import com.aioj.next.ai.config.AiProperties;
@@ -42,19 +43,18 @@ class TurnDigestCuratorHandlerTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AiTurnDigestMapper digestMapper = mock(AiTurnDigestMapper.class);
     private final AiConversationService conversationService = mock(AiConversationService.class);
-    private final ModelGateway modelGateway = mock(ModelGateway.class);
+    private final ModelClient modelClient = mock(ModelClient.class);
     private final com.aioj.next.ai.agent.asyncjob.AgentAsyncJobService jobService =
             mock(com.aioj.next.ai.agent.asyncjob.AgentAsyncJobService.class);
     private final MemoryCandidateIngestionService memoryIngestion = mock(MemoryCandidateIngestionService.class);
     private final ProfileSignalIngestionService profileIngestion = mock(ProfileSignalIngestionService.class);
     private final ProfileAggregateJobProducer aggregateProducer = mock(ProfileAggregateJobProducer.class);
     private final TurnDigestCuratorHandler handler = new TurnDigestCuratorHandler(
-            digestMapper, conversationService, modelGateway, jobService, objectMapper, new AiProperties(),
+            digestMapper, conversationService, modelClient, jobService, objectMapper, new AiProperties(),
             memoryIngestion, profileIngestion, aggregateProducer);
 
     @BeforeEach
     void setUp() {
-        lenient().when(modelGateway.configFor(AiModelScope.AGENT_CURATOR)).thenReturn(config());
         lenient().when(memoryIngestion.ingest(any(), any(), any(), anyList(), any(), any()))
                 .thenReturn(new MemoryCandidateIngestionService.IngestResult(0, 0, 0, 0));
         lenient().when(profileIngestion.recordChatTurnSignals(any(), any(), anyList(), anyString())).thenReturn(0);
@@ -65,7 +65,7 @@ class TurnDigestCuratorHandlerTest {
         when(digestMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(stubRow()));
         when(conversationService.getMessage(7L, 100L)).thenReturn(message(100L, "讲一下第二道异或题"));
         when(conversationService.getMessage(7L, 200L)).thenReturn(message(200L, "这题用异或前缀和……"));
-        when(modelGateway.call(any(), any(GatewayRequest.class))).thenReturn(new GatewayResponse(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(TestModelResponses.response(
                 """
                 {
                   "dialogueAct": "NEW_REQUEST",
@@ -156,7 +156,7 @@ class TurnDigestCuratorHandlerTest {
         for (int i = 0; i < 9; i++) {
             signalNodes.addObject().put("signal", "观察" + i);
         }
-        when(modelGateway.call(any(), any(GatewayRequest.class))).thenReturn(new GatewayResponse(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(TestModelResponses.response(
                 curated.toString(), List.of(), "stop", 500, 120, 0, "deepseek", "deepseek-v4-pro"));
 
         handler.handle(job("{\"turnId\":\"t-1\",\"conversationId\":\"c-1\",\"userId\":7}"));
@@ -180,7 +180,7 @@ class TurnDigestCuratorHandlerTest {
         when(digestMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(stubRow()));
         when(conversationService.getMessage(7L, 100L)).thenReturn(message(100L, "u"));
         when(conversationService.getMessage(7L, 200L)).thenReturn(message(200L, "a"));
-        when(modelGateway.call(any(), any(GatewayRequest.class))).thenReturn(new GatewayResponse(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(TestModelResponses.response(
                 """
                 {
                   "summary": "摘要",
@@ -217,7 +217,7 @@ class TurnDigestCuratorHandlerTest {
         when(digestMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(stubRow()));
         when(conversationService.getMessage(7L, 100L)).thenReturn(message(100L, "u"));
         when(conversationService.getMessage(7L, 200L)).thenReturn(message(200L, "a"));
-        when(modelGateway.call(any(), any(GatewayRequest.class))).thenReturn(new GatewayResponse(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(TestModelResponses.response(
                 """
                 {
                   "summary": "摘要",
@@ -241,7 +241,7 @@ class TurnDigestCuratorHandlerTest {
         when(digestMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(stubRow()));
         when(conversationService.getMessage(7L, 100L)).thenReturn(message(100L, "u"));
         when(conversationService.getMessage(7L, 200L)).thenReturn(message(200L, "a"));
-        when(modelGateway.call(any(), any(GatewayRequest.class))).thenReturn(new GatewayResponse(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(TestModelResponses.response(
                 """
                 {
                   "summary": "摘要",
@@ -263,7 +263,7 @@ class TurnDigestCuratorHandlerTest {
         when(digestMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(stubRow()));
         when(conversationService.getMessage(7L, 100L)).thenReturn(message(100L, "u"));
         when(conversationService.getMessage(7L, 200L)).thenReturn(message(200L, "a"));
-        when(modelGateway.call(any(), any(GatewayRequest.class))).thenReturn(new GatewayResponse(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(TestModelResponses.response(
                 """
                 {
                   "summary": "摘要",
@@ -284,7 +284,7 @@ class TurnDigestCuratorHandlerTest {
         when(digestMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(stubRow()));
         when(conversationService.getMessage(7L, 100L)).thenReturn(message(100L, "u"));
         when(conversationService.getMessage(7L, 200L)).thenReturn(message(200L, "a"));
-        when(modelGateway.call(any(), any(GatewayRequest.class))).thenReturn(new GatewayResponse(
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(TestModelResponses.response(
                 """
                 {
                   "summary": "摘要",
@@ -308,7 +308,7 @@ class TurnDigestCuratorHandlerTest {
 
         handler.handle(job("{\"turnId\":\"t-1\",\"conversationId\":\"c-1\",\"userId\":7}"));
 
-        verify(modelGateway, never()).call(any(), any());
+        verify(modelClient, never()).complete(any(), any());
         verify(digestMapper, never()).insert(any(AiTurnDigestEntity.class));
         verify(memoryIngestion, never()).ingest(any(), any(), any(), anyList(), any(), any());
         verify(profileIngestion, never()).recordChatTurnSignals(any(), any(), anyList(), anyString());
@@ -319,8 +319,8 @@ class TurnDigestCuratorHandlerTest {
         when(digestMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(stubRow()));
         when(conversationService.getMessage(7L, 100L)).thenReturn(message(100L, "u"));
         when(conversationService.getMessage(7L, 200L)).thenReturn(message(200L, "a"));
-        when(modelGateway.call(any(), any(GatewayRequest.class)))
-                .thenReturn(new GatewayResponse("not-json", List.of(), "stop", 1, 1, 0, "deepseek", "m"));
+        when(modelClient.complete(any(ModelRequest.class), any()))
+                .thenReturn(TestModelResponses.response("not-json", List.of(), "stop", 1, 1, 0, "deepseek", "m"));
 
         assertThatThrownBy(() -> handler.handle(job("{\"turnId\":\"t-1\",\"conversationId\":\"c-1\",\"userId\":7}")))
                 .isInstanceOf(IllegalStateException.class);

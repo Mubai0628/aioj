@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.context;
 
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.ChatMessage;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -31,13 +31,13 @@ public class ContextSectionRenderer {
             ContextSectionType.BOOTSTRAP_CONTEXT
     );
 
-    public List<GatewayMessage> render(List<ContextSection> sections) {
+    public List<ChatMessage> render(List<ContextSection> sections) {
         List<ContextSection> ordered = sections.stream()
                 .sorted(Comparator.comparingInt(ContextSection::priority))
                 .toList();
-        List<GatewayMessage> messages = new ArrayList<>();
+        List<ChatMessage> messages = new ArrayList<>();
         StringBuilder systemText = new StringBuilder();
-        List<GatewayMessage> conversational = new ArrayList<>();
+        List<ChatMessage> conversational = new ArrayList<>();
         String focusText = null;
         String currentRequest = null;
         for (ContextSection section : ordered) {
@@ -65,14 +65,14 @@ public class ContextSectionRenderer {
             }
         }
         if (!systemText.isEmpty()) {
-            messages.add(GatewayMessage.system(systemText.toString()));
+            messages.add(ChatMessage.system(systemText.toString()));
         }
         messages.addAll(conversational);
         if (focusText != null && !focusText.isBlank()) {
-            messages.add(GatewayMessage.user(focusText));
+            messages.add(ChatMessage.user(focusText));
         }
         if (currentRequest != null) {
-            messages.add(GatewayMessage.user(currentRequest));
+            messages.add(ChatMessage.user(currentRequest));
         }
         return messages;
     }

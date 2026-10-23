@@ -40,8 +40,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Plan T1.2b: the model call package against {@link FakeProvider}, held to every
- * wire assertion of {@link LegacyAdapterContractTest}, with the gaps that test
- * pins turned into the correct behavior (appendix G.4 item 7).
+ * wire assertion of T1.2a's baseline for the old adapters (deleted with them in
+ * T1.3), with the gaps that baseline pinned turned into the correct behavior
+ * (appendix G.4 item 7).
  */
 class ModelClientContractTest {
     private final FakeProvider provider = new FakeProvider();

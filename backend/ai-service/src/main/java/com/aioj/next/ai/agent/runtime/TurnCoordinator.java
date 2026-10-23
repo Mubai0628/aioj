@@ -8,8 +8,8 @@ import com.aioj.next.ai.agent.context.ContextSectionType;
 import com.aioj.next.ai.agent.context.TrustLevel;
 import com.aioj.next.ai.agent.digest.TurnDigestInput;
 import com.aioj.next.ai.agent.digest.TurnDigestService;
-import com.aioj.next.ai.agent.model.CallProfile;
-import com.aioj.next.ai.agent.model.ModelUsage;
+import com.aioj.next.ai.model.api.CallProfile;
+import com.aioj.next.ai.agent.runtime.ProviderUsage;
 import com.aioj.next.ai.agent.policy.ContestParticipationService;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
@@ -713,7 +713,7 @@ public class TurnCoordinator {
             ContestAiAssistanceTelemetryService.TrackingContext telemetryContext,
             String usageKey,
             String usageSource,
-            ModelUsage usage
+            ProviderUsage usage
     ) {
         if (contestAssistanceTelemetryService != null && usage != null) {
             try {
@@ -738,7 +738,7 @@ public class TurnCoordinator {
         }
     }
 
-    private Consumer<ModelUsage> contestAssistanceUsageObserver(
+    private Consumer<ProviderUsage> contestAssistanceUsageObserver(
             ContestAiAssistanceTelemetryService.TrackingContext telemetryContext,
             String usageSource
     ) {

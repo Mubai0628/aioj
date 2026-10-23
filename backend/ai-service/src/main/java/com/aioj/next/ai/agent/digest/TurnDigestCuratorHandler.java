@@ -3,12 +3,12 @@ package com.aioj.next.ai.agent.digest;
 import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobHandler;
 import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobService;
 import com.aioj.next.ai.agent.memory.MemoryCandidateIngestionService;
-import com.aioj.next.ai.agent.model.CallProfile;
-import com.aioj.next.ai.agent.model.GatewayMessage;
-import com.aioj.next.ai.agent.model.GatewayRequest;
-import com.aioj.next.ai.agent.model.GatewayResponse;
-import com.aioj.next.ai.agent.model.ModelGateway;
-import com.aioj.next.ai.agent.model.ToolChoiceMode;
+import com.aioj.next.ai.model.api.CallOptions;
+import com.aioj.next.ai.model.api.CallProfile;
+import com.aioj.next.ai.model.api.ChatMessage;
+import com.aioj.next.ai.model.api.ModelRequest;
+import com.aioj.next.ai.model.api.ModelResponse;
+import com.aioj.next.ai.model.api.ModelClient;
 import com.aioj.next.ai.agent.profile.ProfileAggregateJobProducer;
 import com.aioj.next.ai.agent.profile.ProfileSignalIngestionService;
 import com.aioj.next.ai.config.AiProperties;
@@ -91,7 +91,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
 
     private final AiTurnDigestMapper digestMapper;
     private final AiConversationService conversationService;
-    private final ModelGateway modelGateway;
+    private final ModelClient modelClient;
     private final AgentAsyncJobService jobService;
     private final ObjectMapper objectMapper;
     private final AiProperties properties;
@@ -102,7 +102,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
     public TurnDigestCuratorHandler(
             AiTurnDigestMapper digestMapper,
             AiConversationService conversationService,
-            ModelGateway modelGateway,
+            ModelClient modelClient,
             AgentAsyncJobService jobService,
             ObjectMapper objectMapper,
             AiProperties properties,
@@ -112,7 +112,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
     ) {
         this.digestMapper = digestMapper;
         this.conversationService = conversationService;
-        this.modelGateway = modelGateway;
+        this.modelClient = modelClient;
         this.jobService = jobService;
         this.objectMapper = objectMapper;
         this.properties = properties;
@@ -149,18 +149,13 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
         AiChatMessageResponse userMessage = fetchMessage(userId, source.path("userMessageId").asString(""));
         AiChatMessageResponse assistantMessage = fetchMessage(userId, source.path("assistantMessageId").asString(""));
 
-        GatewayResponse response = modelGateway.call(
-                modelGateway.configFor(AiModelScope.from(properties.getAgentCore().getCuratorScope())),
-                new GatewayRequest(
-                        List.of(
-                                GatewayMessage.system(SYSTEM_PROMPT),
-                                GatewayMessage.user(buildUserPayload(stubDigest, userMessage, assistantMessage))
-                        ),
-                        List.of(),
-                        ToolChoiceMode.AUTO,
-                        CallProfile.CURATOR
-                )
-        );
+        ModelResponse response = modelClient.complete(
+                ModelRequest.builder(AiModelScope.from(properties.getAgentCore().getCuratorScope()).name())
+                        .message(ChatMessage.system(SYSTEM_PROMPT))
+                        .message(ChatMessage.user(buildUserPayload(stubDigest, userMessage, assistantMessage)))
+                        .profile(CallProfile.CURATOR)
+                        .build(),
+                CallOptions.of("tutor.digest-curator").withCorrelation(stub.getTurnId(), userId));
 
         ObjectNode curated = parseCuratorOutput(response.content());
         ObjectNode merged = merge(stubDigest, curated);

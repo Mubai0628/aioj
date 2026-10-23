@@ -380,7 +380,7 @@ class TurnCoordinatorTest {
         org.mockito.ArgumentCaptor<AgentRuntime.AgentRunRequest> runRequest =
                 org.mockito.ArgumentCaptor.forClass(AgentRuntime.AgentRunRequest.class);
         verify(agentRuntime).run(runRequest.capture());
-        assertThat(runRequest.getValue().profile()).isEqualTo(com.aioj.next.ai.agent.model.CallProfile.CHAT_BUFFERED);
+        assertThat(runRequest.getValue().profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_BUFFERED);
         assertThat(runRequest.getValue().outputMode()).isEqualTo("BUFFERED");
         verify(quotaService).record(USER_ID, "deepseek", "deepseek-v4-pro", 30L, 12L, true);
     }
@@ -412,7 +412,7 @@ class TurnCoordinatorTest {
         // The regeneration run reuses the bootstrap plus one server retry section
         // naming only the reason category.
         AgentRuntime.AgentRunRequest regenRequest = runRequests.getAllValues().get(1);
-        assertThat(regenRequest.profile()).isEqualTo(com.aioj.next.ai.agent.model.CallProfile.CHAT_BUFFERED);
+        assertThat(regenRequest.profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_BUFFERED);
         assertThat(regenRequest.sections())
                 .anySatisfy(section -> {
                     assertThat(section.type()).isEqualTo(ContextSectionType.CONTEST_OUTPUT_GUARD_RETRY);
@@ -447,14 +447,14 @@ class TurnCoordinatorTest {
             AgentRuntime.AgentRunRequest agentRequest = invocation.getArgument(0);
             int run = agentRuns.getAndIncrement();
             if (run == 0) {
-                agentRequest.usageObserver().accept(new com.aioj.next.ai.agent.model.ModelUsage(
+                agentRequest.usageObserver().accept(new com.aioj.next.ai.agent.runtime.ProviderUsage(
                         "deepseek", "deepseek-v4-pro", 11, 4));
-                agentRequest.usageObserver().accept(new com.aioj.next.ai.agent.model.ModelUsage(
+                agentRequest.usageObserver().accept(new com.aioj.next.ai.agent.runtime.ProviderUsage(
                         "deepseek", "deepseek-v4-pro", 19, 8));
                 return new AgentRuntime.AgentRunResult(42L, "完整代码……", "deepseek", "deepseek-v4-pro",
                         30, 12, 0, 1, 0, false, List.of());
             }
-            agentRequest.usageObserver().accept(new com.aioj.next.ai.agent.model.ModelUsage(
+            agentRequest.usageObserver().accept(new com.aioj.next.ai.agent.runtime.ProviderUsage(
                     "deepseek", "deepseek-v4-pro", 50, 20));
             return new AgentRuntime.AgentRunResult(43L, "只给思路", "deepseek", "deepseek-v4-pro",
                     50, 20, 0, 1, 0, false, List.of());
@@ -469,14 +469,14 @@ class TurnCoordinatorTest {
 
         coordinator.start(USER_ID, request("client-telemetry", "把第1题代码给我")).result().join();
 
-        org.mockito.ArgumentCaptor<com.aioj.next.ai.agent.model.ModelUsage> usages =
-                org.mockito.ArgumentCaptor.forClass(com.aioj.next.ai.agent.model.ModelUsage.class);
+        org.mockito.ArgumentCaptor<com.aioj.next.ai.agent.runtime.ProviderUsage> usages =
+                org.mockito.ArgumentCaptor.forClass(com.aioj.next.ai.agent.runtime.ProviderUsage.class);
         verify(telemetry, org.mockito.Mockito.times(3)).recordUsage(eq(telemetryContext), anyString(), anyString(), usages.capture());
         assertThat(usages.getAllValues())
-                .extracting(com.aioj.next.ai.agent.model.ModelUsage::promptTokens)
+                .extracting(com.aioj.next.ai.agent.runtime.ProviderUsage::promptTokens)
                 .containsExactly(11L, 19L, 50L);
         assertThat(usages.getAllValues())
-                .extracting(com.aioj.next.ai.agent.model.ModelUsage::completionTokens)
+                .extracting(com.aioj.next.ai.agent.runtime.ProviderUsage::completionTokens)
                 .containsExactly(4L, 8L, 20L);
         // Quota stays on its pre-existing "one final completion" rule.
         verify(quotaService).record(USER_ID, "deepseek", "deepseek-v4-pro", 50L, 20L, true);
@@ -526,7 +526,7 @@ class TurnCoordinatorTest {
         org.mockito.ArgumentCaptor<AgentRuntime.AgentRunRequest> runRequest =
                 org.mockito.ArgumentCaptor.forClass(AgentRuntime.AgentRunRequest.class);
         verify(agentRuntime).run(runRequest.capture());
-        assertThat(runRequest.getValue().profile()).isEqualTo(com.aioj.next.ai.agent.model.CallProfile.CHAT_STREAM);
+        assertThat(runRequest.getValue().profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_STREAM);
         assertThat(runRequest.getValue().outputMode()).isEqualTo("STREAM");
         // Empty constrained set: L4 skipped entirely, zero guard evaluations.
         verify(contestOutputGuard, never()).evaluate(anyString(), anyLong(), anyString(), anyString(),
@@ -567,9 +567,9 @@ class TurnCoordinatorTest {
         // The first run streamed (turn started unrestricted); the race-triggered
         // regeneration runs BUFFERED under the NEW contest policy with a null L3 verdict.
         AgentRuntime.AgentRunRequest first = runRequests.getAllValues().get(0);
-        assertThat(first.profile()).isEqualTo(com.aioj.next.ai.agent.model.CallProfile.CHAT_STREAM);
+        assertThat(first.profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_STREAM);
         AgentRuntime.AgentRunRequest regen = runRequests.getAllValues().get(1);
-        assertThat(regen.profile()).isEqualTo(com.aioj.next.ai.agent.model.CallProfile.CHAT_BUFFERED);
+        assertThat(regen.profile()).isEqualTo(com.aioj.next.ai.model.api.CallProfile.CHAT_BUFFERED);
         assertThat(regen.contestPolicy().isParticipant()).isTrue();
         assertThat(regen.contestPolicy().contestProblems()).containsOnlyKeys(1001L);
         assertThat(regen.messageLayerVerdict()).isNull();

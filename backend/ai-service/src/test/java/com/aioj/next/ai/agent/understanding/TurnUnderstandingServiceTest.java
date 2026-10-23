@@ -1,9 +1,10 @@
 package com.aioj.next.ai.agent.understanding;
 
-import com.aioj.next.ai.agent.model.CallProfile;
-import com.aioj.next.ai.agent.model.GatewayRequest;
-import com.aioj.next.ai.agent.model.GatewayResponse;
-import com.aioj.next.ai.agent.model.ModelGateway;
+import com.aioj.next.ai.model.api.CallProfile;
+import com.aioj.next.ai.model.api.ModelRequest;
+import com.aioj.next.ai.agent.TestModelResponses;
+import com.aioj.next.ai.model.api.ModelResponse;
+import com.aioj.next.ai.model.api.ModelClient;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
@@ -21,12 +22,12 @@ import static org.mockito.Mockito.when;
 
 class TurnUnderstandingServiceTest {
 
-    private final ModelGateway modelGateway = mock(ModelGateway.class);
+    private final ModelClient modelClient = mock(ModelClient.class);
     private TurnUnderstandingService service;
 
     @BeforeEach
     void setUp() {
-        service = new TurnUnderstandingService(modelGateway, new ObjectMapper(), new AiProperties());
+        service = new TurnUnderstandingService(modelClient, new ObjectMapper(), new AiProperties());
     }
 
     @Test
@@ -35,20 +36,19 @@ class TurnUnderstandingServiceTest {
 
         assertThat(result.requiresTools()).isEmpty();
         assertThat(result.dialogueAct()).isNull();
-        verify(modelGateway, never()).call(any(), any());
+        verify(modelClient, never()).complete(any(), any());
     }
 
     @Test
     void blankMessageSkipsModelCall() {
         assertThat(service.assess("   ", true).requiresTools()).isEmpty();
-        verify(modelGateway, never()).call(any(), any());
+        verify(modelClient, never()).complete(any(), any());
     }
 
     @Test
     void parsesStructuredJudgementAndDropsUnknownValues() {
-        when(modelGateway.configFor(any(AiModelScope.class))).thenReturn(mock(AiModelEffectiveConfig.class));
-        when(modelGateway.call(any(), any(GatewayRequest.class)))
-                .thenReturn(new GatewayResponse("""
+        when(modelClient.complete(any(ModelRequest.class), any()))
+                .thenReturn(TestModelResponses.response("""
                         {
                           "dialogueAct": "FOLLOW_UP",
                           "referenceTypes": ["ORDINAL", "NOT_A_KIND"],
@@ -70,9 +70,8 @@ class TurnUnderstandingServiceTest {
 
     @Test
     void stripsCodeFenceAroundJson() {
-        when(modelGateway.configFor(any(AiModelScope.class))).thenReturn(mock(AiModelEffectiveConfig.class));
-        when(modelGateway.call(any(), any(GatewayRequest.class)))
-                .thenReturn(new GatewayResponse("""
+        when(modelClient.complete(any(ModelRequest.class), any()))
+                .thenReturn(TestModelResponses.response("""
                         ```json
                         {"dialogueAct":"RECALL_HISTORY","referenceTypes":[],"longRangeCue":false,"requiresTools":["MEMORY_SEARCH"]}
                         ```
@@ -86,9 +85,8 @@ class TurnUnderstandingServiceTest {
 
     @Test
     void unknownDialogueActBecomesNullButKnownToolsSurvive() {
-        when(modelGateway.configFor(any(AiModelScope.class))).thenReturn(mock(AiModelEffectiveConfig.class));
-        when(modelGateway.call(any(), any(GatewayRequest.class)))
-                .thenReturn(new GatewayResponse(
+        when(modelClient.complete(any(ModelRequest.class), any()))
+                .thenReturn(TestModelResponses.response(
                         "{\"dialogueAct\":\"YOLO\",\"referenceTypes\":[],\"requiresTools\":[\"PROBLEM_FETCH\"]}",
                         null, null, 10, 5, 0, "deepseek", "deepseek-v4"));
 
@@ -100,17 +98,15 @@ class TurnUnderstandingServiceTest {
 
     @Test
     void invalidJsonFailsOpenToEmpty() {
-        when(modelGateway.configFor(any(AiModelScope.class))).thenReturn(mock(AiModelEffectiveConfig.class));
-        when(modelGateway.call(any(), any(GatewayRequest.class)))
-                .thenReturn(new GatewayResponse("not json at all", null, null, 10, 5, 0, "deepseek", "deepseek-v4"));
+        when(modelClient.complete(any(ModelRequest.class), any()))
+                .thenReturn(TestModelResponses.response("not json at all", null, null, 10, 5, 0, "deepseek", "deepseek-v4"));
 
         assertThat(service.assess("继续", true).requiresTools()).isEmpty();
     }
 
     @Test
     void providerFailureFailsOpenToEmpty() {
-        when(modelGateway.configFor(any(AiModelScope.class))).thenReturn(mock(AiModelEffectiveConfig.class));
-        when(modelGateway.call(any(), any(GatewayRequest.class)))
+        when(modelClient.complete(any(ModelRequest.class), any()))
                 .thenThrow(new RuntimeException("provider down"));
 
         assertThat(service.assess("继续", true).requiresTools()).isEmpty();
@@ -119,15 +115,14 @@ class TurnUnderstandingServiceTest {
     @Test
     void usesStructuredSmallProfileAndCuratorScope() {
         AiModelEffectiveConfig config = mock(AiModelEffectiveConfig.class);
-        when(modelGateway.configFor(any(AiModelScope.class))).thenReturn(config);
-        when(modelGateway.call(any(), any(GatewayRequest.class)))
-                .thenReturn(new GatewayResponse("{}", null, null, 10, 5, 0, "deepseek", "deepseek-v4"));
+        when(modelClient.complete(any(ModelRequest.class), any()))
+                .thenReturn(TestModelResponses.response("{}", null, null, 10, 5, 0, "deepseek", "deepseek-v4"));
 
         service.assess("为什么？", true);
 
-        verify(modelGateway).configFor(AiModelScope.AGENT_CURATOR);
-        org.mockito.ArgumentCaptor<GatewayRequest> request = org.mockito.ArgumentCaptor.forClass(GatewayRequest.class);
-        verify(modelGateway).call(eq(config), request.capture());
+        org.mockito.ArgumentCaptor<ModelRequest> request = org.mockito.ArgumentCaptor.forClass(ModelRequest.class);
+        verify(modelClient).complete(request.capture(), any());
+        assertThat(request.getValue().scope()).isEqualTo(AiModelScope.AGENT_CURATOR.name());
         assertThat(request.getValue().profile()).isEqualTo(CallProfile.STRUCTURED_SMALL);
         assertThat(request.getValue().tools()).isEmpty();
     }

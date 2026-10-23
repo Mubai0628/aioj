@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.context;
 
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.ChatMessage;
 import com.aioj.next.ai.agent.tool.SourceRef;
 
 import java.util.List;
@@ -18,7 +18,7 @@ public record ContextSection(
         TrustLevel trustLevel,
         List<SourceRef> sources,
         String content,
-        List<GatewayMessage> messages
+        List<ChatMessage> messages
 ) {
     public ContextSection {
         sources = sources == null ? List.of() : List.copyOf(sources);
@@ -31,7 +31,7 @@ public record ContextSection(
     }
 
     public static ContextSection conversation(ContextSectionType type, int priority, TrustLevel trustLevel,
-                                              List<GatewayMessage> messages, List<SourceRef> sources) {
+                                              List<ChatMessage> messages, List<SourceRef> sources) {
         int estimate = messages.stream().mapToInt(m -> estimate(m.content())).sum();
         return new ContextSection(type, priority, false, estimate, trustLevel, sources, null, messages);
     }

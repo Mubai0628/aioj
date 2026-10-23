@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.context;
 
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.ChatMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -16,14 +16,14 @@ class ContextSectionRendererTest {
         List<ContextSection> sections = List.of(
                 ContextSection.text(ContextSectionType.SYSTEM_POLICY, 10, true, TrustLevel.SYSTEM_POLICY, "sys"),
                 ContextSection.conversation(ContextSectionType.RECENT_TURNS, 40, TrustLevel.USER_PROVIDED,
-                        List.of(GatewayMessage.user("m1"), GatewayMessage.assistant("a1", List.of())), List.of()),
+                        List.of(ChatMessage.user("m1"), ChatMessage.assistant("a1", List.of())), List.of()),
                 ContextSection.text(ContextSectionType.CONVERSATION_FOCUS, 60, false, TrustLevel.DERIVED_SUMMARY,
                         "[Conversation Focus]\nOpen tasks:\n- 实现第二题代码\n[/Conversation Focus]"),
                 ContextSection.text(ContextSectionType.CURRENT_USER_REQUEST, 90, true, TrustLevel.USER_PROVIDED, "继续"));
 
-        List<GatewayMessage> rendered = renderer.render(sections);
+        List<ChatMessage> rendered = renderer.render(sections);
 
-        assertThat(rendered).extracting(GatewayMessage::role)
+        assertThat(rendered).extracting(message -> message.role().wireName())
                 .containsExactly("system", "user", "assistant", "user", "user");
         assertThat(rendered.get(3).content()).contains("Open tasks:");
         assertThat(rendered.get(4).content()).isEqualTo("继续");
@@ -35,9 +35,9 @@ class ContextSectionRendererTest {
                 ContextSection.text(ContextSectionType.SYSTEM_POLICY, 10, true, TrustLevel.SYSTEM_POLICY, "sys"),
                 ContextSection.text(ContextSectionType.CURRENT_USER_REQUEST, 90, true, TrustLevel.USER_PROVIDED, "hi"));
 
-        List<GatewayMessage> rendered = renderer.render(sections);
+        List<ChatMessage> rendered = renderer.render(sections);
 
-        assertThat(rendered).extracting(GatewayMessage::role).containsExactly("system", "user");
+        assertThat(rendered).extracting(message -> message.role().wireName()).containsExactly("system", "user");
     }
 
     @Test
@@ -52,9 +52,9 @@ class ContextSectionRendererTest {
                         "match-block"),
                 ContextSection.text(ContextSectionType.CURRENT_USER_REQUEST, 90, true, TrustLevel.USER_PROVIDED, "hi"));
 
-        List<GatewayMessage> rendered = renderer.render(sections);
+        List<ChatMessage> rendered = renderer.render(sections);
 
-        assertThat(rendered).extracting(GatewayMessage::role).containsExactly("system", "user");
+        assertThat(rendered).extracting(message -> message.role().wireName()).containsExactly("system", "user");
         assertThat(rendered.get(0).content()).isEqualTo("sys\n\npolicy\n\nmatch-block");
     }
 
@@ -70,9 +70,9 @@ class ContextSectionRendererTest {
                         TrustLevel.SERVER_AUTHORITATIVE, "retry-directive"),
                 ContextSection.text(ContextSectionType.CURRENT_USER_REQUEST, 90, true, TrustLevel.USER_PROVIDED, "hi"));
 
-        List<GatewayMessage> rendered = renderer.render(sections);
+        List<ChatMessage> rendered = renderer.render(sections);
 
-        assertThat(rendered).extracting(GatewayMessage::role).containsExactly("system", "user");
+        assertThat(rendered).extracting(message -> message.role().wireName()).containsExactly("system", "user");
         assertThat(rendered.get(0).content()).isEqualTo("sys\n\nmatch-block\n\nretry-directive");
     }
 
@@ -90,9 +90,9 @@ class ContextSectionRendererTest {
                         "selected-block"),
                 ContextSection.text(ContextSectionType.CURRENT_USER_REQUEST, 90, true, TrustLevel.USER_PROVIDED, "hi"));
 
-        List<GatewayMessage> rendered = renderer.render(sections);
+        List<ChatMessage> rendered = renderer.render(sections);
 
-        assertThat(rendered).extracting(GatewayMessage::role).containsExactly("system", "user");
+        assertThat(rendered).extracting(message -> message.role().wireName()).containsExactly("system", "user");
         assertThat(rendered.get(0).content()).isEqualTo("sys\n\nmatch-block\n\nentry-block\n\nselected-block");
     }
 }

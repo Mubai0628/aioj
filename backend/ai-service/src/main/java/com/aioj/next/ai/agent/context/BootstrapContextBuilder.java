@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.context;
 
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.ChatMessage;
 import com.aioj.next.ai.agent.policy.PolicySnapshotService;
 import com.aioj.next.ai.domain.AiConversationService;
 import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
@@ -110,7 +110,7 @@ public class BootstrapContextBuilder {
         if (selectedSection != null) {
             sections.add(selectedSection);
         }
-        List<GatewayMessage> recentTurns = recentTurns(userId, conversationId, recentTurnsLimit);
+        List<ChatMessage> recentTurns = recentTurns(userId, conversationId, recentTurnsLimit);
         if (!recentTurns.isEmpty()) {
             sections.add(ContextSection.conversation(ContextSectionType.RECENT_TURNS, 40,
                     TrustLevel.USER_PROVIDED, recentTurns, List.of()));
@@ -328,7 +328,7 @@ public class BootstrapContextBuilder {
         return text.length() > FOCUS_ITEM_MAX_CHARS ? text.substring(0, FOCUS_ITEM_MAX_CHARS) : text;
     }
 
-    private List<GatewayMessage> recentTurns(Long userId, String conversationId, int recentTurnsLimit) {
+    private List<ChatMessage> recentTurns(Long userId, String conversationId, int recentTurnsLimit) {
         if (conversationId == null || conversationId.isBlank() || recentTurnsLimit <= 0) {
             return List.of();
         }
@@ -337,12 +337,12 @@ public class BootstrapContextBuilder {
                 .filter(message -> "user".equals(message.role()) || "assistant".equals(message.role()))
                 .toList();
         int from = Math.max(0, completed.size() - recentTurnsLimit);
-        List<GatewayMessage> messages = new ArrayList<>();
+        List<ChatMessage> messages = new ArrayList<>();
         for (AiChatMessageResponse message : completed.subList(from, completed.size())) {
             if ("user".equals(message.role())) {
-                messages.add(GatewayMessage.user(message.content()));
+                messages.add(ChatMessage.user(message.content()));
             } else {
-                messages.add(GatewayMessage.assistant(message.content(), List.of()));
+                messages.add(ChatMessage.assistant(message.content(), List.of()));
             }
         }
         return messages;

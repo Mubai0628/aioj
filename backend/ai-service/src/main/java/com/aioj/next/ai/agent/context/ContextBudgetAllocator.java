@@ -1,6 +1,7 @@
 package com.aioj.next.ai.agent.context;
 
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.ChatMessage;
+import com.aioj.next.ai.model.api.ChatRole;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -51,16 +52,16 @@ public class ContextBudgetAllocator {
         }
         if (recentIndex >= 0) {
             ContextSection recent = result.get(recentIndex);
-            List<GatewayMessage> messages = new ArrayList<>(recent.messages());
+            List<ChatMessage> messages = new ArrayList<>(recent.messages());
             int overflow = total - budgetTokens;
             int freed = 0;
             while (!messages.isEmpty() && freed < overflow) {
-                GatewayMessage dropped = messages.remove(0);
+                ChatMessage dropped = messages.remove(0);
                 freed += estimateOf(dropped);
                 // Keep turn pairs intact: a dropped user message takes its assistant
                 // answer with it, so the model never sees an orphaned reply.
-                if ("user".equals(dropped.role()) && !messages.isEmpty()
-                        && "assistant".equals(messages.get(0).role())) {
+                if (dropped.role() == ChatRole.USER && !messages.isEmpty()
+                        && messages.get(0).role() == ChatRole.ASSISTANT) {
                     freed += estimateOf(messages.remove(0));
                 }
             }
@@ -80,7 +81,7 @@ public class ContextBudgetAllocator {
         return new BudgetResult(List.copyOf(result), List.copyOf(warnings));
     }
 
-    private int estimateOf(GatewayMessage message) {
+    private int estimateOf(ChatMessage message) {
         String content = message.content();
         if (content == null || content.isBlank()) {
             return 0;

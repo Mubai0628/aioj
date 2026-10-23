@@ -16,9 +16,8 @@ import static org.assertj.core.api.Assertions.fail;
 /**
  * Architecture guards for ai-service (plan T0.4; rules from §3.1, §3.2.1 and §6.2).
  *
- * <p>The model call package {@value #MODEL_PACKAGE} does not exist until T1.2b.
- * Its rules already hold, so they apply from its first commit; the fixture test
- * proves they catch violations.
+ * <p>The model call package {@value #MODEL_PACKAGE} arrived in T1.2b; the fixture
+ * test proves its rules catch violations.
  *
  * <p>Today's code is frozen in explicit allowlists. A class that is not listed
  * fails the build, and so does a listed class that no longer needs the entry:
@@ -35,11 +34,6 @@ class AiServiceArchitectureTest {
 
     /** Plan §1.2: the three legacy model call paths, frozen until T1.3 deletes them (§3.2.1 rule 3). */
     private static final Map<String, Set<String>> LEGACY_MODEL_PATH_CALLERS = Map.of(
-            "com.aioj.next.ai.agent.model.ModelGateway", Set.of(
-                    "com.aioj.next.ai.agent.digest.TurnDigestCuratorHandler",
-                    "com.aioj.next.ai.agent.runtime.AgentRuntime",
-                    "com.aioj.next.ai.agent.telemetry.ContestAssistanceIntentJudge",
-                    "com.aioj.next.ai.agent.understanding.TurnUnderstandingService"),
             "com.aioj.next.ai.domain.AiProvider", Set.of(
                     "com.aioj.next.ai.controller.AiController",
                     "com.aioj.next.ai.domain.AiMemoryService",
@@ -64,31 +58,17 @@ class AiServiceArchitectureTest {
      * Plan §3.2.1 rule 1: Provider HTTP calls happen only in the model call package.
      * A Provider call needs its API key, so key reads mark where calls can happen:
      * the model package's client and its ModelConfigSource implementation (T1.2b),
-     * and until T1.3 the three legacy clients, the agent adapters, the config
-     * resolver and the admin connectivity test.
+     * and until T1.3 finishes the three legacy clients, the config resolver and
+     * the admin connectivity test.
      */
     private static final Set<String> PROVIDER_API_KEY_READERS = Set.of(
             "com.aioj.next.ai.model.DefaultModelClient",
             "com.aioj.next.ai.domain.AiModelConfigEndpointSource",
-            "com.aioj.next.ai.agent.model.AbstractOpenAiToolCallAdapter",
             "com.aioj.next.ai.domain.AiModelCatalogClient",
             "com.aioj.next.ai.domain.AiModelCompletionClient",
             "com.aioj.next.ai.domain.AiModelConfigService",
             "com.aioj.next.ai.domain.EnvironmentAiModelConfigResolver",
             "com.aioj.next.ai.domain.OpenAiCompatibleProvider");
-
-    /**
-     * Plan §1.2: agent.model, the future core of the model call package, already
-     * reaches into the harness and business code; T1.2b removes these. Until then
-     * it gains no new ones.
-     */
-    private static final Set<String> AGENT_MODEL_OUTSIDE_DEPENDENCIES = Set.of(
-            "com.aioj.next.ai.agent.tool.ToolDescriptor",
-            "com.aioj.next.ai.agent.tool.ToolNameCodec",
-            "com.aioj.next.ai.config.AiProperties",
-            "com.aioj.next.ai.domain.AiModelConfigService",
-            "com.aioj.next.ai.domain.AiModelEffectiveConfig",
-            "com.aioj.next.ai.domain.AiModelScope");
 
     @Test
     void theModelPackageDependsOnNoPersistenceHarnessOrOtherAiServiceCode() {
@@ -123,13 +103,6 @@ class AiServiceArchitectureTest {
                 AiServiceArchitectureRules.callersOf(MAIN, call -> call.getTargetOwner().getPackageName().startsWith("com.aioj.next.ai")
                         && (call.getName().equals("apiKey") || call.getName().equals("getApiKey"))),
                 PROVIDER_API_KEY_READERS);
-    }
-
-    @Test
-    void agentModelGainsNoNewOutsideDependencies() {
-        assertExactly("ai-service classes outside agent.model that agent.model depends on",
-                AiServiceArchitectureRules.externalTargetsOf(MAIN, "com.aioj.next.ai.agent.model", "com.aioj.next.ai"),
-                AGENT_MODEL_OUTSIDE_DEPENDENCIES);
     }
 
     @Test

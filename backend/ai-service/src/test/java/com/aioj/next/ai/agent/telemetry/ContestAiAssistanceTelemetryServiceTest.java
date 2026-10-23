@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.telemetry;
 
-import com.aioj.next.ai.agent.model.ModelUsage;
+import com.aioj.next.ai.agent.runtime.ProviderUsage;
 import com.aioj.next.ai.agent.guard.GuardVerdict;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
 import com.aioj.next.ai.agent.policy.PolicySnapshotService;
@@ -101,7 +101,7 @@ class ContestAiAssistanceTelemetryServiceTest {
         when(intentJudge.assess(any(), any())).thenReturn(new ContestAssistanceIntentJudge.Judgement(
                 ContestAssistanceIntentJudge.InterceptType.PUBLIC_FULL_CODE_REQUEST,
                 ContestAssistanceIntentJudge.Status.COMPLETED,
-                new ModelUsage("deepseek", "intent", 4, 2)));
+                new ProviderUsage("deepseek", "intent", 4, 2)));
 
         service.finishSuccessful(context, AiTurnService.STATUS_COMPLETED, "give full code", List.of(
                 new ContestAssistanceIntentJudge.Candidate("PUBLIC", "MESSAGE_OR_CONTEXT_FINGERPRINT")
@@ -123,7 +123,7 @@ class ContestAiAssistanceTelemetryServiceTest {
         when(intentJudge.assess(any(), any())).thenReturn(new ContestAssistanceIntentJudge.Judgement(
                 ContestAssistanceIntentJudge.InterceptType.NONE,
                 ContestAssistanceIntentJudge.Status.COMPLETED,
-                new ModelUsage("deepseek", "intent", 4, 2)));
+                new ProviderUsage("deepseek", "intent", 4, 2)));
 
         service.finishSuccessful(context, AiTurnService.STATUS_COMPLETED, "private question", List.of(
                 new ContestAssistanceIntentJudge.Candidate("PRIVATE",
@@ -145,7 +145,7 @@ class ContestAiAssistanceTelemetryServiceTest {
         when(intentJudge.assess(any(), any())).thenReturn(new ContestAssistanceIntentJudge.Judgement(
                 ContestAssistanceIntentJudge.InterceptType.PUBLIC_FULL_CODE_REQUEST,
                 ContestAssistanceIntentJudge.Status.COMPLETED,
-                new ModelUsage("deepseek", "intent", 4, 2)));
+                new ProviderUsage("deepseek", "intent", 4, 2)));
 
         service.finishSuccessful(context, AiTurnService.STATUS_COMPLETED, "private question", List.of(
                 new ContestAssistanceIntentJudge.Candidate("PRIVATE",
@@ -166,7 +166,7 @@ class ContestAiAssistanceTelemetryServiceTest {
         when(intentJudge.assess(any(), any())).thenReturn(new ContestAssistanceIntentJudge.Judgement(
                 ContestAssistanceIntentJudge.InterceptType.NONE,
                 ContestAssistanceIntentJudge.Status.COMPLETED,
-                new ModelUsage("deepseek", "intent", 4, 2)));
+                new ProviderUsage("deepseek", "intent", 4, 2)));
 
         service.finishSuccessful(context, AiTurnService.STATUS_COMPLETED, "unrelated follow-up", List.of(
                 new ContestAssistanceIntentJudge.Candidate("PRIVATE",
@@ -207,7 +207,7 @@ class ContestAiAssistanceTelemetryServiceTest {
 
         service.recordUsage(context, "AGENT_PRIMARY_1",
                 ContestAiAssistanceTelemetryService.SOURCE_AGENT_PRIMARY,
-                new ModelUsage("deepseek", "deepseek-v4-pro", 0, 0, false));
+                new ProviderUsage("deepseek", "deepseek-v4-pro", 0, 0, false));
 
         ArgumentCaptor<AiContestAssistanceModelUsageEntity> usage =
                 ArgumentCaptor.forClass(AiContestAssistanceModelUsageEntity.class);

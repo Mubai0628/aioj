@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.guard;
 
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.ChatMessage;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.policy.GuardDecision;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
@@ -56,10 +56,10 @@ class ContextFingerprintGuardTest {
 
     @Test
     void historyStatementPasteHitsInjectsAndAudits() {
-        List<GatewayMessage> messages = List.of(
-                GatewayMessage.system("stable system prompt"),
-                GatewayMessage.user("上次那题：" + STATEMENT),
-                GatewayMessage.user("继续讲讲"));
+        List<ChatMessage> messages = List.of(
+                ChatMessage.system("stable system prompt"),
+                ChatMessage.user("上次那题：" + STATEMENT),
+                ChatMessage.user("继续讲讲"));
 
         ContextFingerprintGuard.Evaluation evaluation = guard.evaluate("t-1", 7L, "c1",
                 participantView(policy(1002L, ProblemVisibility.PRIVATE, ContestAiPolicyMode.DEFAULT, null)),
@@ -83,10 +83,10 @@ class ContextFingerprintGuardTest {
     void toolResultStatementHits() {
         // A fetched original entering the context via a tool result (bootstrap=2:
         // the tool message was appended by the current run, after the bootstrap).
-        List<GatewayMessage> messages = List.of(
-                GatewayMessage.system("stable system prompt"),
-                GatewayMessage.user("帮我分析这个"),
-                GatewayMessage.toolResult("call-1", "{\"status\":\"OK\",\"statement\":\"" + STATEMENT + "\"}"));
+        List<ChatMessage> messages = List.of(
+                ChatMessage.system("stable system prompt"),
+                ChatMessage.user("帮我分析这个"),
+                ChatMessage.toolResult("call-1", "{\"status\":\"OK\",\"statement\":\"" + STATEMENT + "\"}"));
 
         ContextFingerprintGuard.Evaluation evaluation = guard.evaluate("t-1", 7L, "c1",
                 participantView(policy(1002L, ProblemVisibility.PRIVATE, ContestAiPolicyMode.DEFAULT, null)),
@@ -108,10 +108,10 @@ class ContextFingerprintGuardTest {
                 "server fingerprint result for the current message",
                 "The user's current message matches restricted running-contest problem(s):",
                 List.of(new ContestGuardMatchText.RuleLine(1002L, "PRIVATE", "DEFAULT", null)));
-        List<GatewayMessage> messages = List.of(
-                GatewayMessage.system("stable prompt\n\n[Contest Participation Policy]\n" + STATEMENT),
-                GatewayMessage.system(layerOneBlock),
-                GatewayMessage.user("二分查找的边界怎么确定"));
+        List<ChatMessage> messages = List.of(
+                ChatMessage.system("stable prompt\n\n[Contest Participation Policy]\n" + STATEMENT),
+                ChatMessage.system(layerOneBlock),
+                ChatMessage.user("二分查找的边界怎么确定"));
 
         ContextFingerprintGuard.Evaluation evaluation = guard.evaluate("t-1", 7L, "c1",
                 participantView(policy(1002L, ProblemVisibility.PRIVATE, ContestAiPolicyMode.DEFAULT, null)),
@@ -127,20 +127,20 @@ class ContextFingerprintGuardTest {
         ContestPolicyView view = participantView(
                 policy(1002L, ProblemVisibility.PRIVATE, ContestAiPolicyMode.DEFAULT, null));
         // Assistant message appended by THIS run (index >= bootstrap): L4's job, not matched.
-        List<GatewayMessage> inTurn = List.of(
-                GatewayMessage.system("sys"),
-                GatewayMessage.user("继续"),
-                GatewayMessage.assistant("题面是 " + STATEMENT, List.of()));
+        List<ChatMessage> inTurn = List.of(
+                ChatMessage.system("sys"),
+                ChatMessage.user("继续"),
+                ChatMessage.assistant("题面是 " + STATEMENT, List.of()));
         ContextFingerprintGuard.Evaluation passEvaluation =
                 guard.evaluate("t-1", 7L, "c1", view, Set.of(), inTurn, 2, 2);
         assertThat(passEvaluation.verdict().decision()).isEqualTo(GuardDecision.PASS);
 
         // Stored history assistant message (index < bootstrap) IS matched.
-        List<GatewayMessage> history = List.of(
-                GatewayMessage.system("sys"),
-                GatewayMessage.user("这题什么意思"),
-                GatewayMessage.assistant("题面是 " + STATEMENT, List.of()),
-                GatewayMessage.user("继续"));
+        List<ChatMessage> history = List.of(
+                ChatMessage.system("sys"),
+                ChatMessage.user("这题什么意思"),
+                ChatMessage.assistant("题面是 " + STATEMENT, List.of()),
+                ChatMessage.user("继续"));
         ContextFingerprintGuard.Evaluation hitEvaluation =
                 guard.evaluate("t-1", 7L, "c1", view, Set.of(), history, 4, 1);
         assertThat(hitEvaluation.verdict().decision()).isEqualTo(GuardDecision.CONSTRAIN);
@@ -151,7 +151,7 @@ class ContextFingerprintGuardTest {
 
     @Test
     void nonParticipantAndDisabledOnlyViewsSkipWithoutAudit() {
-        List<GatewayMessage> messages = List.of(GatewayMessage.user("上次那题：" + STATEMENT));
+        List<ChatMessage> messages = List.of(ChatMessage.user("上次那题：" + STATEMENT));
         assertThat(guard.evaluate("t-1", 7L, "c1", null, Set.of(), messages, 1, 1)).isNull();
         assertThat(guard.evaluate("t-1", 7L, "c1", ContestPolicyView.nonParticipant(),
                 Set.of(), messages, 1, 1)).isNull();
@@ -163,9 +163,9 @@ class ContextFingerprintGuardTest {
 
     @Test
     void passIsAuditedWithSourceProfile() {
-        List<GatewayMessage> messages = List.of(
-                GatewayMessage.system("sys"),
-                GatewayMessage.user("帮我讲讲快速排序的时间复杂度"));
+        List<ChatMessage> messages = List.of(
+                ChatMessage.system("sys"),
+                ChatMessage.user("帮我讲讲快速排序的时间复杂度"));
 
         ContextFingerprintGuard.Evaluation evaluation = guard.evaluate("t-1", 7L, "c1",
                 participantView(policy(1002L, ProblemVisibility.PRIVATE, ContestAiPolicyMode.DEFAULT, null)),
@@ -183,9 +183,9 @@ class ContextFingerprintGuardTest {
     void alreadyConstrainedProblemsAreAuditedButNotReinjected() {
         // Layer 1 (or an earlier step) already constrained #1002: the fingerprint
         // still matches, but no second rule block is injected.
-        List<GatewayMessage> messages = List.of(
-                GatewayMessage.system("sys"),
-                GatewayMessage.user("上次那题：" + STATEMENT));
+        List<ChatMessage> messages = List.of(
+                ChatMessage.system("sys"),
+                ChatMessage.user("上次那题：" + STATEMENT));
 
         ContextFingerprintGuard.Evaluation evaluation = guard.evaluate("t-1", 7L, "c1",
                 participantView(policy(1002L, ProblemVisibility.PRIVATE, ContestAiPolicyMode.DEFAULT, null)),
@@ -200,7 +200,7 @@ class ContextFingerprintGuardTest {
 
     @Test
     void publicProblemInjectsHintOnlyRuleWithRunNotes() {
-        List<GatewayMessage> messages = List.of(GatewayMessage.user("题面：" + STATEMENT));
+        List<ChatMessage> messages = List.of(ChatMessage.user("题面：" + STATEMENT));
 
         ContextFingerprintGuard.Evaluation evaluation = guard.evaluate("t-1", 7L, "c1",
                 participantView(policy(1003L, ProblemVisibility.PUBLIC, ContestAiPolicyMode.DEFAULT, "只给思路")),
@@ -214,7 +214,7 @@ class ContextFingerprintGuardTest {
 
     @Test
     void strictModeInjectsRefuseRule() {
-        List<GatewayMessage> messages = List.of(GatewayMessage.user("题面：" + STATEMENT));
+        List<ChatMessage> messages = List.of(ChatMessage.user("题面：" + STATEMENT));
 
         ContextFingerprintGuard.Evaluation evaluation = guard.evaluate("t-1", 7L, "c1",
                 participantView(policy(1004L, ProblemVisibility.PUBLIC, ContestAiPolicyMode.STRICT, null)),

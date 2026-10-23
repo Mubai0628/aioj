@@ -32,6 +32,10 @@ public record ChatMessage(ChatRole role, String content, String reasoningContent
         return new ChatMessage(ChatRole.ASSISTANT, content, null, null, null);
     }
 
+    public static ChatMessage assistant(String content, List<ToolCall> toolCalls) {
+        return new ChatMessage(ChatRole.ASSISTANT, content, null, null, toolCalls);
+    }
+
     /** An assistant turn kept only inside one tool loop, with the reasoning that produced it. */
     public static ChatMessage assistant(String content, String reasoningContent, List<ToolCall> toolCalls) {
         return new ChatMessage(ChatRole.ASSISTANT, content, reasoningContent, null, toolCalls);

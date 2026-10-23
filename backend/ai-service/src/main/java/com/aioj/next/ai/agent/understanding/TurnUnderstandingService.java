@@ -1,12 +1,12 @@
 package com.aioj.next.ai.agent.understanding;
 
-import com.aioj.next.ai.agent.model.CallProfile;
-import com.aioj.next.ai.agent.model.GatewayMessage;
-import com.aioj.next.ai.agent.model.GatewayRequest;
-import com.aioj.next.ai.agent.model.GatewayResponse;
-import com.aioj.next.ai.agent.model.ModelGateway;
-import com.aioj.next.ai.agent.model.ModelUsage;
-import com.aioj.next.ai.agent.model.ToolChoiceMode;
+import com.aioj.next.ai.model.api.CallOptions;
+import com.aioj.next.ai.model.api.CallProfile;
+import com.aioj.next.ai.model.api.ChatMessage;
+import com.aioj.next.ai.model.api.ModelRequest;
+import com.aioj.next.ai.model.api.ModelResponse;
+import com.aioj.next.ai.model.api.ModelClient;
+import com.aioj.next.ai.agent.runtime.ProviderUsage;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.AiModelScope;
 import tools.jackson.databind.JsonNode;
@@ -70,12 +70,12 @@ public class TurnUnderstandingService {
             - 输出必须是合法 JSON。
             """;
 
-    private final ModelGateway modelGateway;
+    private final ModelClient modelClient;
     private final ObjectMapper objectMapper;
     private final AiProperties properties;
 
-    public TurnUnderstandingService(ModelGateway modelGateway, ObjectMapper objectMapper, AiProperties properties) {
-        this.modelGateway = modelGateway;
+    public TurnUnderstandingService(ModelClient modelClient, ObjectMapper objectMapper, AiProperties properties) {
+        this.modelClient = modelClient;
         this.objectMapper = objectMapper;
         this.properties = properties;
     }
@@ -89,19 +89,14 @@ public class TurnUnderstandingService {
             return TurnUnderstanding.empty();
         }
         try {
-            GatewayResponse response = modelGateway.call(
-                    modelGateway.configFor(AiModelScope.from(properties.getAgentCore().getCuratorScope())),
-                    new GatewayRequest(
-                            List.of(
-                                    GatewayMessage.system(SYSTEM_PROMPT),
-                                    GatewayMessage.user(cap(userMessage))
-                            ),
-                            List.of(),
-                            ToolChoiceMode.AUTO,
-                            CallProfile.STRUCTURED_SMALL
-                    )
-            );
-            return parse(response.content(), ModelUsage.from(response));
+            ModelResponse response = modelClient.complete(
+                    ModelRequest.builder(AiModelScope.from(properties.getAgentCore().getCuratorScope()).name())
+                            .message(ChatMessage.system(SYSTEM_PROMPT))
+                            .message(ChatMessage.user(cap(userMessage)))
+                            .profile(CallProfile.STRUCTURED_SMALL)
+                            .build(),
+                    CallOptions.of("tutor.understanding"));
+            return parse(response.content(), ProviderUsage.from(response));
         } catch (RuntimeException ex) {
             // Fail-open: understanding is advisory; the chat turn must never break because of it.
             log.warn("turn understanding failed, proceeding without tool floor: {}", ex.toString());
@@ -109,7 +104,7 @@ public class TurnUnderstandingService {
         }
     }
 
-    private TurnUnderstanding parse(String content, ModelUsage usage) {
+    private TurnUnderstanding parse(String content, ProviderUsage usage) {
         if (content == null || content.isBlank()) {
             return TurnUnderstanding.empty(usage);
         }
@@ -166,7 +161,7 @@ public class TurnUnderstandingService {
             boolean longRangeCue,
             Set<String> requiresTools,
             /** Provider-reported usage is telemetry only; it never influences the tool floor. */
-            ModelUsage usage
+            ProviderUsage usage
     ) {
         public TurnUnderstanding {
             referenceTypes = referenceTypes == null ? List.of() : List.copyOf(referenceTypes);
@@ -183,7 +178,7 @@ public class TurnUnderstandingService {
             return empty(null);
         }
 
-        private static TurnUnderstanding empty(ModelUsage usage) {
+        private static TurnUnderstanding empty(ProviderUsage usage) {
             return new TurnUnderstanding(null, List.of(), false, Set.of(), usage);
         }
     }

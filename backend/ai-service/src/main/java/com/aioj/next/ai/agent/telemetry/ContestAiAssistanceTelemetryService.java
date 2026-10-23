@@ -1,7 +1,7 @@
 package com.aioj.next.ai.agent.telemetry;
 
 import com.aioj.next.ai.agent.guard.GuardVerdict;
-import com.aioj.next.ai.agent.model.ModelUsage;
+import com.aioj.next.ai.agent.runtime.ProviderUsage;
 import com.aioj.next.ai.agent.policy.PolicySnapshotService;
 import com.aioj.next.ai.persistence.entity.AiContestAssistanceModelUsageEntity;
 import com.aioj.next.ai.persistence.entity.AiContestAssistanceTurnEntity;
@@ -115,7 +115,7 @@ public class ContestAiAssistanceTelemetryService {
         }
     }
 
-    public void recordUsage(TrackingContext context, String usageKey, String usageSource, ModelUsage usage) {
+    public void recordUsage(TrackingContext context, String usageKey, String usageSource, ProviderUsage usage) {
         if (context == null || !context.active() || usage == null) {
             return;
         }

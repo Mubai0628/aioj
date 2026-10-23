@@ -3,8 +3,8 @@ package com.aioj.next.ai.domain.draftagent;
 import com.aioj.next.ai.agent.context.ContextSection;
 import com.aioj.next.ai.agent.context.ContextSectionType;
 import com.aioj.next.ai.agent.context.TrustLevel;
-import com.aioj.next.ai.agent.model.CallProfile;
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.CallProfile;
+import com.aioj.next.ai.model.api.ChatMessage;
 import com.aioj.next.ai.agent.runtime.AgentExecutionMode;
 import com.aioj.next.ai.agent.runtime.AgentRuntime;
 import com.aioj.next.ai.agent.runtime.LoopBudget;
@@ -321,16 +321,16 @@ public class ProblemDraftAgentCoordinator {
                                                  AiChatMessageResponse currentUserMessage) {
         List<AiChatMessageResponse> persisted = conversationService.messages(
                 workspace.getCreatorUserId(), workspace.getConversationId());
-        List<GatewayMessage> recent = new ArrayList<>();
+        List<ChatMessage> recent = new ArrayList<>();
         for (AiChatMessageResponse message : persisted) {
             if (Objects.equals(message.id(), currentUserMessage.id())
                     || !"COMPLETED".equalsIgnoreCase(message.status())) {
                 continue;
             }
             if ("user".equalsIgnoreCase(message.role())) {
-                recent.add(GatewayMessage.user(message.content()));
+                recent.add(ChatMessage.user(message.content()));
             } else if ("assistant".equalsIgnoreCase(message.role())) {
-                recent.add(GatewayMessage.assistant(message.content(), List.of()));
+                recent.add(ChatMessage.assistant(message.content(), List.of()));
             }
         }
         if (recent.size() > MAX_RECENT_MESSAGES) {
@@ -355,7 +355,7 @@ public class ProblemDraftAgentCoordinator {
                 config.getMaxTestcasePackageRuns(), Duration.ofMinutes(config.getMaxRunMinutes()));
     }
 
-    private void recordUsage(long userId, com.aioj.next.ai.agent.model.ModelUsage usage) {
+    private void recordUsage(long userId, com.aioj.next.ai.agent.runtime.ProviderUsage usage) {
         if (usage == null || !usage.reported()) {
             return;
         }

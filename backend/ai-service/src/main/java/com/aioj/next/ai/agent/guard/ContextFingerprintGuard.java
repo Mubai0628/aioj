@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.guard;
 
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.ChatMessage;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
 import com.aioj.next.ai.agent.policy.GuardLayer;
@@ -69,7 +69,7 @@ public class ContextFingerprintGuard {
      */
     public Evaluation evaluate(String turnId, long userId, String conversationId,
                                ContestPolicyView contestPolicy, Set<Long> alreadyConstrainedProblemIds,
-                               List<GatewayMessage> messages, int bootstrapMessageCount, int agentStep) {
+                               List<ChatMessage> messages, int bootstrapMessageCount, int agentStep) {
         if (contestPolicy == null || !contestPolicy.isParticipant()) {
             return null;
         }
@@ -83,20 +83,20 @@ public class ContextFingerprintGuard {
         int toolMessages = 0;
         int historyAssistantMessages = 0;
         for (int i = 0; i < messages.size(); i++) {
-            GatewayMessage message = messages.get(i);
+            ChatMessage message = messages.get(i);
             if (message.content() == null || message.content().isBlank()) {
                 continue;
             }
             switch (message.role()) {
-                case "user" -> {
+                case USER -> {
                     text.append('\n').append(message.content());
                     userMessages++;
                 }
-                case "tool" -> {
+                case TOOL -> {
                     text.append('\n').append(message.content());
                     toolMessages++;
                 }
-                case "assistant" -> {
+                case ASSISTANT -> {
                     if (i < bootstrapMessageCount) {
                         text.append('\n').append(message.content());
                         historyAssistantMessages++;

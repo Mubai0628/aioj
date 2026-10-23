@@ -1,5 +1,15 @@
 package com.aioj.next.ai.agent.runtime;
 
+import com.aioj.next.ai.domain.AiModelConfigEndpointSource;
+import com.aioj.next.ai.model.api.CallOptions;
+import com.aioj.next.ai.model.api.EmbeddingRequest;
+import com.aioj.next.ai.model.api.EmbeddingResponse;
+import com.aioj.next.ai.model.api.ModelEndpointConfig;
+import com.aioj.next.ai.model.api.ModelInfo;
+import com.aioj.next.ai.model.api.ModelStreamListener;
+import com.aioj.next.ai.model.api.ProviderId;
+import com.aioj.next.ai.model.api.ToolSpec;
+import com.aioj.next.ai.model.provider.DeepSeekAdapter;
 import com.aioj.next.ai.agent.context.ContextManifestService;
 import com.aioj.next.ai.agent.context.ContextSection;
 import com.aioj.next.ai.agent.context.ContextSectionRenderer;
@@ -9,18 +19,19 @@ import com.aioj.next.ai.agent.context.TrustLevel;
 import com.aioj.next.ai.agent.guard.ContextFingerprintGuard;
 import com.aioj.next.ai.agent.guard.GuardVerdict;
 import com.aioj.next.ai.agent.guard.ProblemFingerprintMatcher;
-import com.aioj.next.ai.agent.model.CallProfile;
-import com.aioj.next.ai.agent.model.CallSettings;
-import com.aioj.next.ai.agent.model.GatewayMessage;
-import com.aioj.next.ai.agent.model.GatewayRequest;
-import com.aioj.next.ai.agent.model.GatewayResponse;
-import com.aioj.next.ai.agent.model.GatewayToolCall;
-import com.aioj.next.ai.agent.model.ModelGateway;
-import com.aioj.next.ai.agent.model.ModelUsage;
-import com.aioj.next.ai.agent.model.ProviderCapabilities;
-import com.aioj.next.ai.agent.model.ToolCallAdapter;
-import com.aioj.next.ai.agent.model.ToolChoiceMode;
-import com.aioj.next.ai.agent.model.ThinkingModeUnavailableException;
+import com.aioj.next.ai.model.api.CallProfile;
+import com.aioj.next.ai.model.provider.CallSettings;
+import com.aioj.next.ai.model.api.ChatMessage;
+import com.aioj.next.ai.model.api.ModelRequest;
+import com.aioj.next.ai.agent.TestModelResponses;
+import com.aioj.next.ai.model.api.ModelResponse;
+import com.aioj.next.ai.model.api.ToolCall;
+import com.aioj.next.ai.model.api.ModelClient;
+import com.aioj.next.ai.agent.runtime.ProviderUsage;
+import com.aioj.next.ai.model.api.ProviderCapabilities;
+import com.aioj.next.ai.model.api.ToolChoice;
+import com.aioj.next.ai.model.api.ModelErrorKind;
+import com.aioj.next.ai.model.api.ModelException;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.policy.GuardDecision;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
@@ -119,7 +130,7 @@ class AgentRuntimeTest {
         adapter = new FakeAdapter();
         toolExecutions = new AtomicInteger();
         when(configService.effectiveConfig(AiModelScope.TEXT_GENERATION)).thenReturn(config());
-        ModelGateway gateway = new ModelGateway(configService, List.of(adapter));
+        ModelClient gateway = adapter;
         ToolRegistry registry = new ToolRegistry(List.of(searchTool()));
         ToolBroker broker = new ToolBroker(registry,
                 new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
@@ -142,9 +153,9 @@ class AgentRuntimeTest {
         assertThat(result.missedRequiredTool()).isFalse();
         assertThat(toolExecutions.get()).isEqualTo(1);
         // Second model call received the sanitized tool payload as a tool message.
-        GatewayRequest secondCall = adapter.requests.get(1);
+        ModelRequest secondCall = adapter.requests.get(1);
         assertThat(secondCall.messages()).anySatisfy(message -> {
-            assertThat(message.role()).isEqualTo("tool");
+            assertThat(message.role().wireName()).isEqualTo("tool");
             assertThat(message.toolCallId()).isEqualTo("call-1");
             assertThat(message.content()).contains("instructionAllowed").contains("二分");
         });
@@ -155,8 +166,8 @@ class AgentRuntimeTest {
 
     @Test
     void reasoningContentStaysInMemoryAndIsReplayedToNextToolLoopRequest() {
-        adapter.script.add(new GatewayResponse("", "private reasoning", List.of(
-                new GatewayToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"x\"]}")),
+        adapter.script.add(TestModelResponses.response("", "private reasoning", List.of(
+                new ToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"x\"]}")),
                 "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro"));
         adapter.script.add(finalResponse("done"));
 
@@ -164,7 +175,7 @@ class AgentRuntimeTest {
 
         assertThat(result.content()).isEqualTo("done");
         assertThat(adapter.requests.get(1).messages())
-                .filteredOn(message -> "assistant".equals(message.role()))
+                .filteredOn(message -> "assistant".equals(message.role().wireName()))
                 .singleElement()
                 .satisfies(message -> assertThat(message.reasoningContent()).isEqualTo("private reasoning"));
         assertThat(result.warnings()).doesNotContain("private reasoning");
@@ -185,7 +196,7 @@ class AgentRuntimeTest {
 
         assertThat(result.executionMode()).isEqualTo(AgentExecutionMode.STANDARD_TOOL_FALLBACK);
         assertThat(result.warnings()).contains(AgentExecutionMode.STANDARD_TOOL_FALLBACK.name());
-        assertThat(adapter.settings).extracting(CallSettings::thinkingEnabled).containsExactly(true, false);
+        assertThat(adapter.settings).extracting(CallSettings::thinking).containsExactly(true, false);
     }
 
     @Test
@@ -225,7 +236,7 @@ class AgentRuntimeTest {
                 assertThat(message.content()).contains("I will design the problem now."));
         assertThat(adapter.requests.get(3).messages()).anySatisfy(message ->
                 assertThat(message.content()).contains("exhausted its answer without a tool call"));
-        assertThat(adapter.settings).extracting(CallSettings::thinkingEnabled)
+        assertThat(adapter.settings).extracting(CallSettings::thinking)
                 .containsExactly(true, false, false, false, false, false);
     }
 
@@ -251,8 +262,8 @@ class AgentRuntimeTest {
             }
         };
         AgentRuntime draftRuntime = runtimeWith(List.of(tool));
-        adapter.script.add(new GatewayResponse("", List.of(
-                new GatewayToolCall("draft-call", "draft.state.get", "{}")),
+        adapter.script.add(TestModelResponses.response("", List.of(
+                new ToolCall("draft-call", "draft.state.get", "{}")),
                 "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro"));
         adapter.script.add(finalResponse("done"));
 
@@ -286,7 +297,7 @@ class AgentRuntimeTest {
     void usageObserverReceivesEveryActualModelInvocation() {
         adapter.script.add(toolCallResponse());
         adapter.script.add(finalResponse("最终回答"));
-        List<ModelUsage> observed = new ArrayList<>();
+        List<ProviderUsage> observed = new ArrayList<>();
         AgentRuntime.AgentRunRequest request = new AgentRuntime.AgentRunRequest(
                 "turn-1", 7L, "c1", "ps-1", Set.of("AI_CHAT"), sections(), false,
                 "STREAM", CallProfile.CHAT_STREAM, budget(8, 6, 3, 3), null, null, observed::add);
@@ -313,10 +324,10 @@ class AgentRuntimeTest {
         assertThat(result.missedRequiredTool()).isFalse();
         assertThat(result.warnings()).doesNotContain("missed_required_tool");
         // DeepSeek is never sent tool_choice=required: runtime simulates with a system nudge.
-        assertThat(adapter.requests).allSatisfy(request -> assertThat(request.toolChoice()).isEqualTo(ToolChoiceMode.AUTO));
-        GatewayRequest retry = adapter.requests.get(1);
+        assertThat(adapter.requests).allSatisfy(request -> assertThat(request.toolChoice()).isEqualTo(ToolChoice.AUTO));
+        ModelRequest retry = adapter.requests.get(1);
         assertThat(retry.messages()).anySatisfy(message -> {
-            assertThat(message.role()).isEqualTo("system");
+            assertThat(message.role().wireName()).isEqualTo("system");
             assertThat(message.content()).contains("requires at least one relevant tool call");
         });
     }
@@ -335,9 +346,9 @@ class AgentRuntimeTest {
 
     @Test
     void toolBudgetExhaustionStopsExecutionAndForcesAnswer() {
-        adapter.script.add(new GatewayResponse("", List.of(
-                        new GatewayToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"a\"]}"),
-                        new GatewayToolCall("call-2", "context.search_exact", "{\"exactTerms\":[\"b\"]}")),
+        adapter.script.add(TestModelResponses.response("", List.of(
+                        new ToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"a\"]}"),
+                        new ToolCall("call-2", "context.search_exact", "{\"exactTerms\":[\"b\"]}")),
                 "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro"));
         adapter.script.add(finalResponse("预算耗尽后的尽力回答"));
 
@@ -348,7 +359,7 @@ class AgentRuntimeTest {
         assertThat(toolExecutions.get()).isEqualTo(1);
         assertThat(result.warnings()).contains("tool_budget_exhausted");
         // The final answer call is made without tools.
-        GatewayRequest lastCall = adapter.requests.get(adapter.requests.size() - 1);
+        ModelRequest lastCall = adapter.requests.get(adapter.requests.size() - 1);
         assertThat(lastCall.tools()).isEmpty();
     }
 
@@ -362,9 +373,9 @@ class AgentRuntimeTest {
         assertThat(result.content()).isEqualTo("没有搜索配额了");
         assertThat(toolExecutions.get()).isZero();
         assertThat(result.toolCallCount()).isZero();
-        GatewayRequest secondCall = adapter.requests.get(1);
+        ModelRequest secondCall = adapter.requests.get(1);
         assertThat(secondCall.messages()).anySatisfy(message -> {
-            assertThat(message.role()).isEqualTo("tool");
+            assertThat(message.role().wireName()).isEqualTo("tool");
             assertThat(message.content()).contains("BUDGET_EXCEEDED");
         });
     }
@@ -381,7 +392,7 @@ class AgentRuntimeTest {
         // The recovery retry runs with the thinking-off recovery profile.
         assertThat(adapter.requests.get(1).profile()).isEqualTo(CallProfile.RECOVERY_ANSWER);
         assertThat(adapter.requests.get(1).messages()).anySatisfy(message -> {
-            assertThat(message.role()).isEqualTo("system");
+            assertThat(message.role().wireName()).isEqualTo("system");
             assertThat(message.content()).contains("previous reply was empty");
         });
     }
@@ -399,9 +410,9 @@ class AgentRuntimeTest {
 
     @Test
     void budgetExhaustedFinalAnswerUsesRecoveryProfileAndRejectsBlank() {
-        adapter.script.add(new GatewayResponse("", List.of(
-                        new GatewayToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"a\"]}"),
-                        new GatewayToolCall("call-2", "context.search_exact", "{\"exactTerms\":[\"b\"]}")),
+        adapter.script.add(TestModelResponses.response("", List.of(
+                        new ToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"a\"]}"),
+                        new ToolCall("call-2", "context.search_exact", "{\"exactTerms\":[\"b\"]}")),
                 "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro"));
         adapter.script.add(emptyResponse("length"));
 
@@ -409,7 +420,7 @@ class AgentRuntimeTest {
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> assertThat(((DomainException) ex).errorCode())
                         .isEqualTo(ErrorCode.SERVICE_UNAVAILABLE));
-        GatewayRequest finalCall = adapter.requests.get(adapter.requests.size() - 1);
+        ModelRequest finalCall = adapter.requests.get(adapter.requests.size() - 1);
         assertThat(finalCall.tools()).isEmpty();
         assertThat(finalCall.profile()).isEqualTo(CallProfile.RECOVERY_ANSWER);
     }
@@ -426,9 +437,9 @@ class AgentRuntimeTest {
                 CallProfile.CHAT_STREAM, budget(8, 6, 3, 3), ContestPolicyView.nonParticipant());
         runtimeWithProblemTool.run(nonParticipantViewSpec);
 
-        assertThat(adapter.requests.get(0).tools()).extracting(ToolDescriptor::name)
+        assertThat(adapter.requests.get(0).tools()).extracting(ToolSpec::name)
                 .containsExactly("context.search_exact");
-        assertThat(adapter.requests.get(1).tools()).extracting(ToolDescriptor::name)
+        assertThat(adapter.requests.get(1).tools()).extracting(ToolSpec::name)
                 .containsExactly("context.search_exact");
     }
 
@@ -436,8 +447,8 @@ class AgentRuntimeTest {
     void participantTurnKeepsProblemSearchAndThreadsContestPolicy() throws Exception {
         AtomicReference<ToolExecutionContext> seenContext = new AtomicReference<>();
         AgentRuntime runtimeWithProblemTool = runtimeWith(List.of(problemSearchTool(seenContext)));
-        adapter.script.add(new GatewayResponse("", List.of(
-                        new GatewayToolCall("call-1", "problem.search", "{\"query\":\"二分\"}")),
+        adapter.script.add(TestModelResponses.response("", List.of(
+                        new ToolCall("call-1", "problem.search", "{\"query\":\"二分\"}")),
                 "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro"));
         adapter.script.add(finalResponse("基于比赛题面的回答"));
         ContestPolicyView view = new ContestPolicyView(ParticipantStatus.PARTICIPANT_ACTIVE, Map.of());
@@ -447,7 +458,7 @@ class AgentRuntimeTest {
                 CallProfile.CHAT_STREAM, budget(8, 6, 3, 3), view));
 
         assertThat(result.content()).isEqualTo("基于比赛题面的回答");
-        assertThat(adapter.requests.get(0).tools()).extracting(ToolDescriptor::name)
+        assertThat(adapter.requests.get(0).tools()).extracting(ToolSpec::name)
                 .containsExactly("problem.search");
         assertThat(seenContext.get().contestPolicy()).isSameAs(view);
     }
@@ -462,7 +473,7 @@ class AgentRuntimeTest {
         // L3 second layer (§5.3): the history paste bypassed the message layer, so the
         // assembled-context match injects the rules before the very first model call.
         assertThat(adapter.requests.get(0).messages()).anySatisfy(message -> {
-            assertThat(message.role()).isEqualTo("system");
+            assertThat(message.role().wireName()).isEqualTo("system");
             assertThat(message.content())
                     .contains("[Contest Guard Match — server fingerprint result for the assembled context; enforce]")
                     .contains("Problem #1002 (PRIVATE, policy DEFAULT)");
@@ -550,8 +561,8 @@ class AgentRuntimeTest {
         return List.of(
                 ContextSection.text(ContextSectionType.SYSTEM_POLICY, 10, true, TrustLevel.SYSTEM_POLICY, "sys"),
                 ContextSection.conversation(ContextSectionType.RECENT_TURNS, 40, TrustLevel.USER_PROVIDED,
-                        List.of(GatewayMessage.user("之前那题：" + CONTEST_STATEMENT),
-                                GatewayMessage.assistant("先读题面", List.of())),
+                        List.of(ChatMessage.user("之前那题：" + CONTEST_STATEMENT),
+                                ChatMessage.assistant("先读题面", List.of())),
                         List.of()),
                 ContextSection.text(ContextSectionType.CURRENT_USER_REQUEST, 90, true, TrustLevel.USER_PROVIDED, "继续"));
     }
@@ -581,8 +592,8 @@ class AgentRuntimeTest {
         };
     }
 
-    private GatewayResponse emptyResponse(String finishReason) {
-        return new GatewayResponse("", List.of(), finishReason, 10, 5, 0, "deepseek", "deepseek-v4-pro");
+    private ModelResponse emptyResponse(String finishReason) {
+        return TestModelResponses.response("", List.of(), finishReason, 10, 5, 0, "deepseek", "deepseek-v4-pro");
     }
 
     @Test
@@ -667,7 +678,7 @@ class AgentRuntimeTest {
 
     private AgentRuntime runtimeWith(List<AgentTool> tools, ContextFingerprintGuard guard,
                                      AiProperties properties) {
-        ModelGateway gateway = new ModelGateway(configService, List.of(adapter));
+        ModelClient gateway = adapter;
         ToolRegistry registry = new ToolRegistry(tools);
         ToolBroker broker = new ToolBroker(registry,
                 new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
@@ -710,19 +721,19 @@ class AgentRuntimeTest {
         return new LoopBudget(steps, toolCalls, search, fetch);
     }
 
-    private GatewayResponse toolCallResponse() {
-        return new GatewayResponse("", List.of(
-                new GatewayToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"二分\"]}")),
+    private ModelResponse toolCallResponse() {
+        return TestModelResponses.response("", List.of(
+                new ToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"二分\"]}")),
                 "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro");
     }
 
-    private GatewayResponse toolResponse(String callId, String toolName) {
-        return new GatewayResponse("", List.of(new GatewayToolCall(callId, toolName, "{}")),
+    private ModelResponse toolResponse(String callId, String toolName) {
+        return TestModelResponses.response("", List.of(new ToolCall(callId, toolName, "{}")),
                 "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro");
     }
 
-    private GatewayResponse finalResponse(String content) {
-        return new GatewayResponse(content, List.of(), "stop", 10, 5, 0, "deepseek", "deepseek-v4-pro");
+    private ModelResponse finalResponse(String content) {
+        return TestModelResponses.response(content, List.of(), "stop", 10, 5, 0, "deepseek", "deepseek-v4-pro");
     }
 
     private AiModelEffectiveConfig config() {
@@ -781,30 +792,37 @@ class AgentRuntimeTest {
         };
     }
 
-    private static final class FakeAdapter implements ToolCallAdapter {
-        private final Queue<GatewayResponse> script = new java.util.concurrent.ConcurrentLinkedQueue<>();
-        private final List<GatewayRequest> requests =
+    /**
+     * A model client that answers from a script and records what the loop asked for,
+     * including the settings the real client would derive (thinking, token budget).
+     */
+    private final class FakeAdapter implements ModelClient {
+        private final Queue<ModelResponse> script = new java.util.concurrent.ConcurrentLinkedQueue<>();
+        private final List<ModelRequest> requests =
                 java.util.Collections.synchronizedList(new ArrayList<>());
         private final List<CallSettings> settings =
                 java.util.Collections.synchronizedList(new ArrayList<>());
+        private final DeepSeekAdapter deepSeek = new DeepSeekAdapter();
         private boolean rejectNextThinkingCall;
         private long delayMillis;
         private volatile CountDownLatch gate;
 
         @Override
-        public String provider() {
-            return "deepseek";
+        public ModelEndpointConfig resolve(String scope) {
+            return AiModelConfigEndpointSource.toEndpoint(configService.effectiveConfig(AiModelScope.from(scope)));
         }
 
         @Override
-        public ProviderCapabilities capabilities() {
-            return ProviderCapabilities.deepSeek();
+        public ProviderCapabilities capabilities(ModelEndpointConfig endpoint) {
+            return deepSeek.capabilities(endpoint.model());
         }
 
         @Override
-        public GatewayResponse execute(AiModelEffectiveConfig config, CallSettings settings, GatewayRequest request) {
+        public ModelResponse complete(ModelRequest request, CallOptions options) {
             requests.add(request);
-            this.settings.add(settings);
+            CallSettings callSettings = CallSettings.resolve(request.endpoint(), request,
+                    capabilities(request.endpoint()));
+            this.settings.add(callSettings);
             if (delayMillis > 0) {
                 try {
                     Thread.sleep(delayMillis);
@@ -822,11 +840,27 @@ class AgentRuntimeTest {
                     throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "model call interrupted");
                 }
             }
-            if (rejectNextThinkingCall && settings.thinkingEnabled()) {
+            if (rejectNextThinkingCall && callSettings.thinking()) {
                 rejectNextThinkingCall = false;
-                throw new ThinkingModeUnavailableException("deepseek", config.model(), 400);
+                throw new ModelException(ModelErrorKind.THINKING_UNAVAILABLE, ProviderId.DEEPSEEK,
+                        request.endpoint().model(), "Configured AI model does not support the requested thinking mode");
             }
             return script.remove();
+        }
+
+        @Override
+        public ModelResponse stream(ModelRequest request, CallOptions options, ModelStreamListener listener) {
+            throw new UnsupportedOperationException("the Agent loop does not stream yet");
+        }
+
+        @Override
+        public EmbeddingResponse embed(EmbeddingRequest request, CallOptions options) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<ModelInfo> listModels(ModelEndpointConfig candidate, CallOptions options) {
+            throw new UnsupportedOperationException();
         }
     }
 }

@@ -1,19 +1,22 @@
-package com.aioj.next.ai.agent.model;
+package com.aioj.next.ai.agent.runtime;
+
+import com.aioj.next.ai.model.api.ModelResponse;
+import com.aioj.next.ai.model.api.ModelUsage;
 
 /** Per-run token accumulator; usage is settled once per turn by the facade. */
 public final class UsageMeter {
-
     private long promptTokens;
     private long completionTokens;
     private long cacheHitTokens;
 
-    public void add(GatewayResponse response) {
+    public void add(ModelResponse response) {
         if (response == null) {
             return;
         }
-        promptTokens += Math.max(0, response.promptTokens());
-        completionTokens += Math.max(0, response.completionTokens());
-        cacheHitTokens += Math.max(0, response.cacheHitTokens());
+        ModelUsage usage = response.usage();
+        promptTokens += usage.promptTokens();
+        completionTokens += usage.completionTokens();
+        cacheHitTokens += usage.cacheHitTokens();
     }
 
     public long promptTokens() {

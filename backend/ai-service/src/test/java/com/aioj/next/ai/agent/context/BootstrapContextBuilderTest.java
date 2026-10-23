@@ -1,6 +1,6 @@
 package com.aioj.next.ai.agent.context;
 
-import com.aioj.next.ai.agent.model.GatewayMessage;
+import com.aioj.next.ai.model.api.ChatMessage;
 import com.aioj.next.ai.agent.policy.PolicySnapshotService;
 import com.aioj.next.ai.domain.AiConversationService;
 import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
@@ -45,7 +45,7 @@ class BootstrapContextBuilderTest {
         ContextSection recent = context.sections().get(1);
         // RUNNING placeholder excluded; the just-sent user message is NOT in history
         // because build happens before it is persisted.
-        assertThat(recent.messages()).extracting(GatewayMessage::role)
+        assertThat(recent.messages()).extracting(message -> message.role().wireName())
                 .containsExactly("user", "assistant");
         assertThat(context.warnings()).isEmpty();
     }
@@ -83,7 +83,7 @@ class BootstrapContextBuilderTest {
         ContextSection recent = context.sections().stream()
                 .filter(section -> section.type() == ContextSectionType.RECENT_TURNS)
                 .findFirst().orElseThrow();
-        assertThat(recent.messages()).extracting(GatewayMessage::content)
+        assertThat(recent.messages()).extracting(ChatMessage::content)
                 .containsExactly("m2", "a2");
     }
 
