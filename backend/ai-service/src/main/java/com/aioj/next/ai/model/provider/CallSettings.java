@@ -4,6 +4,7 @@ import com.aioj.next.ai.model.api.CallProfile;
 import com.aioj.next.ai.model.api.ModelEndpointConfig;
 import com.aioj.next.ai.model.api.ModelRequest;
 import com.aioj.next.ai.model.api.ProviderCapabilities;
+import com.aioj.next.ai.model.api.ProviderId;
 import com.aioj.next.ai.model.api.ResponseFormat;
 
 import java.util.Locale;
@@ -17,27 +18,40 @@ import java.util.Locale;
 public record CallSettings(boolean thinking, String reasoningEffort, double temperature, int maxTokens,
                            ResponseFormat responseFormat) {
 
+    /**
+     * Reasoning counts toward max_tokens. At effort max DeepSeek reasoned through all
+     * 8,192 tokens of a hard turn and answered nothing (T1.3 eval, 2026-10-23); it
+     * documents up to 384K output tokens, so thinking at max effort gets this much room.
+     * Other providers keep the general floor until their limits are checked.
+     */
+    static final int DEEPSEEK_MAX_EFFORT_MIN_TOKENS = 16_384;
+
     public static CallSettings resolve(ModelEndpointConfig endpoint, ModelRequest request,
                                        ProviderCapabilities capabilities) {
         CallProfile profile = request.profile();
         boolean thinking = capabilities.thinks(endpoint, profile, request.thinkingDisabled());
+        String effort = endpoint.reasoningEffort() != null
+                && "max".equals(endpoint.reasoningEffort().trim().toLowerCase(Locale.ROOT)) ? "max" : "high";
         int maxTokens = request.maxTokens() != null && request.maxTokens() > 0
                 ? request.maxTokens()
                 : endpoint.maxTokens() == null || endpoint.maxTokens() <= 0
                         ? profile.defaultMaxTokens()
                         : endpoint.maxTokens();
         if (thinking) {
-            maxTokens = Math.max(maxTokens, CallProfile.MIN_MAX_TOKENS_WHEN_THINKING);
+            maxTokens = Math.max(maxTokens, minimumWhenThinking(capabilities.provider(), effort));
         }
         double temperature = request.temperature() != null
                 ? request.temperature()
                 : endpoint.temperature() == null ? profile.defaultTemperature() : endpoint.temperature();
-        String effort = endpoint.reasoningEffort() != null
-                && "max".equals(endpoint.reasoningEffort().trim().toLowerCase(Locale.ROOT)) ? "max" : "high";
         ResponseFormat format = request.responseFormat();
         if (!format.isJson() && profile.forceJsonOutput()) {
             format = ResponseFormat.jsonObject();
         }
         return new CallSettings(thinking, effort, temperature, maxTokens, format);
+    }
+
+    private static int minimumWhenThinking(ProviderId provider, String effort) {
+        return provider == ProviderId.DEEPSEEK && "max".equals(effort)
+                ? DEEPSEEK_MAX_EFFORT_MIN_TOKENS : CallProfile.MIN_MAX_TOKENS_WHEN_THINKING;
     }
 }

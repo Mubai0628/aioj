@@ -72,7 +72,8 @@ class ModelClientContractTest {
         assertThat(body.path("thinking").path("type").asString()).isEqualTo("enabled");
         assertThat(body.path("reasoning_effort").asString()).isEqualTo("max");
         assertThat(body.has("temperature")).as("no temperature in thinking mode").isFalse();
-        assertThat(body.path("max_tokens").asInt()).isEqualTo(4096);
+        assertThat(body.path("max_tokens").asInt()).as("thinking at effort max gets room to answer")
+                .isEqualTo(16384);
         assertThat(body.path("tool_choice").asString()).isEqualTo("auto");
         assertLoopMessages(body);
         assertToolsPassThrough(body);
