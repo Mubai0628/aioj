@@ -5,6 +5,7 @@ import com.aioj.next.ai.model.api.ModelEndpointConfig;
 import com.aioj.next.ai.model.api.ModelErrorKind;
 import com.aioj.next.ai.model.api.ModelException;
 import com.aioj.next.ai.model.api.ProviderId;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
@@ -16,9 +17,14 @@ import java.util.Locale;
  */
 @Component
 public class AiModelConfigEndpointSource implements ModelConfigSource {
-    private final AiModelConfigService configService;
+    /**
+     * Looked up per call: the config service's connectivity test and model catalog
+     * use the model client, which uses this source, so a constructor dependency
+     * would be a bean cycle.
+     */
+    private final ObjectProvider<AiModelConfigService> configService;
 
-    public AiModelConfigEndpointSource(AiModelConfigService configService) {
+    public AiModelConfigEndpointSource(ObjectProvider<AiModelConfigService> configService) {
         this.configService = configService;
     }
 
@@ -31,7 +37,7 @@ public class AiModelConfigEndpointSource implements ModelConfigSource {
             throw new ModelException(ModelErrorKind.CONFIGURATION_INVALID, null, null,
                     "Unknown AI model scope: " + scope);
         }
-        return toEndpoint(configService.effectiveConfig(modelScope));
+        return toEndpoint(configService.getObject().effectiveConfig(modelScope));
     }
 
     /** The same conversion for a configuration that is not stored yet, such as one under test. */
