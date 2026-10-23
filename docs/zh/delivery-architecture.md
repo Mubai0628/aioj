@@ -38,6 +38,8 @@ CI 对后端、React、Compose、Markdown 链接、仓库卫生和秘密泄露�
 
 后端测试包含 ai-service 的架构测试（ArchUnit，只在测试范围）：模型调用包只能经它的 `api` 子包使用，且不依赖持久层或 ai-service 的其他代码；现有的三条模型调用旧路径冻结在允许清单里，不接新调用方；ai-service 进程内不启动子进程。允许清单只减不增。
 
+`backend/agent-harness` 是与领域无关的 Agent 循环和工具管线，它的架构测试要求：运行时只依赖 JDK 和 Jackson；各子包的 `internal` 包只在本子包内使用；依赖方向是 runtime → tool → context；源码里不出现判题领域的词。每条规则都有违规样例证明它会报错。
+
 ## 生产边界
 
 - 生产根目录保存 image-only Compose、环境文件、当前/上一版本 digest 与部署历史，不保存 Git 工作树。

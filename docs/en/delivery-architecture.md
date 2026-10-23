@@ -38,6 +38,8 @@ CI checks the backend, React applications, Compose, Markdown links, repository h
 
 The backend tests include ai-service architecture tests (ArchUnit, test scope only): the model call package is used only through its `api` subpackage and depends on neither persistence nor the rest of ai-service; the three legacy model call paths are frozen in allowlists and take no new callers; the ai-service process starts no child processes. The allowlists only shrink.
 
+`backend/agent-harness` holds the domain-free agent loop and tool pipeline. Its architecture tests require that it depends at runtime on the JDK and Jackson only, that each subpackage's `internal` package is used only inside that subpackage, that dependencies point from runtime to tools to context, and that its sources contain no words of the judge domain. Fixtures prove that every rule reports a violation.
+
 ## Production boundary
 
 - The production root stores image-only Compose, environment files, current/previous digest sets, and deployment history, but no Git worktree.
