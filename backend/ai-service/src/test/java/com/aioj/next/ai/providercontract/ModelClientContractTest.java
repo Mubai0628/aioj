@@ -126,6 +126,30 @@ class ModelClientContractTest {
         assertThat(k27Body.has("temperature")).isFalse();
     }
 
+    /** Plan Q13: a plain OpenAI-compatible endpoint gets the standard fields, no thinking and no tools. */
+    @Test
+    void anOpenAiCompatibleRequestUsesOnlyTheStandardFieldsAndCallsNoTools() {
+        provider.reply(Reply.json(200, ProviderPayloads.deepSeekText("ok", null)));
+        ModelEndpointConfig compatible = endpoint(ProviderId.OPENAI_COMPATIBLE, provider.chatUrl(), "glm-4", true,
+                "max");
+
+        try (DefaultModelClient client = client(compatible, fastProperties())) {
+            assertThat(client.complete(userOnly(compatible, CallProfile.COMPLETION), CallOptions.of("test")).content())
+                    .isEqualTo("ok");
+            assertThatThrownBy(() -> client.complete(loopRequest(compatible, ToolChoice.AUTO), CallOptions.of("test")))
+                    .isInstanceOfSatisfying(ModelException.class,
+                            error -> assertThat(error.kind()).isEqualTo(ModelErrorKind.CAPABILITY_UNSUPPORTED));
+        }
+
+        JsonNode body = provider.onlyRequest().json();
+        assertThat(body.path("model").asString()).isEqualTo("glm-4");
+        assertThat(body.path("max_tokens").asInt()).isEqualTo(4096);
+        assertThat(body.path("temperature").asDouble()).isEqualTo(0.3);
+        assertThat(body.has("thinking")).isFalse();
+        assertThat(body.has("reasoning_effort")).isFalse();
+        assertThat(body.has("tools")).isFalse();
+    }
+
     @Test
     void deepSeekParallelToolCallsAreParsedWithReasoningAndCacheHits() {
         provider.reply(Reply.json(200, ProviderPayloads.deepSeekToolCalls("need the statement")));

@@ -1,6 +1,8 @@
 package com.aioj.next.ai.persistence.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -26,6 +28,21 @@ public class AiModelConfigEntity {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Long updatedBy;
+    // Plan A6.2: null means the model client's default, so saving must be able to write a null back.
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer connectTimeoutMs;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer firstByteTimeoutMs;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer totalTimeoutMs;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer maxConcurrency;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer maxRetries;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Boolean thinkingFallbackEnabled;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Boolean streamingEnabled;
 
     public Long getId() {
         return id;
@@ -161,5 +178,61 @@ public class AiModelConfigEntity {
 
     public void setUpdatedBy(Long updatedBy) {
         this.updatedBy = updatedBy;
+    }
+
+    public Integer getConnectTimeoutMs() {
+        return connectTimeoutMs;
+    }
+
+    public void setConnectTimeoutMs(Integer connectTimeoutMs) {
+        this.connectTimeoutMs = connectTimeoutMs;
+    }
+
+    public Integer getFirstByteTimeoutMs() {
+        return firstByteTimeoutMs;
+    }
+
+    public void setFirstByteTimeoutMs(Integer firstByteTimeoutMs) {
+        this.firstByteTimeoutMs = firstByteTimeoutMs;
+    }
+
+    public Integer getTotalTimeoutMs() {
+        return totalTimeoutMs;
+    }
+
+    public void setTotalTimeoutMs(Integer totalTimeoutMs) {
+        this.totalTimeoutMs = totalTimeoutMs;
+    }
+
+    public Integer getMaxConcurrency() {
+        return maxConcurrency;
+    }
+
+    public void setMaxConcurrency(Integer maxConcurrency) {
+        this.maxConcurrency = maxConcurrency;
+    }
+
+    public Integer getMaxRetries() {
+        return maxRetries;
+    }
+
+    public void setMaxRetries(Integer maxRetries) {
+        this.maxRetries = maxRetries;
+    }
+
+    public Boolean getThinkingFallbackEnabled() {
+        return thinkingFallbackEnabled;
+    }
+
+    public void setThinkingFallbackEnabled(Boolean thinkingFallbackEnabled) {
+        this.thinkingFallbackEnabled = thinkingFallbackEnabled;
+    }
+
+    public Boolean getStreamingEnabled() {
+        return streamingEnabled;
+    }
+
+    public void setStreamingEnabled(Boolean streamingEnabled) {
+        this.streamingEnabled = streamingEnabled;
     }
 }

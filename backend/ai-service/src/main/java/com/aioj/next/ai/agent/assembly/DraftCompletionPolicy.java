@@ -38,8 +38,10 @@ final class DraftCompletionPolicy implements CompletionPolicy {
             emptyAnswersBeforeGate++;
             log.warn("Agent run got an empty pre-finalization completion turn={} run={} step={}", turnId,
                     context.runId(), context.step());
-            switchToStandardTools(context);
-        } else if (fallbackAllowed) {
+        }
+        // Dropping thinking is the recovery; a scope that forbids it keeps thinking, and a
+        // second empty answer then ends the run (plan A6.2).
+        if (fallbackAllowed) {
             switchToStandardTools(context);
         }
         return Verdict.continueWith(recoveryInstruction(empty));

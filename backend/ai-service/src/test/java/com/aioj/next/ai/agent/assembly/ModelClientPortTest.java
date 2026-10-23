@@ -50,6 +50,7 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.aioj.next.ai.model.api.EndpointTuning;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -143,6 +144,25 @@ class ModelClientPortTest {
                         ex -> assertThat(ex.kind()).isEqualTo(ModelCallException.Kind.REJECTED));
         assertThat(port.lastFailure()).containsSame(refusal);
         assertThat(client.requests).hasSize(1);
+    }
+
+    @Test
+    void aScopeThatForbidsDroppingThinkingFailsInsteadOfFallingBack() {
+        ModelEndpointConfig strict = ModelEndpointConfig.builder(ProviderId.DEEPSEEK)
+                .baseUrl("http://127.0.0.1:9/chat/completions").apiKey("test-key").model("deepseek-flash")
+                .enabled(true).thinking(true, "high")
+                .tuning(new EndpointTuning(null, null, null, null, null, false, null)).build();
+        FakeModelClient strictClient = new FakeModelClient(strict, DEEPSEEK_CAPS);
+        strictClient.reply(refused(ModelErrorKind.THINKING_UNAVAILABLE));
+        ModelClientPort port = ModelClientPort.open(strictClient, "PROBLEM_DRAFT", CallProfile.PROBLEM_DRAFT,
+                options("problem_draft"), true, observed::add);
+
+        assertThat(port.fallbackAllowed()).isFalse();
+        assertThatThrownBy(() -> port.complete(call("PROBLEM_DRAFT", null, null)))
+                .isInstanceOfSatisfying(ModelCallException.class,
+                        ex -> assertThat(ex.kind()).isEqualTo(ModelCallException.Kind.REJECTED));
+        assertThat(strictClient.requests).hasSize(1);
+        assertThat(port.executionMode()).isEqualTo(AgentExecutionMode.THINKING);
     }
 
     @Test

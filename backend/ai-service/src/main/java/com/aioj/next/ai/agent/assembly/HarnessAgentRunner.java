@@ -82,7 +82,7 @@ public class HarnessAgentRunner {
 
         DraftCompletionPolicy gate = spec.completionPolicy().isRequired()
                 ? new DraftCompletionPolicy(spec.completionPolicy().requiredSuccessfulToolName(), port,
-                        fallbackAllowed, spec.turnId())
+                        port.fallbackAllowed(), spec.turnId())
                 : null;
         List<HarnessMessage> starting = HarnessMessages.fromChat(renderer.render(spec.sections()));
         InterceptorFailures failures = new InterceptorFailures();

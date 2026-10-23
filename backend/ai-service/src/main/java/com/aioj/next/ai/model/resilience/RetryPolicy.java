@@ -37,7 +37,14 @@ public final class RetryPolicy {
      * @param attemptsMade attempts already made, the failed one included
      */
     public Optional<Duration> delayBeforeRetry(ModelException failure, int attemptsMade, Instant deadline) {
-        if (attemptsMade > maxRetries || failure.outputStarted() || !retryable(failure.kind())) {
+        return delayBeforeRetry(failure, attemptsMade, deadline, null);
+    }
+
+    /** The same, with the endpoint's own retry count; {@code null} keeps the configured one. */
+    public Optional<Duration> delayBeforeRetry(ModelException failure, int attemptsMade, Instant deadline,
+                                               Integer endpointMaxRetries) {
+        int limit = endpointMaxRetries == null ? maxRetries : Math.max(0, endpointMaxRetries);
+        if (attemptsMade > limit || failure.outputStarted() || !retryable(failure.kind())) {
             return Optional.empty();
         }
         Duration delay;

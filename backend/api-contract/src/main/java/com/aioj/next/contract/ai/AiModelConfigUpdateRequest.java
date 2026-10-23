@@ -12,6 +12,7 @@ public record AiModelConfigUpdateRequest(
         String reasoningEffort,
         Double temperature,
         Integer maxTokens,
-        Integer embeddingDimension
+        Integer embeddingDimension,
+        AiModelCallSettings callSettings
 ) {
 }

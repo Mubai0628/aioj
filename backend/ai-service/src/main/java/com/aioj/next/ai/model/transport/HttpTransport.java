@@ -20,6 +20,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -48,21 +50,26 @@ public final class HttpTransport implements AutoCloseable {
 
     private final ExecutorService executor;
     private final ScheduledExecutorService watchdog;
-    private final HttpClient client;
+    private final Duration connectTimeout;
+    /** The JDK client fixes the connect timeout per client; the configs use only a few values. */
+    private final ConcurrentMap<Duration, HttpClient> clients = new ConcurrentHashMap<>();
 
     public HttpTransport(Duration connectTimeout) {
         this.executor = Executors.newCachedThreadPool(daemonThreads("model-http"));
         this.watchdog = Executors.newSingleThreadScheduledExecutor(daemonThreads("model-stream-deadline"));
-        this.client = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)
-                .connectTimeout(connectTimeout)
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .executor(executor)
-                .build();
+        this.connectTimeout = connectTimeout;
     }
 
-    /** One request to a provider. {@code body == null} sends a GET. */
-    public record Exchange(URI uri, Map<String, String> headers, String body, ProviderId provider, String model) {
+    /**
+     * One request to a provider. {@code body == null} sends a GET.
+     *
+     * @param connectTimeout the endpoint's own, or null for the transport's default
+     */
+    public record Exchange(URI uri, Map<String, String> headers, String body, ProviderId provider, String model,
+                           Duration connectTimeout) {
+        public Exchange(URI uri, Map<String, String> headers, String body, ProviderId provider, String model) {
+            this(uri, headers, body, provider, model, null);
+        }
     }
 
     /** Called for each event of a stream; it may throw to abort the stream. */
@@ -71,11 +78,21 @@ public final class HttpTransport implements AutoCloseable {
         void accept(String data);
     }
 
+    private HttpClient client(Exchange exchange) {
+        Duration timeout = exchange.connectTimeout() == null ? connectTimeout : exchange.connectTimeout();
+        return clients.computeIfAbsent(timeout, value -> HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(value)
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .executor(executor)
+                .build());
+    }
+
     /** Sends the request and reads the whole answer within {@code timeout}. */
     public TransportResponse send(Exchange exchange, Duration timeout, CancellationSignal cancellation) {
         HttpRequest request = request(exchange, timeout);
         CompletableFuture<HttpResponse<String>> future =
-                client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                client(exchange).sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         CancellationSignal.Registration registration = onCancel(cancellation, () -> future.cancel(true));
         try {
             HttpResponse<String> response = future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -166,7 +183,7 @@ public final class HttpTransport implements AutoCloseable {
         // for the headers is bounded by the future instead.
         HttpRequest request = request(exchange, null);
         CompletableFuture<HttpResponse<InputStream>> future =
-                client.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream());
+                client(exchange).sendAsync(request, HttpResponse.BodyHandlers.ofInputStream());
         CancellationSignal.Registration registration = onCancel(cancellation, () -> future.cancel(true));
         try {
             return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);

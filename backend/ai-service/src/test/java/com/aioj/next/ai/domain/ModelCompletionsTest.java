@@ -18,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import com.aioj.next.ai.model.api.EndpointTuning;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -96,6 +97,19 @@ class ModelCompletionsTest {
                     assertThat(error.errorCode()).isEqualTo(ErrorCode.INTERNAL_ERROR);
                     assertThat(error.getMessage()).isEqualTo("AI provider returned empty content");
                 });
+        verify(modelClient, times(1)).complete(any(), any());
+    }
+
+    @Test
+    void aScopeThatForbidsDroppingThinkingFailsOnABlankAnswer() {
+        when(modelClient.capabilities(any())).thenReturn(new DeepSeekAdapter().capabilities("deepseek-v4-pro"));
+        when(modelClient.complete(any(), any())).thenReturn(answer(" ", new ModelUsage(10, 5, 0, true)));
+        AiModelEffectiveConfig strict = config("deepseek", "deepseek-v4-pro", true, true)
+                .withTuning(new EndpointTuning(null, null, null, null, null, false, null));
+
+        assertThatThrownBy(() -> completions.complete(strict, MESSAGES, 0.1, 512, false))
+                .isInstanceOfSatisfying(DomainException.class,
+                        error -> assertThat(error.getMessage()).isEqualTo("AI provider returned empty content"));
         verify(modelClient, times(1)).complete(any(), any());
     }
 

@@ -64,6 +64,9 @@ final class EnvironmentAiModelConfigResolver implements AiModelConfigResolver {
             candidates.add(envCandidate("KIMI_API_KEY"));
             return resolution(candidates, "KIMI_API_KEY");
         }
+        if ("openai-compatible".equals(textProvider)) {
+            return resolution(List.of(envCandidate("OPENAI_COMPATIBLE_API_KEY")), "OPENAI_COMPATIBLE_API_KEY");
+        }
         return new ApiKeyResolution("", "", "NONE", "");
     }
 
@@ -197,6 +200,9 @@ final class EnvironmentAiModelConfigResolver implements AiModelConfigResolver {
         }
         if ("deepseek".equals(normalized)) {
             return "deepseek";
+        }
+        if ("openai-compatible".equals(normalized) || "openai".equals(normalized) || "custom".equals(normalized)) {
+            return "openai-compatible";
         }
         return "";
     }

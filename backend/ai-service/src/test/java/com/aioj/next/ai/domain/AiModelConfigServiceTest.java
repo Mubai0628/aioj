@@ -15,6 +15,13 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import com.aioj.next.ai.model.api.EndpointTuning;
+import com.aioj.next.contract.ai.AiModelCallSettings;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -115,7 +122,8 @@ class AiModelConfigServiceTest {
                 null,
                 null,
                 null,
-                "return ok"
+                "return ok",
+                null
         ), 9L);
 
         assertThat(response.success()).isFalse();
@@ -143,7 +151,8 @@ class AiModelConfigServiceTest {
                 null,
                 null,
                 null,
-                "return ok"
+                "return ok",
+                null
         ), 9L);
 
         assertThat(response.success()).isTrue();
@@ -241,9 +250,9 @@ class AiModelConfigServiceTest {
 
         assertThatThrownBy(() -> fixture.service.updateConfig("TEXT_GENERATION", new AiModelConfigUpdateRequest(
                 true,
-                "custom",
+                "zhipu",
                 "https://example.test/v1/chat/completions",
-                "custom-model",
+                "glm-4",
                 "CLEAR",
                 null,
                 true,
@@ -251,9 +260,10 @@ class AiModelConfigServiceTest {
                 "high",
                 null,
                 null,
+                null,
                 null
         ), 9L)).isInstanceOf(DomainException.class)
-                .hasMessageContaining("DeepSeek or Kimi");
+                .hasMessage("Unknown text AI provider zhipu; choose deepseek, kimi or openai-compatible");
     }
 
     @Test
@@ -276,7 +286,8 @@ class AiModelConfigServiceTest {
                 null,
                 null,
                 null,
-                "return ok"
+                "return ok",
+                null
         ), 9L)).isInstanceOf(DomainException.class)
                 .hasMessageContaining("do not match");
 
@@ -299,6 +310,7 @@ class AiModelConfigServiceTest {
                 "max",
                 0.2,
                 2048,
+                null,
                 null
         ), 9L)).isInstanceOf(DomainException.class)
                 .hasMessageContaining("environment variables");
@@ -340,6 +352,7 @@ class AiModelConfigServiceTest {
                 "high",
                 null,
                 null,
+                null,
                 null
         ), 9L);
 
@@ -370,7 +383,8 @@ class AiModelConfigServiceTest {
                 null,
                 null,
                 null,
-                "return ok"
+                "return ok",
+                null
         ), 9L);
 
         assertThat(response.success()).isFalse();
@@ -430,6 +444,109 @@ class AiModelConfigServiceTest {
         var response = fixture.service.listModels("TEXT_GENERATION", "kimi", "https://api.moonshot.ai/v1/chat/completions");
 
         assertThat(response).isSameAs(expected);
+    }
+
+    @Test
+    void saveStoresTheChosenProviderByItsRealName() {
+        Fixture fixture = new Fixture(Map.of("KIMI_API_KEY", "kimi-key", "AI_EMBEDDING_API_KEY", "embedding-key",
+                "OPENAI_COMPATIBLE_API_KEY", "compatible-key"));
+
+        fixture.service.updateConfig("TEXT_GENERATION", update("moonshot",
+                "https://api.moonshot.cn/v1/chat/completions", "kimi-k3", null), 9L);
+        fixture.service.updateConfig("EMBEDDING", update("qwen",
+                "https://dashscope.aliyuncs.com/compatible-mode/v1", "text-embedding-v4", null), 9L);
+        fixture.service.updateConfig("MEMORY_EXTRACTION", update("openai",
+                "https://llm.example.test/v1/chat/completions", "glm-4", null), 9L);
+
+        assertThat(fixture.rows.get("TEXT_GENERATION").getProvider()).isEqualTo("kimi");
+        assertThat(fixture.rows.get("EMBEDDING").getProvider()).isEqualTo("dashscope");
+        assertThat(fixture.rows.get("MEMORY_EXTRACTION").getProvider()).isEqualTo("openai-compatible");
+        AiModelEffectiveConfig compatible = fixture.service.effectiveConfig(AiModelScope.MEMORY_EXTRACTION);
+        assertThat(compatible.apiKeyEnvName()).isEqualTo("OPENAI_COMPATIBLE_API_KEY");
+        assertThat(compatible.hasApiKey()).isTrue();
+    }
+
+    @Test
+    void saveRefusesAProviderTheScopeCannotUse() {
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
+
+        assertThatThrownBy(() -> fixture.service.updateConfig("PROBLEM_DRAFT", update("openai-compatible",
+                "https://llm.example.test/v1/chat/completions", "glm-4", null), 9L))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("PROBLEM_DRAFT calls tools");
+        assertThatThrownBy(() -> fixture.service.updateConfig("EMBEDDING", update("deepseek",
+                "https://api.deepseek.com", "deepseek-embed", null), 9L))
+                .hasMessage("Unknown embedding AI provider deepseek; choose dashscope or openai-compatible");
+        assertThat(fixture.rows).isEmpty();
+    }
+
+    @Test
+    void callSettingsAreCheckedStoredUsedAtOnceAndClearedBySaving() {
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
+        AiModelCallSettings settings = new AiModelCallSettings(3_000, 20_000, 90_000, 3, 1, false, true);
+
+        AiModelConfigResponse saved = fixture.service.updateConfig("TEXT_GENERATION", update("deepseek",
+                "https://api.deepseek.com/chat/completions", "deepseek-v4-pro", settings), 9L);
+
+        assertThat(saved.callSettings()).isEqualTo(settings);
+        EndpointTuning tuning = fixture.service.effectiveConfig(AiModelScope.TEXT_GENERATION).tuning();
+        assertThat(tuning).isEqualTo(new EndpointTuning(Duration.ofSeconds(3), Duration.ofSeconds(20),
+                Duration.ofSeconds(90), 3, 1, false, true));
+        assertThat(AiModelConfigEndpointSource.toEndpoint(fixture.service.effectiveConfig(AiModelScope.TEXT_GENERATION))
+                .tuning()).isEqualTo(tuning);
+        assertThat(fixture.service.effectiveConfig(AiModelScope.PROBLEM_DRAFT).tuning())
+                .as("an inherited scope keeps its own defaults").isEqualTo(EndpointTuning.DEFAULTS);
+
+        fixture.service.updateConfig("TEXT_GENERATION", update("deepseek",
+                "https://api.deepseek.com/chat/completions", "deepseek-v4-pro", null), 9L);
+
+        assertThat(fixture.rows.get("TEXT_GENERATION").getTotalTimeoutMs()).isNull();
+        assertThat(fixture.rows.get("TEXT_GENERATION").getThinkingFallbackEnabled()).isNull();
+        assertThat(fixture.service.effectiveConfig(AiModelScope.TEXT_GENERATION).tuning())
+                .isEqualTo(EndpointTuning.DEFAULTS);
+        assertThatThrownBy(() -> fixture.service.updateConfig("TEXT_GENERATION", update("deepseek",
+                "https://api.deepseek.com/chat/completions", "deepseek-v4-pro",
+                new AiModelCallSettings(null, null, null, 0, null, null, null)), 9L))
+                .hasMessage("maxConcurrency must be between 1 and 64");
+    }
+
+    @Test
+    void theConnectivityTestUsesTheFormsCallSettings() {
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
+        when(fixture.completionClient.complete(any(), any(), anyDouble(), anyInt(), anyBoolean()))
+                .thenReturn(new ModelCompletions.Result("{}", "deepseek", "deepseek-v4-pro", 3, 2));
+
+        fixture.service.testConfig("TEXT_GENERATION", new AiModelConfigTestRequest(true, "deepseek",
+                "https://api.deepseek.com/chat/completions", "deepseek-v4-pro", "KEEP", null, true, false, "high",
+                null, null, null, null, new AiModelCallSettings(null, null, 45_000, null, 0, null, null)), 9L);
+
+        ArgumentCaptor<AiModelEffectiveConfig> tested = ArgumentCaptor.forClass(AiModelEffectiveConfig.class);
+        verify(fixture.completionClient).complete(tested.capture(), any(), anyDouble(), anyInt(), anyBoolean());
+        assertThat(tested.getValue().tuning().totalTimeout()).isEqualTo(Duration.ofSeconds(45));
+        assertThat(tested.getValue().tuning().maxRetries()).isZero();
+    }
+
+    /** Text-level checks of the additive V71 script: nullable columns only, nothing for secrets. */
+    @Test
+    void v71OnlyAddsNullableColumns() throws IOException {
+        String sql;
+        try (InputStream stream = getClass().getClassLoader().getResourceAsStream(
+                "db/migration/V71__ai_model_config_call_settings.sql")) {
+            assertThat(stream).isNotNull();
+            sql = new String(stream.readAllBytes(), StandardCharsets.UTF_8).toLowerCase();
+        }
+        String ddl = sql.replaceAll("(?m)^\\s*--.*$", "");
+
+        assertThat(ddl).contains("alter table ai_model_configs");
+        assertThat(ddl.split("add column", -1)).hasSize(8);
+        assertThat(ddl).doesNotContain("drop ", "modify ", "change ", "rename ", "not null", "default ",
+                "delete from", "insert into", "update ", "create table", "api_key", "secret", "token");
+    }
+
+    private static AiModelConfigUpdateRequest update(String provider, String baseUrl, String model,
+                                                     AiModelCallSettings settings) {
+        return new AiModelConfigUpdateRequest(true, provider, baseUrl, model, "KEEP", null, true, false, "high",
+                null, null, null, settings);
     }
 
     private static final class Fixture {

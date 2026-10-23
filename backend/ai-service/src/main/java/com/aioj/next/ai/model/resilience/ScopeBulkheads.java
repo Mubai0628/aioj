@@ -38,7 +38,17 @@ public final class ScopeBulkheads {
      */
     public Permit acquire(String scope, Instant deadline, CancellationSignal cancellation,
                           ProviderId provider, String model) {
+        return acquire(scope, null, deadline, cancellation, provider, model);
+    }
+
+    /**
+     * The same, with the scope's concurrency from its current settings ({@code null} keeps the
+     * default). A new limit counts for permits taken from now on; calls holding one keep it.
+     */
+    public Permit acquire(String scope, Integer limit, Instant deadline, CancellationSignal cancellation,
+                          ProviderId provider, String model) {
         Bulkhead bulkhead = byScope.computeIfAbsent(scope, key -> new Bulkhead(concurrency.applyAsInt(key)));
+        bulkhead.resize(limit == null ? concurrency.applyAsInt(scope) : limit);
         if (bulkhead.permits.tryAcquire()) {
             return bulkhead.permit();
         }
@@ -92,11 +102,30 @@ public final class ScopeBulkheads {
     }
 
     private static final class Bulkhead {
-        private final Semaphore permits;
+        private final ResizableSemaphore permits;
         private final AtomicInteger waiting = new AtomicInteger();
+        private volatile int limit;
 
         private Bulkhead(int permits) {
-            this.permits = new Semaphore(Math.max(1, permits), true);
+            this.limit = Math.max(1, permits);
+            this.permits = new ResizableSemaphore(limit);
+        }
+
+        /** Lowering the limit can leave fewer than zero free permits until running calls finish. */
+        private void resize(int requested) {
+            int next = Math.max(1, requested);
+            if (next == limit) {
+                return;
+            }
+            synchronized (this) {
+                int delta = next - limit;
+                if (delta > 0) {
+                    permits.release(delta);
+                } else if (delta < 0) {
+                    permits.reduce(-delta);
+                }
+                limit = next;
+            }
         }
 
         private Permit permit() {
@@ -106,6 +135,16 @@ public final class ScopeBulkheads {
                     permits.release();
                 }
             };
+        }
+    }
+
+    private static final class ResizableSemaphore extends Semaphore {
+        private ResizableSemaphore(int permits) {
+            super(permits, true);
+        }
+
+        private void reduce(int reduction) {
+            reducePermits(reduction);
         }
     }
 }

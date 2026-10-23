@@ -23,6 +23,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import com.aioj.next.ai.model.api.EndpointTuning;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.aioj.next.ai.providercontract.ModelContractFixtures.client;
 import static com.aioj.next.ai.providercontract.ModelContractFixtures.endpoint;
@@ -243,6 +246,71 @@ class ModelClientResilienceTest {
         }
         assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(900);
         assertThat(provider.requests()).hasSize(1);
+    }
+
+    /** Plan A6.2: saving clears the config cache, so the next call resolves and follows the new settings. */
+    @Test
+    void theNextCallFollowsASavedTimeoutAndRetryCount() {
+        AtomicReference<ModelEndpointConfig> saved = new AtomicReference<>(deepSeek());
+        provider.reply(Reply.delayed(400, Reply.json(200, ProviderPayloads.deepSeekText("in time", null))));
+        provider.reply(Reply.delayed(400, Reply.json(200, ProviderPayloads.deepSeekText("late", null))));
+        provider.reply(Reply.json(503, ProviderPayloads.error("server_unavailable", "busy")));
+
+        try (DefaultModelClient client = new DefaultModelClient(scope -> saved.get(), List.of(recorder),
+                fastProperties())) {
+            assertThat(client.complete(resolved("TEXT_GENERATION"), CallOptions.of("test")).content())
+                    .isEqualTo("in time");
+
+            saved.set(tuned(new EndpointTuning(null, null, Duration.ofMillis(150), null, 0, null, null)));
+            assertThatThrownBy(() -> client.complete(resolved("TEXT_GENERATION"), CallOptions.of("test")))
+                    .isInstanceOfSatisfying(ModelException.class,
+                            error -> assertThat(error.kind()).isEqualTo(ModelErrorKind.TIMEOUT));
+
+            saved.set(tuned(new EndpointTuning(null, null, null, null, 0, null, null)));
+            assertThatThrownBy(() -> client.complete(resolved("TEXT_GENERATION"), CallOptions.of("test")))
+                    .as("no retries left for the 503")
+                    .isInstanceOfSatisfying(ModelException.class,
+                            error -> assertThat(error.kind()).isEqualTo(ModelErrorKind.UNAVAILABLE));
+        }
+        assertThat(provider.requests()).hasSize(3);
+        assertThat(recorder.last().attempts()).isEqualTo(1);
+    }
+
+    @Test
+    void aSavedConcurrencyCountsForTheNextPermit() {
+        ModelClientProperties properties = fastProperties();
+        properties.getBulkhead().setMaxWait(Duration.ofMillis(100));
+        AtomicReference<ModelEndpointConfig> saved = new AtomicReference<>(
+                tuned(new EndpointTuning(null, null, null, 1, null, null, null)));
+        provider.reply(Reply.delayed(800, Reply.json(200, ProviderPayloads.deepSeekText("first", null))));
+        provider.reply(Reply.json(200, ProviderPayloads.deepSeekText("second", null)));
+
+        try (DefaultModelClient client = new DefaultModelClient(scope -> saved.get(), List.of(recorder), properties)) {
+            CompletableFuture<ModelResponse> first = CompletableFuture.supplyAsync(
+                    () -> client.complete(resolved("TEXT_GENERATION"), CallOptions.of("test")));
+            waitForRequests(1);
+            assertThatThrownBy(() -> client.complete(resolved("TEXT_GENERATION"), CallOptions.of("test")))
+                    .as("one permit, and it is taken")
+                    .isInstanceOfSatisfying(ModelException.class,
+                            error -> assertThat(error.getMessage()).contains("capacity"));
+
+            saved.set(tuned(new EndpointTuning(null, null, null, 2, null, null, null)));
+            assertThat(client.complete(resolved("TEXT_GENERATION"), CallOptions.of("test")).content())
+                    .isEqualTo("second");
+            assertThat(first.join().content()).isEqualTo("first");
+        }
+    }
+
+    private ModelEndpointConfig tuned(EndpointTuning tuning) {
+        ModelEndpointConfig base = deepSeek();
+        return new ModelEndpointConfig(base.provider(), base.baseUrl(), base.apiKey(), base.model(), base.enabled(),
+                base.jsonOutputEnabled(), base.thinkingEnabled(), base.reasoningEffort(), base.temperature(),
+                base.maxTokens(), base.embeddingDimension(), tuning);
+    }
+
+    /** A request without an endpoint: the client resolves the scope's current configuration. */
+    private static ModelRequest resolved(String scope) {
+        return ModelRequest.builder(scope).message(ChatMessage.user("hi")).build();
     }
 
     private ModelEndpointConfig deepSeek() {

@@ -13,6 +13,7 @@ public record AiModelConfigTestRequest(
         Double temperature,
         Integer maxTokens,
         Integer embeddingDimension,
-        String prompt
+        String prompt,
+        AiModelCallSettings callSettings
 ) {
 }

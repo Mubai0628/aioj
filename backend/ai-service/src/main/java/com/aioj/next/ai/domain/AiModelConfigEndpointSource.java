@@ -47,7 +47,7 @@ public class AiModelConfigEndpointSource implements ModelConfigSource {
                 : ProviderId.fromConfig(config.provider());
         return new ModelEndpointConfig(provider, config.baseUrl(), config.apiKey(), config.model(), config.enabled(),
                 config.jsonOutputEnabled(), config.thinkingEnabled(), config.reasoningEffort(), config.temperature(),
-                config.maxTokens(), config.embeddingDimension());
+                config.maxTokens(), config.embeddingDimension(), config.tuning());
     }
 
     /** The admin settings offer DashScope or any custom OpenAI-compatible endpoint for embeddings. */

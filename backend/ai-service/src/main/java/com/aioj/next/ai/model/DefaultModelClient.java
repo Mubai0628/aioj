@@ -25,6 +25,7 @@ import com.aioj.next.ai.model.provider.CallSettings;
 import com.aioj.next.ai.model.provider.ChatAdapter;
 import com.aioj.next.ai.model.provider.DeepSeekAdapter;
 import com.aioj.next.ai.model.provider.EmbeddingAdapter;
+import com.aioj.next.ai.model.provider.GenericOpenAiAdapter;
 import com.aioj.next.ai.model.provider.KimiAdapter;
 import com.aioj.next.ai.model.provider.ModelCatalog;
 import com.aioj.next.ai.model.provider.StreamAccumulator;
@@ -79,6 +80,7 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
         this.listeners = List.copyOf(listeners);
         chatAdapters.put(ProviderId.DEEPSEEK, new DeepSeekAdapter());
         chatAdapters.put(ProviderId.KIMI, new KimiAdapter());
+        chatAdapters.put(ProviderId.OPENAI_COMPATIBLE, new GenericOpenAiAdapter());
         this.transport = new HttpTransport(properties.getConnectTimeout());
         ModelClientProperties.Bulkhead bulkhead = properties.getBulkhead();
         this.bulkheads = new ScopeBulkheads(bulkhead::concurrencyFor, bulkhead.getMaxWaiting(), bulkhead.getMaxWait());
@@ -133,9 +135,11 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
             }
             HttpTransport.Exchange exchange = new HttpTransport.Exchange(embeddings.uri(endpoint),
                     headers(endpoint, true, "application/json"),
-                    write(embeddings.body(endpoint, request.inputs())), endpoint.provider(), endpoint.model());
+                    write(embeddings.body(endpoint, request.inputs())), endpoint.provider(), endpoint.model(),
+                    endpoint.tuning().connectTimeout());
             EmbeddingResponse response;
-            try (ScopeBulkheads.Permit ignored = acquire(request.scope(), call.options, endpoint)) {
+            try (ScopeBulkheads.Permit ignored = acquire(request.scope(), endpoint.tuning().maxConcurrency(),
+                    call.options, endpoint)) {
                 response = withRetries(call, endpoint, () -> {
                     TransportResponse answer = transport.send(exchange, attemptTimeout(call.options, endpoint),
                             call.options.cancellation());
@@ -168,8 +172,9 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
                         "Server environment API key is not configured for this provider.");
             }
             HttpTransport.Exchange exchange = new HttpTransport.Exchange(catalog.modelsUri(candidate),
-                    headers(candidate, false, "application/json"), null, candidate.provider(), candidate.model());
-            try (ScopeBulkheads.Permit ignored = acquire(CATALOG_SCOPE, call.options, candidate)) {
+                    headers(candidate, false, "application/json"), null, candidate.provider(), candidate.model(),
+                    candidate.tuning().connectTimeout());
+            try (ScopeBulkheads.Permit ignored = acquire(CATALOG_SCOPE, null, call.options, candidate)) {
                 return withRetries(call, candidate, () -> {
                     TransportResponse answer = transport.send(exchange, attemptTimeout(call.options, candidate),
                             call.options.cancellation());
@@ -211,9 +216,10 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
             ObjectNode body = adapter.chatBody(endpoint, settings, request, stream);
             HttpTransport.Exchange exchange = new HttpTransport.Exchange(adapter.chatUri(endpoint),
                     headers(endpoint, true, stream ? "text/event-stream" : "application/json"), write(body),
-                    endpoint.provider(), endpoint.model());
+                    endpoint.provider(), endpoint.model(), endpoint.tuning().connectTimeout());
             ModelResponse response;
-            try (ScopeBulkheads.Permit ignored = acquire(request.scope(), call.options, endpoint)) {
+            try (ScopeBulkheads.Permit ignored = acquire(request.scope(), endpoint.tuning().maxConcurrency(),
+                    call.options, endpoint)) {
                 response = withRetries(call, endpoint, () -> stream
                         ? streamOnce(adapter, exchange, endpoint, settings, call.options, listener)
                         : completeOnce(adapter, exchange, endpoint, settings, call.options));
@@ -242,7 +248,9 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
                                      ModelStreamListener listener) {
         StreamAccumulator accumulator = new StreamAccumulator(listener);
         Duration attempt = attemptTimeout(options, endpoint);
-        Duration headers = attempt.compareTo(firstByteTimeout) < 0 ? attempt : firstByteTimeout;
+        Duration firstByte = endpoint.tuning().firstByteTimeout() == null
+                ? firstByteTimeout : endpoint.tuning().firstByteTimeout();
+        Duration headers = attempt.compareTo(firstByte) < 0 ? attempt : firstByte;
         TransportResponse answer = transport.stream(exchange, headers, Instant.now().plus(attempt),
                 options.cancellation(), data -> {
                     try {
@@ -279,7 +287,8 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
                 return result;
             } catch (ModelException failure) {
                 breaker.record(CircuitBreakers.outcomeOf(failure.kind()));
-                Optional<Duration> delay = retryPolicy.delayBeforeRetry(failure, call.attempts, call.options.deadline());
+                Optional<Duration> delay = retryPolicy.delayBeforeRetry(failure, call.attempts,
+                        call.options.deadline(), endpoint.tuning().maxRetries());
                 if (delay.isEmpty()) {
                     throw failure;
                 }
@@ -325,13 +334,16 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
         }
     }
 
-    private ScopeBulkheads.Permit acquire(String scope, CallOptions options, ModelEndpointConfig endpoint) {
-        return bulkheads.acquire(scope, options.deadline(), options.cancellation(), endpoint.provider(),
+    private ScopeBulkheads.Permit acquire(String scope, Integer limit, CallOptions options,
+                                          ModelEndpointConfig endpoint) {
+        return bulkheads.acquire(scope, limit, options.deadline(), options.cancellation(), endpoint.provider(),
                 endpoint.model());
     }
 
-    /** The time one attempt may take: the configured total, cut to what is left of the deadline. */
+    /** The time one attempt may take: the endpoint's or configured total, cut to what is left of the deadline. */
     private Duration attemptTimeout(CallOptions options, ModelEndpointConfig endpoint) {
+        Duration totalTimeout = endpoint.tuning().totalTimeout() == null
+                ? this.totalTimeout : endpoint.tuning().totalTimeout();
         if (options.deadline() == null) {
             return totalTimeout;
         }

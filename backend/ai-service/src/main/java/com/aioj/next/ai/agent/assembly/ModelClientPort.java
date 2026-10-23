@@ -64,12 +64,13 @@ public final class ModelClientPort implements ModelPort {
         this.capabilities = modelClient.capabilities(endpoint);
         this.scope = scope;
         this.options = options;
-        this.fallbackAllowed = fallbackAllowed;
+        // Plan A6.2: a scope can forbid dropping thinking; its calls then fail instead.
+        this.fallbackAllowed = fallbackAllowed && endpoint.tuning().thinkingFallbackAllowed();
         this.thinksByDefault = capabilities.thinks(endpoint, profile, false);
         this.responseObserver = responseObserver == null ? response -> {
         } : responseObserver;
         // A workflow that may fall back but whose endpoint does not think starts there.
-        this.standardFallback = fallbackAllowed && !thinksByDefault;
+        this.standardFallback = this.fallbackAllowed && !thinksByDefault;
     }
 
     /**
@@ -116,6 +117,11 @@ public final class ModelClientPort implements ModelPort {
     /** Calls the rest of the run without thinking, as a stateful workflow's recovery asks. */
     public void switchToStandardTools() {
         standardFallback = true;
+    }
+
+    /** Whether this run may drop thinking: the workflow allows it and the scope does not forbid it. */
+    public boolean fallbackAllowed() {
+        return fallbackAllowed;
     }
 
     public boolean standardFallback() {

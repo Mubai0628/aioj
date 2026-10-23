@@ -1,10 +1,12 @@
 package com.aioj.next.ai.domain;
 
 import com.aioj.next.ai.config.AiProperties;
+import com.aioj.next.ai.model.api.EndpointTuning;
 import com.aioj.next.ai.persistence.entity.AiModelConfigEntity;
 import com.aioj.next.ai.persistence.mapper.AiModelConfigMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.contract.ai.AiModelCallSettings;
 import com.aioj.next.contract.ai.AiModelConfigResponse;
 import com.aioj.next.contract.ai.AiModelConfigTestRequest;
 import com.aioj.next.contract.ai.AiModelConfigTestResponse;
@@ -18,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -25,6 +28,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -34,6 +38,11 @@ public class AiModelConfigService implements AiModelConfigResolver {
     private static final Logger log = LoggerFactory.getLogger(AiModelConfigService.class);
     private static final long CACHE_TTL_MILLIS = 30_000;
     private static final ZoneId ZONE = ZoneId.systemDefault();
+    /** Plan A6.1: the provider is chosen, never guessed; these are the names a scope may store. */
+    private static final Set<String> TEXT_PROVIDERS = Set.of("deepseek", "kimi", "openai-compatible");
+    private static final Set<String> EMBEDDING_PROVIDERS = Set.of("dashscope", "openai-compatible");
+    /** Plan Q13: tools only run on verified providers, and these scopes call tools. */
+    private static final Set<AiModelScope> TOOL_SCOPES = Set.of(AiModelScope.TEXT_GENERATION, AiModelScope.PROBLEM_DRAFT);
 
     private final AiModelConfigMapper mapper;
     private final ModelCompletions completionClient;
@@ -135,6 +144,7 @@ public class AiModelConfigService implements AiModelConfigResolver {
         entity.setTemperature(temperature(request == null ? null : request.temperature(), base.temperature()));
         entity.setMaxTokens(maxTokens(request == null ? null : request.maxTokens(), base.maxTokens()));
         entity.setEmbeddingDimension(embeddingDimension(request == null ? null : request.embeddingDimension(), base.embeddingDimension()));
+        applyCallSettings(entity, validCallSettings(request == null ? null : request.callSettings()));
         applyKeyAction(entity, request);
         entity.setUpdatedAt(now);
         entity.setUpdatedBy(updatedBy);
@@ -229,7 +239,8 @@ public class AiModelConfigService implements AiModelConfigResolver {
                 temperature(request.temperature(), current.temperature()),
                 maxTokens(request.maxTokens(), current.maxTokens()),
                 embeddingDimension(request.embeddingDimension(), current.embeddingDimension())
-        );
+        ).withTuning(request.callSettings() == null ? current.tuning()
+                : tuning(validCallSettings(request.callSettings())));
     }
 
     private AiModelEffectiveConfig loadEffectiveConfig(AiModelScope scope) {
@@ -294,7 +305,8 @@ public class AiModelConfigService implements AiModelConfigResolver {
                 maxTokens(entity.getMaxTokens(), fallback.maxTokens()),
                 embeddingDimension(entity.getEmbeddingDimension(), fallback.embeddingDimension()),
                 toInstant(entity.getUpdatedAt()),
-                entity.getUpdatedBy()
+                entity.getUpdatedBy(),
+                tuning(storedCallSettings(entity))
         );
     }
 
@@ -307,13 +319,29 @@ public class AiModelConfigService implements AiModelConfigResolver {
                 || scope == AiModelScope.INTENT;
     }
 
+    /** Plan A6.1: an unknown provider is refused; the old aliases are stored by their real names. */
     private String providerForScope(AiModelScope scope, String provider) {
+        String name = required("provider", provider).toLowerCase(Locale.ROOT);
         if (!isTextScope(scope)) {
-            return required("provider", provider);
+            String canonical = switch (name) {
+                case "qwen", "alibaba" -> "dashscope";
+                case "openai", "custom" -> "openai-compatible";
+                default -> name;
+            };
+            if (!EMBEDDING_PROVIDERS.contains(canonical)) {
+                throw new DomainException(ErrorCode.BAD_REQUEST,
+                        "Unknown embedding AI provider " + name + "; choose dashscope or openai-compatible");
+            }
+            return canonical;
         }
-        String canonical = environmentResolver.canonicalTextProvider(provider);
-        if (canonical.isBlank()) {
-            throw new DomainException(ErrorCode.BAD_REQUEST, "Text AI API must be DeepSeek or Kimi");
+        String canonical = environmentResolver.canonicalTextProvider(name);
+        if (!TEXT_PROVIDERS.contains(canonical)) {
+            throw new DomainException(ErrorCode.BAD_REQUEST,
+                    "Unknown text AI provider " + name + "; choose deepseek, kimi or openai-compatible");
+        }
+        if ("openai-compatible".equals(canonical) && TOOL_SCOPES.contains(scope)) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, scope.name()
+                    + " calls tools, which run only on deepseek or kimi; openai-compatible suits the other text scopes");
         }
         return canonical;
     }
@@ -350,7 +378,7 @@ public class AiModelConfigService implements AiModelConfigResolver {
             return normalizedModel.startsWith("deepseek-")
                     || normalizedBaseUrl.contains("deepseek");
         }
-        return true;
+        return !"openai-compatible".equals(normalizedProvider);
     }
 
     private String normalizeTextBaseUrl(AiModelScope scope, String provider, String baseUrl) {
@@ -399,7 +427,8 @@ public class AiModelConfigService implements AiModelConfigResolver {
                 config.apiKeySource(),
                 config.apiKeyEnvName(),
                 config.updatedAt(),
-                config.updatedBy()
+                config.updatedBy(),
+                callSettings(config.tuning())
         );
     }
 
@@ -460,6 +489,67 @@ public class AiModelConfigService implements AiModelConfigResolver {
             throw new DomainException(ErrorCode.BAD_REQUEST, "embeddingDimension must be positive");
         }
         return next;
+    }
+
+    /** Plan A6.2: each value is either left to the default (null) or within a sane range. */
+    private AiModelCallSettings validCallSettings(AiModelCallSettings settings) {
+        if (settings == null) {
+            return null;
+        }
+        within("connectTimeoutMs", settings.connectTimeoutMs(), 100, 120_000);
+        within("firstByteTimeoutMs", settings.firstByteTimeoutMs(), 1_000, 600_000);
+        within("totalTimeoutMs", settings.totalTimeoutMs(), 1_000, 1_800_000);
+        within("maxConcurrency", settings.maxConcurrency(), 1, 64);
+        within("maxRetries", settings.maxRetries(), 0, 5);
+        return settings;
+    }
+
+    private void within(String field, Integer value, int min, int max) {
+        if (value != null && (value < min || value > max)) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, field + " must be between " + min + " and " + max);
+        }
+    }
+
+    /** Saving replaces every call setting, so clearing a field puts the default back. */
+    private void applyCallSettings(AiModelConfigEntity entity, AiModelCallSettings settings) {
+        AiModelCallSettings value = settings == null
+                ? new AiModelCallSettings(null, null, null, null, null, null, null) : settings;
+        entity.setConnectTimeoutMs(value.connectTimeoutMs());
+        entity.setFirstByteTimeoutMs(value.firstByteTimeoutMs());
+        entity.setTotalTimeoutMs(value.totalTimeoutMs());
+        entity.setMaxConcurrency(value.maxConcurrency());
+        entity.setMaxRetries(value.maxRetries());
+        entity.setThinkingFallbackEnabled(value.thinkingFallbackEnabled());
+        entity.setStreamingEnabled(value.streamingEnabled());
+    }
+
+    private AiModelCallSettings storedCallSettings(AiModelConfigEntity entity) {
+        return new AiModelCallSettings(entity.getConnectTimeoutMs(), entity.getFirstByteTimeoutMs(),
+                entity.getTotalTimeoutMs(), entity.getMaxConcurrency(), entity.getMaxRetries(),
+                entity.getThinkingFallbackEnabled(), entity.getStreamingEnabled());
+    }
+
+    private static EndpointTuning tuning(AiModelCallSettings settings) {
+        if (settings == null) {
+            return EndpointTuning.DEFAULTS;
+        }
+        return new EndpointTuning(millis(settings.connectTimeoutMs()), millis(settings.firstByteTimeoutMs()),
+                millis(settings.totalTimeoutMs()), settings.maxConcurrency(), settings.maxRetries(),
+                settings.thinkingFallbackEnabled(), settings.streamingEnabled());
+    }
+
+    private static AiModelCallSettings callSettings(EndpointTuning tuning) {
+        return new AiModelCallSettings(millis(tuning.connectTimeout()), millis(tuning.firstByteTimeout()),
+                millis(tuning.totalTimeout()), tuning.maxConcurrency(), tuning.maxRetries(),
+                tuning.thinkingFallback(), tuning.streaming());
+    }
+
+    private static Duration millis(Integer value) {
+        return value == null ? null : Duration.ofMillis(value);
+    }
+
+    private static Integer millis(Duration value) {
+        return value == null ? null : (int) value.toMillis();
     }
 
     private Instant toInstant(LocalDateTime value) {

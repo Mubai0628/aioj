@@ -62,7 +62,8 @@ public class ModelCompletions {
         if (!response.content().isBlank()) {
             return result(response, messages);
         }
-        boolean canRetryWithoutThinking = capabilities.thinkingToggle()
+        boolean canRetryWithoutThinking = endpoint.tuning().thinkingFallbackAllowed()
+                && capabilities.thinkingToggle()
                 && capabilities.thinks(endpoint, CallProfile.COMPLETION, false);
         if (!canRetryWithoutThinking) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "AI provider returned empty content");

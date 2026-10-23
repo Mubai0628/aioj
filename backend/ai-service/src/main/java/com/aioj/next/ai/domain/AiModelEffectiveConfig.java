@@ -1,5 +1,7 @@
 package com.aioj.next.ai.domain;
 
+import com.aioj.next.ai.model.api.EndpointTuning;
+
 import java.time.Instant;
 
 public record AiModelEffectiveConfig(
@@ -21,8 +23,24 @@ public record AiModelEffectiveConfig(
         Integer maxTokens,
         Integer embeddingDimension,
         Instant updatedAt,
-        Long updatedBy
+        Long updatedBy,
+        EndpointTuning tuning
 ) {
+    public AiModelEffectiveConfig {
+        tuning = tuning == null ? EndpointTuning.DEFAULTS : tuning;
+    }
+
+    public AiModelEffectiveConfig(AiModelScope scope, boolean enabled, boolean inherited, String source,
+                                  String provider, String baseUrl, String apiKey, String apiKeyPreview,
+                                  String apiKeySource, String apiKeyEnvName, String model,
+                                  boolean jsonOutputEnabled, boolean thinkingEnabled, String reasoningEffort,
+                                  Double temperature, Integer maxTokens, Integer embeddingDimension,
+                                  Instant updatedAt, Long updatedBy) {
+        this(scope, enabled, inherited, source, provider, baseUrl, apiKey, apiKeyPreview, apiKeySource,
+                apiKeyEnvName, model, jsonOutputEnabled, thinkingEnabled, reasoningEffort, temperature, maxTokens,
+                embeddingDimension, updatedAt, updatedBy, EndpointTuning.DEFAULTS);
+    }
+
     public boolean hasApiKey() {
         return apiKey != null && !apiKey.isBlank();
     }
@@ -35,6 +53,7 @@ public record AiModelEffectiveConfig(
         return maxTokens == null || maxTokens <= 0 ? fallback : maxTokens;
     }
 
+    /** An inherited scope takes the endpoint but keeps its own call settings' defaults (plan A6.2). */
     public AiModelEffectiveConfig withScope(AiModelScope nextScope, boolean nextInherited, String nextSource) {
         return new AiModelEffectiveConfig(
                 nextScope,
@@ -55,8 +74,15 @@ public record AiModelEffectiveConfig(
                 maxTokens,
                 embeddingDimension,
                 updatedAt,
-                updatedBy
+                updatedBy,
+                nextInherited ? EndpointTuning.DEFAULTS : tuning
         );
+    }
+
+    public AiModelEffectiveConfig withTuning(EndpointTuning nextTuning) {
+        return new AiModelEffectiveConfig(scope, enabled, inherited, source, provider, baseUrl, apiKey, apiKeyPreview,
+                apiKeySource, apiKeyEnvName, model, jsonOutputEnabled, thinkingEnabled, reasoningEffort, temperature,
+                maxTokens, embeddingDimension, updatedAt, updatedBy, nextTuning);
     }
 
     public AiModelEffectiveConfig withOverrides(
@@ -94,7 +120,8 @@ public record AiModelEffectiveConfig(
                 nextMaxTokens == null ? maxTokens : nextMaxTokens,
                 nextEmbeddingDimension == null ? embeddingDimension : nextEmbeddingDimension,
                 updatedAt,
-                updatedBy
+                updatedBy,
+                tuning
         );
     }
 

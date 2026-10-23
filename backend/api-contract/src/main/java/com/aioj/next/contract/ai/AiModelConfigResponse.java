@@ -21,6 +21,7 @@ public record AiModelConfigResponse(
         String apiKeySource,
         String apiKeyEnvName,
         Instant updatedAt,
-        Long updatedBy
+        Long updatedBy,
+        AiModelCallSettings callSettings
 ) {
 }

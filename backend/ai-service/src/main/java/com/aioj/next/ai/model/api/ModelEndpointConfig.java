@@ -8,6 +8,7 @@ package com.aioj.next.ai.model.api;
  *                for embeddings, the endpoint or its compatible-mode root
  * @param temperature {@code null} means the call profile's default
  * @param maxTokens {@code null} or non-positive means the call profile's default
+ * @param tuning the scope's own timeouts, retries, concurrency and fallback switch
  */
 public record ModelEndpointConfig(
         ProviderId provider,
@@ -20,8 +21,19 @@ public record ModelEndpointConfig(
         String reasoningEffort,
         Double temperature,
         Integer maxTokens,
-        Integer embeddingDimension
+        Integer embeddingDimension,
+        EndpointTuning tuning
 ) {
+    public ModelEndpointConfig {
+        tuning = tuning == null ? EndpointTuning.DEFAULTS : tuning;
+    }
+
+    public ModelEndpointConfig(ProviderId provider, String baseUrl, String apiKey, String model, boolean enabled,
+                               boolean jsonOutputEnabled, boolean thinkingEnabled, String reasoningEffort,
+                               Double temperature, Integer maxTokens, Integer embeddingDimension) {
+        this(provider, baseUrl, apiKey, model, enabled, jsonOutputEnabled, thinkingEnabled, reasoningEffort,
+                temperature, maxTokens, embeddingDimension, EndpointTuning.DEFAULTS);
+    }
 
     public boolean hasApiKey() {
         return apiKey != null && !apiKey.isBlank();
@@ -29,7 +41,7 @@ public record ModelEndpointConfig(
 
     public ModelEndpointConfig withThinking(boolean thinking) {
         return new ModelEndpointConfig(provider, baseUrl, apiKey, model, enabled, jsonOutputEnabled, thinking,
-                reasoningEffort, temperature, maxTokens, embeddingDimension);
+                reasoningEffort, temperature, maxTokens, embeddingDimension, tuning);
     }
 
     /** Never prints the API key. */
@@ -56,6 +68,7 @@ public record ModelEndpointConfig(
         private Double temperature;
         private Integer maxTokens;
         private Integer embeddingDimension;
+        private EndpointTuning tuning = EndpointTuning.DEFAULTS;
 
         private Builder(ProviderId provider) {
             this.provider = provider;
@@ -107,9 +120,14 @@ public record ModelEndpointConfig(
             return this;
         }
 
+        public Builder tuning(EndpointTuning value) {
+            this.tuning = value;
+            return this;
+        }
+
         public ModelEndpointConfig build() {
             return new ModelEndpointConfig(provider, baseUrl, apiKey, model, enabled, jsonOutputEnabled,
-                    thinkingEnabled, reasoningEffort, temperature, maxTokens, embeddingDimension);
+                    thinkingEnabled, reasoningEffort, temperature, maxTokens, embeddingDimension, tuning);
         }
     }
 }
