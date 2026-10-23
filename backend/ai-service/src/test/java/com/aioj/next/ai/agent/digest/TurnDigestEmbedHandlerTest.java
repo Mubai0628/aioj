@@ -1,5 +1,6 @@
 package com.aioj.next.ai.agent.digest;
 
+import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobPermanentFailure;
 import com.aioj.next.ai.domain.AiModelConfigService;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
@@ -109,11 +110,29 @@ class TurnDigestEmbedHandlerTest {
     }
 
     @Test
-    void ownershipMismatchFails() {
+    void ownershipMismatchFailsWithoutRetries() {
         when(digestMapper.selectById(11L)).thenReturn(digest("READY"));
 
         assertThatThrownBy(() -> handler.handle(job("{\"turnId\":\"t-1\",\"userId\":999,\"digestId\":11}")))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(AgentAsyncJobPermanentFailure.class);
+        verify(provider, never()).embed(anyString());
+    }
+
+    /** A conversation deleted after its digest was queued (eval cleanup does this) leaves nothing to embed. */
+    @Test
+    void deletedDigestCompletesWithoutWork() throws Exception {
+        when(digestMapper.selectById(11L)).thenReturn(null);
+
+        handler.handle(job("{\"turnId\":\"t-1\",\"userId\":7,\"digestId\":11}"));
+
+        verify(provider, never()).embed(anyString());
+        verify(chunkMapper, never()).insert(any(AiRetrievalChunkEntity.class));
+    }
+
+    @Test
+    void payloadWithoutDigestFailsWithoutRetries() {
+        assertThatThrownBy(() -> handler.handle(job("{\"turnId\":\"t-1\",\"userId\":7}")))
+                .isInstanceOf(AgentAsyncJobPermanentFailure.class);
     }
 
     private AiAsyncJobEntity job(String payload) {

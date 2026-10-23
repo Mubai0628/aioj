@@ -81,6 +81,30 @@ class AgentAsyncJobWorkerTest {
         verify(jobService, never()).complete(any());
     }
 
+    @Test
+    void permanentFailureParksFailedWithoutBackoff() {
+        AgentAsyncJobHandler failing = new AgentAsyncJobHandler() {
+            @Override
+            public String jobType() {
+                return "EMBED_DIGEST";
+            }
+
+            @Override
+            public void handle(AiAsyncJobEntity job) {
+                throw new AgentAsyncJobPermanentFailure("embed job digest ownership mismatch: 11");
+            }
+        };
+        AgentAsyncJobWorker worker = new AgentAsyncJobWorker(jobService, new AiProperties(), List.of(failing));
+        AiAsyncJobEntity job = job(4L, "EMBED_DIGEST");
+        when(jobService.claimDueJobs(anyInt(), anyLong(), anyString())).thenReturn(List.of(job));
+
+        worker.pollDueJobs();
+
+        verify(jobService).failFinal(job, "embed job digest ownership mismatch: 11");
+        verify(jobService, never()).fail(any(), any(), anyLong());
+        verify(jobService, never()).complete(any());
+    }
+
     private AiAsyncJobEntity job(Long id, String type) {
         AiAsyncJobEntity job = new AiAsyncJobEntity();
         job.setId(id);

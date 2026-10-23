@@ -1,6 +1,7 @@
 package com.aioj.next.ai.agent.digest;
 
 import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobHandler;
+import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobPermanentFailure;
 import com.aioj.next.ai.agent.context.ContextManifestService;
 import com.aioj.next.ai.domain.AiModelConfigService;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
@@ -29,7 +30,9 @@ import java.util.Optional;
  * digest, embeds its retrieval text and upserts one ai_retrieval_chunks row owned by
  * {@code TURN_DIGEST:<digestId>}. Idempotent via textHash; a missing vector from the
  * provider throws so the job retries with backoff, while a disabled embedding config
- * completes silently (the KEYWORD lane keeps serving searches).
+ * completes silently (the KEYWORD lane keeps serving searches). A digest deleted with its
+ * conversation leaves nothing to embed, so the job completes; a payload or owner that can
+ * never match fails the job without retries.
  */
 @Component
 public class TurnDigestEmbedHandler implements AgentAsyncJobHandler {
@@ -71,11 +74,15 @@ public class TurnDigestEmbedHandler implements AgentAsyncJobHandler {
         long digestId = payload.path("digestId").asLong(0);
         Long userId = payload.path("userId").isNumber() ? payload.path("userId").asLong(0L) : null;
         if (digestId <= 0 || userId == null) {
-            throw new IllegalStateException("embed job payload missing digestId/userId");
+            throw new AgentAsyncJobPermanentFailure("embed job payload missing digestId/userId");
         }
         AiTurnDigestEntity digest = digestMapper.selectById(digestId);
-        if (digest == null || !userId.equals(digest.getUserId())) {
-            throw new IllegalStateException("embed job digest missing or ownership mismatch: " + digestId);
+        if (digest == null) {
+            log.info("embed job skipped: digest {} no longer exists (deleted with its conversation)", digestId);
+            return;
+        }
+        if (!userId.equals(digest.getUserId())) {
+            throw new AgentAsyncJobPermanentFailure("embed job digest ownership mismatch: " + digestId);
         }
         if (!StubDigestFactory.STATUS_READY.equals(digest.getStatus())) {
             return; // only curated (READY) digests enter the dense lane

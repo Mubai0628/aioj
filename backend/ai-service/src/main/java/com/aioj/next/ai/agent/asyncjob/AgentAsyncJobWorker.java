@@ -16,7 +16,8 @@ import java.util.stream.Collectors;
 /**
  * Polling worker for ai_async_jobs (design doc §6.3): claims due jobs under a lease,
  * dispatches to the registered handler, and records completion or backoff. Unknown job
- * types park as FAILED immediately so misconfiguration is observable instead of retried.
+ * types and a handler's {@link AgentAsyncJobPermanentFailure} park as FAILED immediately,
+ * so what no retry can fix is observable instead of retried.
  */
 @Service
 public class AgentAsyncJobWorker {
@@ -65,6 +66,10 @@ public class AgentAsyncJobWorker {
         try {
             handler.handle(job);
             jobService.complete(job);
+        } catch (AgentAsyncJobPermanentFailure ex) {
+            log.warn("agent async job failed permanently: jobId={} type={} error={}", job.getId(), job.getJobType(),
+                    ex.getMessage());
+            jobService.failFinal(job, ex.getMessage());
         } catch (Exception ex) {
             log.warn("agent async job failed: jobId={} type={} error={}", job.getId(), job.getJobType(), ex.toString());
             jobService.fail(job, ex, properties.getAgentJobs().getBackoffBaseSeconds());
