@@ -1,0 +1,51 @@
+# agent-executor reads only the variables plan §3.6 rule 3 allows: its own inbound token,
+# AGENT_SANDBOX_*, limits (AGENT_EXECUTOR_*) and logging. ConfigurationWhitelistTest enforces it.
+server:
+  port: ${AGENT_EXECUTOR_PORT:8205}
+
+spring:
+  application:
+    name: ai-oj-agent-executor
+  servlet:
+    multipart:
+      max-file-size: ${AGENT_EXECUTOR_MAX_UPLOAD:50MB}
+      max-request-size: ${AGENT_EXECUTOR_MAX_REQUEST:52MB}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+logging:
+  level:
+    root: ${AGENT_EXECUTOR_LOG_LEVEL:INFO}
+
+aioj:
+  executor:
+    internal-api-token: ${AGENT_EXECUTOR_INTERNAL_TOKEN}
+    sandbox-endpoint: ${AGENT_SANDBOX_ENDPOINT:http://localhost:8090/execute}
+    sandbox-token: ${AGENT_SANDBOX_TOKEN:}
+    sandbox-timeout: ${AGENT_SANDBOX_TIMEOUT:PT10S}
+    sandbox-read-timeout: ${AGENT_SANDBOX_READ_TIMEOUT:PT370S}
+    language-whitelist: ${AGENT_EXECUTOR_LANGUAGE_WHITELIST:java,cpp,python}
+    cache-root: ${AGENT_EXECUTOR_WORK_ROOT:${user.home}/.ai-oj-next/agent-executor}
+    max-concurrent-executions: ${AGENT_EXECUTOR_MAX_CONCURRENCY:1}
+    stdout-base-collect-limit-bytes: ${AGENT_EXECUTOR_STDOUT_BASE_COLLECT_LIMIT_BYTES:65536}
+    stdout-extra-collect-bytes: ${AGENT_EXECUTOR_STDOUT_EXTRA_COLLECT_BYTES:65536}
+    stdout-max-collect-limit-bytes: ${AGENT_EXECUTOR_STDOUT_MAX_COLLECT_LIMIT_BYTES:4194304}
+    stderr-collect-limit-bytes: ${AGENT_EXECUTOR_STDERR_COLLECT_LIMIT_BYTES:65536}
+    max-source-bytes: ${AGENT_EXECUTOR_MAX_SOURCE_BYTES:262144}
+    max-input-bytes: ${AGENT_EXECUTOR_MAX_INPUT_BYTES:8388608}
+    max-batch-size: ${AGENT_EXECUTOR_MAX_BATCH_SIZE:200}
+    max-batch-input-bytes: ${AGENT_EXECUTOR_MAX_BATCH_INPUT_BYTES:33554432}
+    max-run-time-limit-millis: ${AGENT_EXECUTOR_MAX_RUN_TIME_LIMIT_MILLIS:30000}
+    max-script-time-limit-millis: ${AGENT_EXECUTOR_MAX_SCRIPT_TIME_LIMIT_MILLIS:180000}
+    max-memory-limit-kb: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:1048576}
+    max-process-limit: ${AGENT_EXECUTOR_MAX_PROCESS_LIMIT:80}
+    max-draft-package-bytes: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_BYTES:52428800}
+    max-draft-package-uncompressed-bytes: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_UNCOMPRESSED_BYTES:104857600}
+    max-draft-package-entry-bytes: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_ENTRY_BYTES:8388608}
+    max-draft-package-entries: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_ENTRIES:500}
+    max-draft-package-cases: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_CASES:200}
+    max-draft-package-run-millis: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_RUN_MILLIS:540000}

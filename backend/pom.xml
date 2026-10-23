@@ -27,6 +27,7 @@
         <module>problem-service</module>
         <module>judge-worker</module>
         <module>ai-service</module>
+        <module>agent-executor</module>
     </modules>
 
     <properties>
