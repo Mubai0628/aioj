@@ -1,10 +1,10 @@
 package com.aioj.next.ai.controller;
 
 import com.aioj.next.ai.agent.AgentChatFacade;
+import com.aioj.next.ai.agent.context.ContextDebugService;
 import com.aioj.next.ai.domain.AccountImportParseService;
 import com.aioj.next.ai.domain.AiChatContext;
 import com.aioj.next.ai.domain.AiCompletion;
-import com.aioj.next.ai.domain.AiContextService;
 import com.aioj.next.ai.domain.AiConversationService;
 import com.aioj.next.ai.domain.AiLearningProfileService;
 import com.aioj.next.ai.domain.AiMemoryService;
@@ -84,7 +84,7 @@ class AgentChatSseControllerTest {
     @Mock
     private AiConversationService aiConversationService;
     @Mock
-    private AiContextService aiContextService;
+    private ContextDebugService contextDebugService;
     @Mock
     private AiMemoryService aiMemoryService;
     @Mock
@@ -111,7 +111,7 @@ class AgentChatSseControllerTest {
                 aiQuotaService,
                 accountImportParseService,
                 aiConversationService,
-                aiContextService,
+                contextDebugService,
                 aiMemoryService,
                 aiLearningProfileService,
                 aiMemoryCandidateService,

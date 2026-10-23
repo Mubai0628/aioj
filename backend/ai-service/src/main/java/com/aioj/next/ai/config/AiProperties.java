@@ -25,8 +25,6 @@ public class AiProperties {
     private Intent intent = new Intent();
     private Embedding embedding = new Embedding();
     private Capacity capacity = new Capacity();
-    private ContestLeakGuard contestLeakGuard = new ContestLeakGuard();
-    private Context context = new Context();
     private Recall recall = new Recall();
     private MemoryJobs memoryJobs = new MemoryJobs();
     private AgentJobs agentJobs = new AgentJobs();
@@ -175,14 +173,6 @@ public class AiProperties {
 
     public void setCapacity(Capacity capacity) {
         this.capacity = capacity == null ? new Capacity() : capacity;
-    }
-
-    public Context getContext() {
-        return context;
-    }
-
-    public void setContext(Context context) {
-        this.context = context == null ? new Context() : context;
     }
 
     public MemoryJobs getMemoryJobs() {
@@ -777,44 +767,6 @@ public class AiProperties {
         }
     }
 
-    public static class ContestLeakGuard {
-        private boolean enabled = true;
-        private double matchThreshold = 0.75;
-        private double recallThreshold = 0.45;
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-
-        public double getMatchThreshold() {
-            return matchThreshold;
-        }
-
-        public void setMatchThreshold(double matchThreshold) {
-            this.matchThreshold = matchThreshold;
-        }
-
-        public double getRecallThreshold() {
-            return recallThreshold;
-        }
-
-        public void setRecallThreshold(double recallThreshold) {
-            this.recallThreshold = recallThreshold;
-        }
-    }
-
-    public ContestLeakGuard getContestLeakGuard() {
-        return contestLeakGuard;
-    }
-
-    public void setContestLeakGuard(ContestLeakGuard contestLeakGuard) {
-        this.contestLeakGuard = contestLeakGuard == null ? new ContestLeakGuard() : contestLeakGuard;
-    }
-
     public static class Capacity {
         private int chatCorePoolSize = 4;
         private int chatMaxPoolSize = 8;
@@ -932,81 +884,6 @@ public class AiProperties {
 
         public void setToolQueueCapacity(int toolQueueCapacity) {
             this.toolQueueCapacity = toolQueueCapacity;
-        }
-    }
-
-    public static class Context {
-        private int defaultWindowTokens = 64_000;
-        private double compressionThresholdRatio = 0.70;
-        private double outputReserveRatio = 0.20;
-        private double estimatorSafetyFactor = 1.20;
-        private int hardMaxMemoryTokens = 2_500;
-        private int hardMaxRetrievedHistoryTokens = 3_000;
-        private int hardMaxSubmissionCodeTokens = 12_000;
-        private double estimatorEwmaAlpha = 0.20;
-
-        public int getDefaultWindowTokens() {
-            return defaultWindowTokens;
-        }
-
-        public void setDefaultWindowTokens(int defaultWindowTokens) {
-            this.defaultWindowTokens = defaultWindowTokens;
-        }
-
-        public double getCompressionThresholdRatio() {
-            return compressionThresholdRatio;
-        }
-
-        public void setCompressionThresholdRatio(double compressionThresholdRatio) {
-            this.compressionThresholdRatio = compressionThresholdRatio;
-        }
-
-        public double getOutputReserveRatio() {
-            return outputReserveRatio;
-        }
-
-        public void setOutputReserveRatio(double outputReserveRatio) {
-            this.outputReserveRatio = outputReserveRatio;
-        }
-
-        public double getEstimatorSafetyFactor() {
-            return estimatorSafetyFactor;
-        }
-
-        public void setEstimatorSafetyFactor(double estimatorSafetyFactor) {
-            this.estimatorSafetyFactor = estimatorSafetyFactor;
-        }
-
-        public int getHardMaxMemoryTokens() {
-            return hardMaxMemoryTokens;
-        }
-
-        public void setHardMaxMemoryTokens(int hardMaxMemoryTokens) {
-            this.hardMaxMemoryTokens = hardMaxMemoryTokens;
-        }
-
-        public int getHardMaxRetrievedHistoryTokens() {
-            return hardMaxRetrievedHistoryTokens;
-        }
-
-        public void setHardMaxRetrievedHistoryTokens(int hardMaxRetrievedHistoryTokens) {
-            this.hardMaxRetrievedHistoryTokens = hardMaxRetrievedHistoryTokens;
-        }
-
-        public int getHardMaxSubmissionCodeTokens() {
-            return hardMaxSubmissionCodeTokens;
-        }
-
-        public double getEstimatorEwmaAlpha() {
-            return estimatorEwmaAlpha;
-        }
-
-        public void setEstimatorEwmaAlpha(double estimatorEwmaAlpha) {
-            this.estimatorEwmaAlpha = estimatorEwmaAlpha;
-        }
-
-        public void setHardMaxSubmissionCodeTokens(int hardMaxSubmissionCodeTokens) {
-            this.hardMaxSubmissionCodeTokens = hardMaxSubmissionCodeTokens;
         }
     }
 

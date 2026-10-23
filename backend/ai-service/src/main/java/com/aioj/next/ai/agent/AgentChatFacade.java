@@ -13,9 +13,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Thin facade over the Agent Core V3 pipeline (design doc §2): the only type
- * AiController talks to for chat turns. The legacy AiChatTurnService bean is
- * kept in the codebase (archive round will remove it) but is no longer part of
- * the request path — never mix the two pipelines.
+ * AiController talks to for chat turns.
  */
 @Service
 public class AgentChatFacade {

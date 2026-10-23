@@ -158,7 +158,8 @@ public class ContestAiUsageService {
             }
             userIds.add(event.getActorUserId());
             if (ACTION_GUARD_EVALUATED.equals(event.getAction())) {
-                // ContestTurnGuard writes the decision name (PASS/CONSTRAIN/REFUSE) into status.
+                // The legacy ContestTurnGuard (deleted in plan T1.1) wrote the decision name
+                // (PASS/CONSTRAIN/REFUSE) into status; V3 turns record theirs in ai_guard_decisions.
                 evaluatedCountByUser.merge(event.getActorUserId(), 1L, Long::sum);
                 if ("CONSTRAIN".equals(event.getStatus())) {
                     constrainCountByUser.merge(event.getActorUserId(), 1L, Long::sum);

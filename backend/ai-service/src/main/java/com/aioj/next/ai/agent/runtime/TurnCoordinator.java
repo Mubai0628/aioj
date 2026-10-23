@@ -60,9 +60,9 @@ import java.util.concurrent.TimeoutException;
 /**
  * Turn mechanics for the Agent Core V3 pipeline (design doc §2/§7): idempotent
  * begin/resume on ai_turns, quota accounting, message lifecycle, in-flight
- * dedup, and timeout finalization — the same outer contract the legacy
- * AiChatTurnService honored, but with all legacy hooks (context service,
- * contest guard, memory, response policy guard) removed. Those capabilities
+ * dedup, and timeout finalization — the same outer contract the legacy chat
+ * pipeline honored (deleted in plan T1.1), but without its hooks (context
+ * service, contest guard, memory, response policy guard). Those capabilities
  * return as V3 components in their own phases.
  */
 @Service

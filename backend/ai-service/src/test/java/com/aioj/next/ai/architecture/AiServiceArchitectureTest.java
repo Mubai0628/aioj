@@ -42,11 +42,9 @@ class AiServiceArchitectureTest {
                     "com.aioj.next.ai.agent.understanding.TurnUnderstandingService"),
             "com.aioj.next.ai.domain.AiProvider", Set.of(
                     "com.aioj.next.ai.controller.AiController",
-                    "com.aioj.next.ai.domain.AiChatTurnService",
                     "com.aioj.next.ai.domain.AiMemoryService",
                     "com.aioj.next.ai.domain.AiRetrievalService",
                     "com.aioj.next.ai.domain.ContestPostmortemAnalysisService",
-                    "com.aioj.next.ai.domain.ContestTurnGuard",
                     "com.aioj.next.ai.domain.PlagiarismAnalysisService",
                     "com.aioj.next.ai.domain.ProblemDraftStore",
                     "com.aioj.next.ai.domain.StudentPostmortemAnalysisService",
@@ -58,7 +56,6 @@ class AiServiceArchitectureTest {
                     "com.aioj.next.ai.domain.AccountImportParseService",
                     "com.aioj.next.ai.domain.AiModelConfigService",
                     "com.aioj.next.ai.domain.AiStructuredSubmissionAnalysisService",
-                    "com.aioj.next.ai.domain.ContestTurnGuard",
                     "com.aioj.next.ai.domain.memory.AiMemoryMergeService"),
             "com.aioj.next.ai.domain.AiModelCatalogClient", Set.of(
                     "com.aioj.next.ai.domain.AiModelConfigService"));

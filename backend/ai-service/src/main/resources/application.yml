@@ -117,12 +117,6 @@ aioj:
       cooldown-window-minutes: ${AI_MEMORY_RECALL_COOLDOWN_WINDOW_MINUTES:30}
       cooldown-penalty: ${AI_MEMORY_RECALL_COOLDOWN_PENALTY:0.35}
       confirmed-boost: ${AI_MEMORY_RECALL_CONFIRMED_BOOST:0.10}
-    context:
-      estimator-ewma-alpha: ${AI_CONTEXT_ESTIMATOR_EWMA_ALPHA:0.20}
-    contest-leak-guard:
-      enabled: ${AI_CONTEST_LEAK_GUARD_ENABLED:true}
-      match-threshold: ${AI_CONTEST_GUARD_MATCH_THRESHOLD:0.75}
-      recall-threshold: ${AI_CONTEST_GUARD_RECALL_THRESHOLD:0.45}
     memory-jobs:
       enabled: ${AI_MEMORY_JOBS_ENABLED:true}
       poll-interval-ms: ${AI_MEMORY_JOBS_POLL_INTERVAL_MS:5000}

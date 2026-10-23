@@ -1,8 +1,8 @@
 package com.aioj.next.ai.controller;
 
 import com.aioj.next.ai.agent.AgentChatFacade;
+import com.aioj.next.ai.agent.context.ContextDebugService;
 import com.aioj.next.ai.domain.AccountImportParseService;
-import com.aioj.next.ai.domain.AiContextService;
 import com.aioj.next.ai.domain.AiConversationService;
 import com.aioj.next.ai.domain.AiLearningProfileService;
 import com.aioj.next.ai.domain.AiMemoryService;
@@ -29,7 +29,7 @@ class AiControllerConstructorInjectionTest {
             .withBean(AiQuotaService.class, () -> mock(AiQuotaService.class))
             .withBean(AccountImportParseService.class, () -> mock(AccountImportParseService.class))
             .withBean(AiConversationService.class, () -> mock(AiConversationService.class))
-            .withBean(AiContextService.class, () -> mock(AiContextService.class))
+            .withBean(ContextDebugService.class, () -> mock(ContextDebugService.class))
             .withBean(AiMemoryService.class, () -> mock(AiMemoryService.class))
             .withBean(AiLearningProfileService.class, () -> mock(AiLearningProfileService.class))
             .withBean(AiMemoryCandidateService.class, () -> mock(AiMemoryCandidateService.class))

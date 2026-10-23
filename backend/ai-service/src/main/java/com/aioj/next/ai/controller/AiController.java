@@ -1,10 +1,10 @@
 package com.aioj.next.ai.controller;
 
 import com.aioj.next.ai.agent.AgentChatFacade;
+import com.aioj.next.ai.agent.context.ContextDebugService;
 import com.aioj.next.ai.domain.AiCompletion;
 import com.aioj.next.ai.domain.AiChatContext;
 import com.aioj.next.ai.domain.AiConversationService;
-import com.aioj.next.ai.domain.AiContextService;
 import com.aioj.next.ai.domain.AiMemoryService;
 import com.aioj.next.ai.domain.AiLearningProfileService;
 import com.aioj.next.ai.domain.AiProvider;
@@ -110,7 +110,7 @@ public class AiController {
     private final AiQuotaService aiQuotaService;
     private final AccountImportParseService accountImportParseService;
     private final AiConversationService aiConversationService;
-    private final AiContextService aiContextService;
+    private final ContextDebugService contextDebugService;
     private final AiMemoryService aiMemoryService;
     private final AiLearningProfileService aiLearningProfileService;
     private final AiMemoryCandidateService aiMemoryCandidateService;
@@ -132,7 +132,7 @@ public class AiController {
             AiQuotaService aiQuotaService,
             AccountImportParseService accountImportParseService,
             AiConversationService aiConversationService,
-            AiContextService aiContextService,
+            ContextDebugService contextDebugService,
             AiMemoryService aiMemoryService,
             AiLearningProfileService aiLearningProfileService,
             AiMemoryCandidateService aiMemoryCandidateService,
@@ -143,7 +143,7 @@ public class AiController {
             ObjectMapper objectMapper
     ) {
         this(aiProvider, agentChatFacade, aiQuotaService, accountImportParseService, aiConversationService,
-                aiContextService, aiMemoryService, aiLearningProfileService, aiMemoryCandidateService,
+                contextDebugService, aiMemoryService, aiLearningProfileService, aiMemoryCandidateService,
                 aiMemoryDebugService, aiMemoryReviewService, problemDraftStore, responseNormalizer, objectMapper,
                 Runnable::run);
     }
@@ -155,7 +155,7 @@ public class AiController {
             AiQuotaService aiQuotaService,
             AccountImportParseService accountImportParseService,
             AiConversationService aiConversationService,
-            AiContextService aiContextService,
+            ContextDebugService contextDebugService,
             AiMemoryService aiMemoryService,
             AiLearningProfileService aiLearningProfileService,
             AiMemoryCandidateService aiMemoryCandidateService,
@@ -171,7 +171,7 @@ public class AiController {
         this.aiQuotaService = aiQuotaService;
         this.accountImportParseService = accountImportParseService;
         this.aiConversationService = aiConversationService;
-        this.aiContextService = aiContextService;
+        this.contextDebugService = contextDebugService;
         this.aiMemoryService = aiMemoryService;
         this.aiLearningProfileService = aiLearningProfileService;
         this.aiMemoryCandidateService = aiMemoryCandidateService;
@@ -329,7 +329,7 @@ public class AiController {
     public ApiResponse<AiConversationContextDebugResponse> contextDebug(@PathVariable String id) {
         Long userId = SecuritySupport.currentUserId();
         aiConversationService.ensureOwner(id, userId);
-        return ApiResponse.ok(aiContextService.contextDebug(userId, id));
+        return ApiResponse.ok(contextDebugService.contextDebug(userId, id));
     }
 
     @DeleteMapping("/ai/conversations/{id}")

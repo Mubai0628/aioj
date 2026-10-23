@@ -1,6 +1,6 @@
 package com.aioj.next.ai.controller;
 
-import com.aioj.next.ai.domain.AiContextService;
+import com.aioj.next.ai.agent.context.ContextDebugService;
 import com.aioj.next.ai.domain.AiConversationService;
 import com.aioj.next.ai.domain.AiLearningProfileService;
 import com.aioj.next.ai.domain.AiMemoryService;
@@ -60,7 +60,7 @@ class AiConversationContextDebugControllerTest {
     @Mock
     private AiConversationService aiConversationService;
     @Mock
-    private AiContextService aiContextService;
+    private ContextDebugService contextDebugService;
     @Mock
     private AiMemoryService aiMemoryService;
     @Mock
@@ -82,7 +82,7 @@ class AiConversationContextDebugControllerTest {
                 aiQuotaService,
                 accountImportParseService,
                 aiConversationService,
-                aiContextService,
+                contextDebugService,
                 aiMemoryService,
                 aiLearningProfileService,
                 aiMemoryCandidateService,
@@ -161,7 +161,7 @@ class AiConversationContextDebugControllerTest {
                 new AiConversationContextDebugResponse.TokenEstimate(0, 8, 0, 0, 8),
                 List.of()
         );
-        when(aiContextService.contextDebug(USER_ID, "c-owned")).thenReturn(response);
+        when(contextDebugService.contextDebug(USER_ID, "c-owned")).thenReturn(response);
 
         mockMvc.perform(get("/ai/conversations/c-owned/context-debug"))
                 .andExpect(status().isOk())
