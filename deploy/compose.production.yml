@@ -279,7 +279,7 @@ services:
   # Plan T1.9 (A4.3, §3.6 rule 3): the only bridge between app-net and the agent
   # sandbox. Its environment is a whitelist: its own inbound token, the agent sandbox
   # endpoint and token, limits and logging; no MYSQL_*, RABBITMQ_*, JWT_*, model keys
-  # or the shared internal token. ai-service starts using it in T1.10.
+  # or the shared internal token. ai-service sends all draft execution here (T1.10).
   agent-executor:
     image: ${AGENT_EXECUTOR_IMAGE:?AGENT_EXECUTOR_IMAGE must be an immutable GHCR digest}
     restart: unless-stopped
@@ -291,6 +291,10 @@ services:
       AGENT_EXECUTOR_WORK_ROOT: /aioj/agent-work
       AGENT_EXECUTOR_MAX_CONCURRENCY: "1"
       AGENT_EXECUTOR_LOG_LEVEL: ${AGENT_EXECUTOR_LOG_LEVEL:-INFO}
+      # Plan T1.10: measured peaks in agent-sandbox were g++ 171-215 MiB, javac 55-143 MiB and a
+      # 20-case package build 220 MiB, so runs get 256 MiB and compiles or generator scripts 384 MiB.
+      AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:-262144}
+      AGENT_EXECUTOR_MAX_COMPILE_MEMORY_LIMIT_KB: ${AGENT_EXECUTOR_MAX_COMPILE_MEMORY_LIMIT_KB:-393216}
     volumes:
       - agent-executor-work:/aioj/agent-work
     depends_on:
@@ -325,7 +329,10 @@ services:
       JWT_PUBLIC_KEY_PEM: ${JWT_PUBLIC_KEY_PEM:-}
       AIOJ_INTERNAL_API_TOKEN: ${AIOJ_INTERNAL_API_TOKEN}
       PROBLEM_SERVICE_URI: http://problem-service:8202
-      JUDGE_WORKER_URI: http://judge-worker:8203
+      # Plan T1.10: draft code runs in agent-executor; ai-service holds no sandbox token.
+      AGENT_EXECUTOR_ENDPOINT: http://agent-executor:8205
+      AGENT_EXECUTOR_INTERNAL_TOKEN: ${AGENT_EXECUTOR_INTERNAL_TOKEN:?AGENT_EXECUTOR_INTERNAL_TOKEN is required}
+      AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:-262144}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/chat/completions}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-pro}
