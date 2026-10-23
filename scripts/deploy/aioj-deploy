@@ -37,8 +37,8 @@ jq -e --arg tag "$tag" '
   .schemaVersion == 1 and .release == $tag and .platform == "linux/amd64" and
   (.deploymentBundle.name == "deployment-bundle.tar.gz") and
   (.deploymentBundle.sha256 | test("^[0-9a-f]{64}$")) and
-  (.images | keys | sort == ["ai","auth","gateway","judge-worker","problem","sandbox","web-admin","web-user"]) and
-  ([.images[] | test("^ghcr\\.io/mubai0628/aioj-(ai|auth|gateway|judge-worker|problem|sandbox|web-admin|web-user)@sha256:[0-9a-f]{64}$")] | all)
+  (.images | keys | sort == ["agent-executor","ai","auth","gateway","judge-worker","problem","sandbox","web-admin","web-user"]) and
+  ([.images[] | test("^ghcr\\.io/mubai0628/aioj-(agent-executor|ai|auth|gateway|judge-worker|problem|sandbox|web-admin|web-user)@sha256:[0-9a-f]{64}$")] | all)
 ' "$work/image-manifest.json" >/dev/null || { printf 'release manifest validation failed\n' >&2; exit 65; }
 
 bundle_name=$(jq -r '.deploymentBundle.name' "$work/image-manifest.json")
@@ -59,6 +59,7 @@ PROBLEM_IMAGE=$(jq -r '.images.problem' "$work/image-manifest.json")
 AI_IMAGE=$(jq -r '.images.ai' "$work/image-manifest.json")
 JUDGE_IMAGE=$(jq -r '.images["judge-worker"]' "$work/image-manifest.json")
 SANDBOX_IMAGE=$(jq -r '.images.sandbox' "$work/image-manifest.json")
+AGENT_EXECUTOR_IMAGE=$(jq -r '.images["agent-executor"]' "$work/image-manifest.json")
 WEB_USER_IMAGE=$(jq -r '.images["web-user"]' "$work/image-manifest.json")
 WEB_ADMIN_IMAGE=$(jq -r '.images["web-admin"]' "$work/image-manifest.json")
 EOF

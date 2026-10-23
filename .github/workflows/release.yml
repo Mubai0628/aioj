@@ -58,6 +58,9 @@ jobs:
           - service: judge-worker
             dockerfile: deploy/docker/backend.Dockerfile
             build_args: SERVICE_MODULE=judge-worker
+          - service: agent-executor
+            dockerfile: deploy/docker/backend.Dockerfile
+            build_args: SERVICE_MODULE=agent-executor
           - service: sandbox
             dockerfile: deploy/sandbox/Dockerfile
             build_args: ""

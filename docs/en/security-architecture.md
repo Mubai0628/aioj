@@ -38,6 +38,17 @@ The current go-judge integration uses a `privileged` container. Normal code rema
 
 Single-node deployment increases blast radius and single-point-of-failure impact. Internal networks, read-only mounts, resource limits, and secret isolation are mandatory compensating controls, but they cannot make the single-node topology security-equivalent to an isolated judge node.
 
+### agent-sandbox
+
+agent-sandbox, added for Agent tool execution, reuses the judge Sandbox image and also runs `privileged`, so the consequences listed above apply to it as well. Compensating controls:
+
+- it joins only the internal `agent-sandbox-net` network and publishes no port; the only other member of that network is agent-executor, which holds no database, message-queue, JWT, or AI secret;
+- MySQL, Redis, RabbitMQ, business services, and the judge Sandbox are not on its network;
+- its root filesystem is read-only, `/tmp` is a size-capped tmpfs, and it mounts no business volume; PID, memory, CPU, output, and copy-out are bounded;
+- its token is separate from the judge Sandbox's.
+
+Whether gVisor (`runsc`) can host go-judge and so remove `privileged` has not been evaluated yet, because that needs a Linux host. Until then agent-sandbox stays `privileged`, and the maintainer has accepted this risk.
+
 ## AI security
 
 - The model and its output are untrusted; authorization and tool execution remain server-side.

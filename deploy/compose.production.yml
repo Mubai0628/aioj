@@ -246,6 +246,64 @@ services:
     cpus: "0.75"
     logging: *bounded-logging
 
+  # Plan T1.9 (A4.2, §3.6): the Agent tools' own sandbox. Same image digest as the
+  # judge sandbox, its own token and limits; only on the internal agent-sandbox-net,
+  # with no ports, no Docker socket and no business volumes. It stays privileged until
+  # gVisor (runsc) has been evaluated on a Linux host; see SECURITY.md.
+  agent-sandbox:
+    image: ${SANDBOX_IMAGE:?SANDBOX_IMAGE must be an immutable GHCR digest}
+    restart: unless-stopped
+    privileged: true
+    read_only: true
+    shm_size: 64m
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,size=192m,mode=1777
+    environment:
+      ES_HTTP_ADDR: ":8090"
+      ES_AUTH_TOKEN: ${AGENT_SANDBOX_TOKEN:?AGENT_SANDBOX_TOKEN is required}
+      ES_OUTPUT_LIMIT: ${AGENT_SANDBOX_OUTPUT_LIMIT:-67108864}
+      ES_COPY_OUT_LIMIT: ${AGENT_SANDBOX_COPY_OUT_LIMIT:-67108864}
+      ES_FILE_TIMEOUT: ${AGENT_SANDBOX_FILE_TIMEOUT:-10m}
+    networks: [agent-sandbox-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/version >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    logging: *bounded-logging
+    mem_limit: 512m
+    cpus: "0.75"
+
+  # Plan T1.9 (A4.3, §3.6 rule 3): the only bridge between app-net and the agent
+  # sandbox. Its environment is a whitelist: its own inbound token, the agent sandbox
+  # endpoint and token, limits and logging; no MYSQL_*, RABBITMQ_*, JWT_*, model keys
+  # or the shared internal token. ai-service starts using it in T1.10.
+  agent-executor:
+    image: ${AGENT_EXECUTOR_IMAGE:?AGENT_EXECUTOR_IMAGE must be an immutable GHCR digest}
+    restart: unless-stopped
+    environment:
+      JAVA_OPTS: ${AGENT_EXECUTOR_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=60 -XX:+ExitOnOutOfMemoryError}
+      AGENT_EXECUTOR_INTERNAL_TOKEN: ${AGENT_EXECUTOR_INTERNAL_TOKEN:?AGENT_EXECUTOR_INTERNAL_TOKEN is required}
+      AGENT_SANDBOX_ENDPOINT: http://agent-sandbox:8090/execute
+      AGENT_SANDBOX_TOKEN: ${AGENT_SANDBOX_TOKEN}
+      AGENT_EXECUTOR_WORK_ROOT: /aioj/agent-work
+      AGENT_EXECUTOR_MAX_CONCURRENCY: "1"
+      AGENT_EXECUTOR_LOG_LEVEL: ${AGENT_EXECUTOR_LOG_LEVEL:-INFO}
+    volumes:
+      - agent-executor-work:/aioj/agent-work
+    depends_on:
+      agent-sandbox:
+        condition: service_healthy
+    networks: [app-net, agent-sandbox-net]
+    healthcheck:
+      <<: *backend-health
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8205/actuator/health | grep -q '\"status\":\"UP\"'"]
+    logging: *bounded-logging
+    mem_limit: 256m
+    cpus: "0.25"
+
   ai-service:
     image: ${AI_IMAGE:?AI_IMAGE must be an immutable GHCR digest}
     restart: unless-stopped
@@ -392,10 +450,15 @@ volumes:
   testcase-cache:
   ai-draft-artifacts:
   sandbox-tmp:
+  agent-executor-work:
 
 networks:
   app-net:
     driver: bridge
   judge-net:
+    driver: bridge
+    internal: true
+  # Agent tools only; never connected to judge-net or app-net (plan §3.6 rule 2).
+  agent-sandbox-net:
     driver: bridge
     internal: true

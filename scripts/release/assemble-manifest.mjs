@@ -9,7 +9,7 @@ if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(releaseTag)) throw new Error("i
 if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error("invalid Git commit");
 if (!/^[0-9a-f]{64}$/.test(bundleSha)) throw new Error("invalid deployment bundle SHA-256");
 
-const expected = ["gateway", "auth", "problem", "ai", "judge-worker", "sandbox", "web-user", "web-admin"];
+const expected = ["gateway", "auth", "problem", "ai", "judge-worker", "agent-executor", "sandbox", "web-user", "web-admin"];
 const images = {};
 for (const file of fs.readdirSync(fragmentDirectory).filter((name) => name.endsWith(".json"))) {
   const fragment = JSON.parse(fs.readFileSync(path.join(fragmentDirectory, file), "utf8"));

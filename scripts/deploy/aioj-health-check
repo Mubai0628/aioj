@@ -5,7 +5,7 @@ root=${AIOJ_ROOT:-/opt/aioj}
 compose_file="$root/compose.production.yml"
 app_env="$root/env/app.env"
 deploy_env="$root/deploy.env"
-services=(mysql redis rabbitmq auth-service problem-service sandbox judge-worker ai-service gateway-service web-user web-admin)
+services=(mysql redis rabbitmq auth-service problem-service sandbox judge-worker agent-sandbox agent-executor ai-service gateway-service web-user web-admin)
 deadline=$((SECONDS + ${AIOJ_HEALTH_TIMEOUT_SECONDS:-600}))
 
 compose() {

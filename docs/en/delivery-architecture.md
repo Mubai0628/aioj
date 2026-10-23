@@ -20,7 +20,7 @@ reviewed main
    -> health validation and version record
 ```
 
-The eight application images are gateway, auth, problem, ai, judge-worker, sandbox, web-user, and web-admin. Third-party infrastructure images are also pinned to reviewed platform digests.
+The nine application images are gateway, auth, problem, ai, judge-worker, agent-executor, sandbox, web-user, and web-admin. The Agent tools' agent-sandbox runs the same sandbox image digest with its own configuration and token. Third-party infrastructure images are also pinned to reviewed platform digests.
 
 ## Immutable version identity
 

@@ -9,6 +9,8 @@ Recommended files:
 - `jwt-public.pem`
 - `ai-api-key`
 - `sandbox-token`
+- `agent-sandbox-token` (the Agent tools' sandbox; never the judge sandbox's token)
+- `agent-executor-token` (held by agent-executor and ai-service only)
 
 For local development, `.env` values are enough. Rotate any key that has ever
 been committed or pasted into chat.

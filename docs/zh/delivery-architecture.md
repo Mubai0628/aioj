@@ -20,7 +20,7 @@ AIOJ 使用 GitHub Actions、私有 GHCR、不可变镜像 digest 与受保护�
    -> 健康检查与版本记录
 ```
 
-八个应用镜像分别对应 gateway、auth、problem、ai、judge-worker、sandbox、web-user 和 web-admin。第三方基础镜像同样固定到经过审核的平台 digest。
+九个应用镜像分别对应 gateway、auth、problem、ai、judge-worker、agent-executor、sandbox、web-user 和 web-admin。Agent 工具专用的 agent-sandbox 复用 sandbox 镜像的同一个 digest，只是配置和令牌不同。第三方基础镜像同样固定到经过审核的平台 digest。
 
 ## 不可变版本身份
 

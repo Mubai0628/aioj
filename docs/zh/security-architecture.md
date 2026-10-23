@@ -38,6 +38,17 @@ problem-service 只发布任务，judge-worker 只编排并调用 Sandbox。Sand
 
 单节点部署扩大了该风险的影响范围和单点故障范围。内部网络、只读挂载、资源限制和秘密隔离是必要补偿控制，但不能让单节点与独立判题节点达到等价安全。
 
+### agent-sandbox
+
+为 Agent 工具执行新增的 agent-sandbox 复用判题 Sandbox 的镜像，同样以 `privileged` 运行，上面列出的后果对它同样成立。补偿控制：
+
+- 只接入 internal 网络 `agent-sandbox-net`，不发布端口；这个网络里另外只有 agent-executor，它不持有数据库、消息队列、JWT 或 AI 秘密；
+- MySQL、Redis、RabbitMQ、业务服务和判题 Sandbox 都不在它的网络里；
+- 根文件系统只读，`/tmp` 是有容量上限的 tmpfs，没有业务卷；PID、内存、CPU、输出和 copy-out 各有上限；
+- 令牌与判题 Sandbox 分开。
+
+gVisor（`runsc`）能否承载 go-judge、从而去掉 `privileged`，目前还没有评估，因为需要一台 Linux 主机。评估之前 agent-sandbox 保留 `privileged`，维护者已接受这一风险。
+
 ## AI 安全
 
 - 模型和模型输出不可信，授权和工具执行在服务端。
