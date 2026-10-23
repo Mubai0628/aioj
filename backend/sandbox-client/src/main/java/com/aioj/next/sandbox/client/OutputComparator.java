@@ -1,4 +1,4 @@
-package com.aioj.next.judge.domain;
+package com.aioj.next.sandbox.client;
 
 import java.io.IOException;
 import java.io.InputStream;

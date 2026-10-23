@@ -21,6 +21,7 @@
         <module>common-lib</module>
         <module>api-contract</module>
         <module>agent-harness</module>
+        <module>sandbox-client</module>
         <module>gateway-service</module>
         <module>auth-service</module>
         <module>problem-service</module>

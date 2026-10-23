@@ -1,13 +1,11 @@
-package com.aioj.next.judge.domain;
-
-import org.springframework.stereotype.Component;
+package com.aioj.next.sandbox.client;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
-@Component
+/** Ignores line-ending style, trailing spaces and tabs on each line, and trailing blank lines. */
 public class DefaultOutputComparator implements OutputComparator {
     private static final Pattern TRAILING_WS = Pattern.compile("[\\t ]+$", Pattern.MULTILINE);
 

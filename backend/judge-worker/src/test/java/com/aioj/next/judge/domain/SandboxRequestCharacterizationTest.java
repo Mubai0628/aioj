@@ -7,6 +7,7 @@ import com.aioj.next.contract.problem.TestcaseCheckerType;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
 import com.aioj.next.judge.persistence.entity.SubmissionEntity;
 import com.aioj.next.judge.persistence.mapper.SubmissionMapper;
+import com.aioj.next.sandbox.client.DefaultOutputComparator;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;

@@ -1,25 +1,28 @@
 package com.aioj.next.judge.domain;
 
 import com.aioj.next.judge.config.JudgeWorkerProperties;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
+import com.aioj.next.sandbox.client.Command;
+import com.aioj.next.sandbox.client.GoJudgeClient;
+import com.aioj.next.sandbox.client.LanguageProfile;
+import com.aioj.next.sandbox.client.Limits;
+import com.aioj.next.sandbox.client.ResultCode;
+import com.aioj.next.sandbox.client.RunResult;
+import com.aioj.next.sandbox.client.SandboxConfig;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
 
-import java.io.IOException;
 import java.io.OutputStream;
-import java.net.http.HttpClient;
-import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * The execution endpoints' side of go-judge: compile and run single
+ * programs, and run the generator scripts that collect draft testcases. The
+ * protocol, language table and limit rules come from sandbox-client (plan
+ * T1.8); the requests sent are pinned by SandboxRequestCharacterizationTest.
+ */
 @Component
 public class SandboxExecutionClient {
-    private static final int DEFAULT_STDOUT_BASE_COLLECT_LIMIT_BYTES = 64 * 1024;
-    private static final int DEFAULT_STDERR_COLLECT_LIMIT_BYTES = 64 * 1024;
     private static final int DEFAULT_SCRIPT_TARGET_CASE_COUNT = 3;
     private static final int MAX_SCRIPT_TARGET_CASE_COUNT = 20;
     private static final String COLLECT_MODE_PAIRED = "PAIRED";
@@ -28,53 +31,42 @@ public class SandboxExecutionClient {
     private static final String GENERATED_FILES_JSON = ".aioj_generated_files.json";
     private static final String OFFICIAL_PACKAGE_JSON = ".aioj_official_package.json";
     private static final String OFFICIAL_PACKAGE_ZIP = ".aioj_official_hidden.zip";
-    private static final ParameterizedTypeReference<List<SandboxRunResult>> RUN_RESULT_TYPE =
-            new ParameterizedTypeReference<>() {
-            };
 
     private final JudgeWorkerProperties properties;
-    private final RestClient restClient;
+    private final GoJudgeClient sandbox;
 
     public SandboxExecutionClient(JudgeWorkerProperties properties) {
         this.properties = properties;
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
-                .connectTimeout(resolveTimeout(properties.getSandboxTimeout()))
-                .build());
-        requestFactory.setReadTimeout(resolveTimeout(properties.getSandboxReadTimeout()));
-        RestClient.Builder builder = RestClient.builder()
-                .baseUrl(stripTrailingPath(properties.getSandboxEndpoint()))
-                .requestFactory(requestFactory);
-        if (StringUtils.hasText(properties.getSandboxToken())) {
-            builder.defaultHeader("Authorization", "Bearer " + properties.getSandboxToken());
-        }
-        this.restClient = builder.build();
+        this.sandbox = new GoJudgeClient(sandboxConfig(properties));
+    }
+
+    /** go-judge connection settings from judge-worker's properties. */
+    static SandboxConfig sandboxConfig(JudgeWorkerProperties properties) {
+        return new SandboxConfig(properties.getSandboxEndpoint(), properties.getSandboxToken(),
+                properties.getSandboxTimeout(), properties.getSandboxReadTimeout());
     }
 
     public CompileOutcome compileSource(String language, String sourceCode, long cpuLimitNs, long memoryLimitBytes) {
-        LangProfile lang = LangProfile.of(language);
+        LanguageProfile lang = LanguageProfile.of(language);
         if (!lang.requiresCompile()) {
             return CompileOutcome.success(null, 0L, 0L, null, 0, 0L, 0);
         }
-        SandboxRunResult result = runSandbox(List.of(Map.of(
-                "args", lang.compileArgs(),
-                "env", lang.envVars(),
-                "files", standardFiles("", stdoutBaseCollectLimitBytes(), stderrCollectLimitBytes()),
-                "cpuLimit", cpuLimitNs,
-                "clockLimit", wallClockLimit(cpuLimitNs),
-                "memoryLimit", memoryLimitBytes,
-                "procLimit", processLimit(50),
-                "copyIn", Map.of(lang.sourceFileName(), Map.of("content", sourceCode == null ? "" : sourceCode)),
-                "copyOutCached", List.of(lang.executableName())
-        )));
-        Long timeMs = nanosToMillis(result.time());
-        Long memoryKb = bytesToKb(result.memory());
-        Long runTimeMs = nanosToMillis(result.runTime());
-        String stderr = fileContent(result, "stderr");
-        if (!"Accepted".equals(result.status())) {
+        RunResult result = sandbox.run(Command.builder(lang.compileArgs())
+                .env(lang.envVars())
+                .standardFiles("", stdoutBaseCollectLimitBytes(), stderrCollectLimitBytes())
+                .limits(cpuLimitNs, Limits.wallClockLimit(cpuLimitNs), memoryLimitBytes, processLimit(50))
+                .copyInContent(lang.sourceFileName(), sourceCode == null ? "" : sourceCode)
+                .copyOutCached(List.of(lang.executableName()))
+                .build());
+        Long timeMs = Limits.nanosToMillis(result.time());
+        Long memoryKb = Limits.bytesToKb(result.memory());
+        Long runTimeMs = Limits.nanosToMillis(result.runTime());
+        String stderr = result.file("stderr");
+        if (!result.accepted()) {
             return CompileOutcome.failed(firstText(stderr, result.error(), result.status()), timeMs, memoryKb,
                     stderr, result.exitStatus(), runTimeMs, result.procPeak()).withSandboxStatus(result.status());
         }
-        String fileId = result.fileIds() == null ? null : result.fileIds().get(lang.executableName());
+        String fileId = result.cachedFileId(lang.executableName());
         if (!StringUtils.hasText(fileId)) {
             return CompileOutcome.failed("Compile succeeded but sandbox did not return cached fileId",
                     timeMs, memoryKb, stderr, result.exitStatus(), runTimeMs, result.procPeak())
@@ -86,38 +78,31 @@ public class SandboxExecutionClient {
 
     public RunOutcome runSource(String language, String sourceCode, String compiledFileId, String stdin,
                                 long cpuLimitNs, long memoryLimitBytes, int stdoutCollectLimitBytes) {
-        LangProfile lang = LangProfile.of(language);
+        LanguageProfile lang = LanguageProfile.of(language);
         String temporaryFileId = null;
         try {
             String executableFileId = compiledFileId;
             if (lang.requiresCompile() && !StringUtils.hasText(executableFileId)) {
-                CompileOutcome compile = compileSource(language, sourceCode, safeMultiply(cpuLimitNs, 10),
-                        safeMultiply(memoryLimitBytes, 2));
+                CompileOutcome compile = compileSource(language, sourceCode, Limits.safeMultiply(cpuLimitNs, 10),
+                        Limits.safeMultiply(memoryLimitBytes, 2));
                 if (compile.failed()) {
                     return RunOutcome.fromCompileFailure(compile);
                 }
                 executableFileId = compile.fileId();
                 temporaryFileId = executableFileId;
             }
-            Map<String, Object> copyIn = new LinkedHashMap<>();
+            Command.Builder command = Command.builder(lang.runArgs())
+                    .env(lang.envVars())
+                    .standardFiles(stdin == null ? "" : stdin,
+                            Limits.positiveOrDefault(stdoutCollectLimitBytes, stdoutBaseCollectLimitBytes()),
+                            stderrCollectLimitBytes())
+                    .limits(cpuLimitNs, Limits.wallClockLimit(cpuLimitNs), memoryLimitBytes, processLimit(50));
             if (lang.requiresCompile()) {
-                copyIn.put(lang.executableName(), Map.of("fileId", executableFileId));
+                command.copyInCached(lang.executableName(), executableFileId);
             } else {
-                copyIn.put(lang.sourceFileName(), Map.of("content", sourceCode == null ? "" : sourceCode));
+                command.copyInContent(lang.sourceFileName(), sourceCode == null ? "" : sourceCode);
             }
-            SandboxRunResult result = runSandbox(List.of(Map.of(
-                    "args", lang.runArgs(),
-                    "env", lang.envVars(),
-                    "files", standardFiles(stdin == null ? "" : stdin,
-                            positiveOrDefault(stdoutCollectLimitBytes, stdoutBaseCollectLimitBytes()),
-                            stderrCollectLimitBytes()),
-                    "cpuLimit", cpuLimitNs,
-                    "clockLimit", wallClockLimit(cpuLimitNs),
-                    "memoryLimit", memoryLimitBytes,
-                    "procLimit", processLimit(50),
-                    "copyIn", copyIn
-            )));
-            return RunOutcome.from(result);
+            return RunOutcome.from(sandbox.run(command.build()));
         } finally {
             if (temporaryFileId != null) {
                 deleteCachedFile(temporaryFileId);
@@ -143,52 +128,43 @@ public class SandboxExecutionClient {
                 Math.max(1L, properties.getMaxDraftPackageEntryBytes()),
                 Math.max(1L, properties.getMaxDraftPackageBytes()),
                 Math.max(1, properties.getMaxDraftPackageEntries()));
-        SandboxRunResult result = runSandbox(List.of(Map.of(
-                "args", List.of("/bin/bash", "-lc", collector),
-                "env", List.of("PATH=/usr/bin:/bin"),
-                "files", standardFiles("", positiveOrDefault(stdoutCollectLimitBytes, stdoutBaseCollectLimitBytes()),
-                        stderrCollectLimitBytes()),
-                "cpuLimit", cpuLimitNs,
-                "clockLimit", wallClockLimit(cpuLimitNs),
-                "memoryLimit", memoryLimitBytes,
-                "procLimit", processLimit(50),
-                "copyIn", Map.of("generator.py", Map.of("content", script == null ? "" : script)),
-                "copyOut", List.of(GENERATED_FILES_JSON),
-                "copyOutMax", Math.max(1L, properties.getMaxDraftPackageBytes())
-        )));
-        return RunOutcome.from(result, fileContent(result, GENERATED_FILES_JSON));
+        RunResult result = sandbox.run(Command.builder(List.of("/bin/bash", "-lc", collector))
+                .env(List.of("PATH=/usr/bin:/bin"))
+                .standardFiles("", Limits.positiveOrDefault(stdoutCollectLimitBytes, stdoutBaseCollectLimitBytes()),
+                        stderrCollectLimitBytes())
+                .limits(cpuLimitNs, Limits.wallClockLimit(cpuLimitNs), memoryLimitBytes, processLimit(50))
+                .copyInContent("generator.py", script == null ? "" : script)
+                .copyOut(List.of(GENERATED_FILES_JSON))
+                .copyOutMax(Math.max(1L, properties.getMaxDraftPackageBytes()))
+                .build());
+        return RunOutcome.from(result, result.file(GENERATED_FILES_JSON));
     }
 
     public RunOutcome runOfficialPackageScript(String script, String standardSolutionLanguage, String standardSolutionCode,
                                                long cpuLimitNs, long memoryLimitBytes, int stdoutCollectLimitBytes,
                                                int targetCaseCount, long standardCpuLimitNs, long standardMemoryLimitBytes,
                                                long maxCaseBytes, long maxPackageBytes) {
-        LangProfile lang = LangProfile.of(standardSolutionLanguage);
+        LanguageProfile lang = LanguageProfile.of(standardSolutionLanguage);
+        Long standardTimeLimitMillis = Limits.nanosToMillis(standardCpuLimitNs);
         String collector = officialPackageCollector(
                 safeTargetCaseCount(targetCaseCount),
-                nanosToMillis(standardCpuLimitNs) == null ? 1000L : Math.max(1L, nanosToMillis(standardCpuLimitNs)),
+                standardTimeLimitMillis == null ? 1000L : Math.max(1L, standardTimeLimitMillis),
                 Math.max(1L, standardMemoryLimitBytes),
                 Math.max(1L, maxCaseBytes),
                 Math.max(1L, maxPackageBytes),
                 lang
         );
-        Map<String, Object> copyIn = new LinkedHashMap<>();
-        copyIn.put("generator.py", Map.of("content", script == null ? "" : script));
-        copyIn.put(lang.sourceFileName(), Map.of("content", standardSolutionCode == null ? "" : standardSolutionCode));
-        SandboxRunResult result = runSandbox(List.of(Map.of(
-                "args", List.of("/bin/bash", "-lc", collector),
-                "env", List.of("PATH=/usr/bin:/bin"),
-                "files", standardFiles("", positiveOrDefault(stdoutCollectLimitBytes, stdoutBaseCollectLimitBytes()),
-                        stderrCollectLimitBytes()),
-                "cpuLimit", cpuLimitNs,
-                "clockLimit", wallClockLimit(cpuLimitNs),
-                "memoryLimit", memoryLimitBytes,
-                "procLimit", processLimit(80),
-                "copyIn", copyIn,
-                "copyOut", List.of(OFFICIAL_PACKAGE_JSON),
-                "copyOutCached", List.of(OFFICIAL_PACKAGE_ZIP)
-        )));
-        return RunOutcome.fromOfficialPackage(result, fileContent(result, OFFICIAL_PACKAGE_JSON));
+        RunResult result = sandbox.run(Command.builder(List.of("/bin/bash", "-lc", collector))
+                .env(List.of("PATH=/usr/bin:/bin"))
+                .standardFiles("", Limits.positiveOrDefault(stdoutCollectLimitBytes, stdoutBaseCollectLimitBytes()),
+                        stderrCollectLimitBytes())
+                .limits(cpuLimitNs, Limits.wallClockLimit(cpuLimitNs), memoryLimitBytes, processLimit(80))
+                .copyInContent("generator.py", script == null ? "" : script)
+                .copyInContent(lang.sourceFileName(), standardSolutionCode == null ? "" : standardSolutionCode)
+                .copyOut(List.of(OFFICIAL_PACKAGE_JSON))
+                .copyOutCached(List.of(OFFICIAL_PACKAGE_ZIP))
+                .build());
+        return RunOutcome.fromOfficialPackage(result, result.file(OFFICIAL_PACKAGE_JSON));
     }
 
     static String generatedFilesCollector(int targetCaseCount) {
@@ -319,7 +295,7 @@ public class SandboxExecutionClient {
 
     static String officialPackageCollector(int targetCaseCount, long standardTimeLimitMillis,
                                            long standardMemoryLimitBytes, long maxCaseBytes,
-                                           long maxPackageBytes, LangProfile lang) {
+                                           long maxPackageBytes, LanguageProfile lang) {
         return """
                 python3 - <<'PY'
                 import hashlib
@@ -589,56 +565,27 @@ public class SandboxExecutionClient {
     }
 
     public void deleteCachedFile(String fileId) {
-        restClient.delete().uri("/file/{id}", fileId).retrieve().toBodilessEntity();
+        sandbox.deleteFile(fileId);
     }
 
     public void downloadCachedFile(String fileId, OutputStream outputStream) {
-        restClient.get().uri("/file/{id}", fileId).exchange((request, response) -> {
-            try (var input = response.getBody()) {
-                if (input != null) {
-                    input.transferTo(outputStream);
-                }
-            } catch (IOException ex) {
-                throw new IllegalStateException("Failed to stream sandbox cached file", ex);
-            }
-            return null;
-        });
-    }
-
-    private SandboxRunResult runSandbox(List<Map<String, Object>> commands) {
-        List<SandboxRunResult> results = restClient.post()
-                .uri("/run")
-                .body(Map.of("cmd", commands))
-                .retrieve()
-                .body(RUN_RESULT_TYPE);
-        if (results == null || results.isEmpty() || results.get(0) == null) {
-            throw new IllegalStateException("Sandbox returned empty /run response");
-        }
-        return results.get(0);
-    }
-
-    private List<Map<String, Object>> standardFiles(String stdin, int stdoutCollectLimit, int stderrCollectLimit) {
-        return List.of(
-                Map.of("content", stdin),
-                Map.of("name", "stdout", "max", stdoutCollectLimit),
-                Map.of("name", "stderr", "max", stderrCollectLimit)
-        );
+        sandbox.downloadFile(fileId, outputStream);
     }
 
     public static long millisToNanos(long millis) {
-        return safeMultiply(millis, 1_000_000L);
+        return Limits.millisToNanos(millis);
     }
 
     public static long kbToBytes(long kb) {
-        return safeMultiply(kb, 1024L);
+        return Limits.kbToBytes(kb);
     }
 
     static int stdoutBaseCollectLimitBytes(int configuredLimit) {
-        return positiveOrDefault(configuredLimit, DEFAULT_STDOUT_BASE_COLLECT_LIMIT_BYTES);
+        return Limits.stdoutBaseCollectLimitBytes(configuredLimit);
     }
 
     static int stderrCollectLimitBytes(int configuredLimit) {
-        return positiveOrDefault(configuredLimit, DEFAULT_STDERR_COLLECT_LIMIT_BYTES);
+        return Limits.stderrCollectLimitBytes(configuredLimit);
     }
 
     private int stdoutBaseCollectLimitBytes() {
@@ -649,48 +596,8 @@ public class SandboxExecutionClient {
         return stderrCollectLimitBytes(properties.getStderrCollectLimitBytes());
     }
 
-    private static String stripTrailingPath(String endpoint) {
-        if (!StringUtils.hasText(endpoint)) {
-            return "http://localhost:8090";
-        }
-        String trimmed = endpoint.trim();
-        if (trimmed.endsWith("/run") || trimmed.endsWith("/execute")) {
-            return trimmed.substring(0, trimmed.lastIndexOf('/'));
-        }
-        return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
-    }
-
-    private static Duration resolveTimeout(Duration timeout) {
-        return timeout == null || timeout.isNegative() || timeout.isZero() ? Duration.ofSeconds(10) : timeout;
-    }
-
-    private static long safeMultiply(long value, long factor) {
-        if (value > Long.MAX_VALUE / factor) {
-            return Long.MAX_VALUE;
-        }
-        return value * factor;
-    }
-
-    private long wallClockLimit(long cpuLimitNs) {
-        long grace = millisToNanos(2_000L);
-        long doubled = safeMultiply(Math.max(1L, cpuLimitNs), 2L);
-        return Math.max(doubled, safeAdd(Math.max(1L, cpuLimitNs), grace));
-    }
-
     private int processLimit(int requested) {
-        int configured = positiveOrDefault(properties.getMaxProcessLimit(), 80);
-        return Math.min(Math.max(1, requested), configured);
-    }
-
-    private static long safeAdd(long value, long addend) {
-        if (value > Long.MAX_VALUE - addend) {
-            return Long.MAX_VALUE;
-        }
-        return value + addend;
-    }
-
-    private static int positiveOrDefault(int value, int fallback) {
-        return value > 0 ? value : fallback;
+        return Limits.processLimit(requested, properties.getMaxProcessLimit());
     }
 
     private static int safeTargetCaseCount(int targetCaseCount) {
@@ -726,30 +633,6 @@ public class SandboxExecutionClient {
         return "[" + values.stream().map(SandboxExecutionClient::pythonString).reduce((a, b) -> a + ", " + b).orElse("") + "]";
     }
 
-    private static Long nanosToMillis(Long nanos) {
-        if (nanos == null) {
-            return null;
-        }
-        if (nanos <= 0) {
-            return 0L;
-        }
-        return (nanos + 999_999L) / 1_000_000L;
-    }
-
-    private static Long bytesToKb(Long bytes) {
-        if (bytes == null) {
-            return null;
-        }
-        if (bytes <= 0) {
-            return 0L;
-        }
-        return (bytes + 1023L) / 1024L;
-    }
-
-    private static String fileContent(SandboxRunResult result, String name) {
-        return result.files() == null ? null : result.files().get(name);
-    }
-
     private static String firstText(String... values) {
         if (values != null) {
             for (String value : values) {
@@ -759,35 +642,6 @@ public class SandboxExecutionClient {
             }
         }
         return "Sandbox execution failed";
-    }
-
-    private record LangProfile(
-            boolean requiresCompile,
-            List<String> compileArgs,
-            String sourceFileName,
-            String executableName,
-            List<String> runArgs,
-            List<String> envVars
-    ) {
-        static LangProfile of(String lang) {
-            return switch (lang) {
-                case "cpp" -> new LangProfile(true,
-                        List.of("/usr/bin/g++", "-O2", "-std=c++17", "main.cpp", "-o", "main"),
-                        "main.cpp", "main",
-                        List.of("./main"),
-                        List.of("PATH=/usr/bin:/bin"));
-                case "java" -> new LangProfile(true,
-                        List.of("/usr/bin/javac", "Main.java"),
-                        "Main.java", "Main.class",
-                        List.of("/usr/bin/java", "-cp", ".", "Main"),
-                        List.of("PATH=/usr/bin:/bin"));
-                case "python" -> new LangProfile(false,
-                        List.of(), "main.py", null,
-                        List.of("/usr/bin/python3", "main.py"),
-                        List.of("PATH=/usr/bin:/bin"));
-                default -> throw new IllegalArgumentException("Unsupported language: " + lang);
-            };
-        }
     }
 
     public record CompileOutcome(boolean failed,
@@ -844,52 +698,52 @@ public class SandboxExecutionClient {
         public RunOutcome(String status, String message, Long timeMillis, Long memoryKb, String stdout,
                           String stderr, Integer exitStatus, Long runTimeMillis, String generatedFilesJson) {
             this(status, message, timeMillis, memoryKb, stdout, stderr, exitStatus, runTimeMillis,
-                    generatedFilesJson, null, Map.of(), normalizeResultCode(status, null), null);
+                    generatedFilesJson, null, Map.of(), normalizeResultCode(status), null);
         }
 
         public RunOutcome(String status, String message, Long timeMillis, Long memoryKb, String stdout,
                           String stderr, Integer exitStatus, Long runTimeMillis, String generatedFilesJson,
                           String officialPackageJson, Map<String, String> fileIds) {
             this(status, message, timeMillis, memoryKb, stdout, stderr, exitStatus, runTimeMillis,
-                    generatedFilesJson, officialPackageJson, fileIds, normalizeResultCode(status, null), null);
+                    generatedFilesJson, officialPackageJson, fileIds, normalizeResultCode(status), null);
         }
 
-        static RunOutcome from(SandboxRunResult result) {
+        static RunOutcome from(RunResult result) {
             return from(result, null);
         }
 
-        static RunOutcome from(SandboxRunResult result, String generatedFilesJson) {
+        static RunOutcome from(RunResult result, String generatedFilesJson) {
             return new RunOutcome(
                     result.status(),
                     firstText(result.error(), result.status()),
-                    nanosToMillis(result.time()),
-                    bytesToKb(result.memory()),
-                    fileContent(result, "stdout"),
-                    fileContent(result, "stderr"),
+                    Limits.nanosToMillis(result.time()),
+                    Limits.bytesToKb(result.memory()),
+                    result.file("stdout"),
+                    result.file("stderr"),
                     result.exitStatus(),
-                    nanosToMillis(result.runTime()),
+                    Limits.nanosToMillis(result.runTime()),
                     generatedFilesJson,
                     null,
                     result.fileIds(),
-                    normalizeResultCode(result.status(), result.fileError()),
+                    ResultCode.of(result).name(),
                     result.procPeak()
             );
         }
 
-        static RunOutcome fromOfficialPackage(SandboxRunResult result, String officialPackageJson) {
+        static RunOutcome fromOfficialPackage(RunResult result, String officialPackageJson) {
             return new RunOutcome(
                     result.status(),
                     firstText(result.error(), result.status()),
-                    nanosToMillis(result.time()),
-                    bytesToKb(result.memory()),
-                    fileContent(result, "stdout"),
-                    fileContent(result, "stderr"),
+                    Limits.nanosToMillis(result.time()),
+                    Limits.bytesToKb(result.memory()),
+                    result.file("stdout"),
+                    result.file("stderr"),
                     result.exitStatus(),
-                    nanosToMillis(result.runTime()),
+                    Limits.nanosToMillis(result.runTime()),
                     null,
                     officialPackageJson,
                     result.fileIds(),
-                    normalizeResultCode(result.status(), result.fileError()),
+                    ResultCode.of(result).name(),
                     result.procPeak()
             );
         }
@@ -901,46 +755,11 @@ public class SandboxExecutionClient {
         }
 
         public boolean accepted() {
-            return "Accepted".equals(status);
+            return RunResult.ACCEPTED.equals(status);
         }
-    }
-
-    private static String normalizeResultCode(String status, List<SandboxFileError> fileErrors) {
-        if (fileErrors != null && fileErrors.stream().anyMatch(error -> "CollectSizeExceeded".equals(error.type()))) {
-            return "OUTPUT_LIMIT_EXCEEDED";
-        }
-        if (status == null) {
-            return "SYSTEM_ERROR";
-        }
-        return switch (status) {
-            case "Accepted" -> "ACCEPTED";
-            case "Time Limit Exceeded" -> "TIME_LIMIT_EXCEEDED";
-            case "Memory Limit Exceeded" -> "MEMORY_LIMIT_EXCEEDED";
-            case "Output Limit Exceeded" -> "OUTPUT_LIMIT_EXCEEDED";
-            case "Nonzero Exit Status", "Non Zero Exit Status", "Signalled", "Dangerous Syscall" -> "RUNTIME_ERROR";
-            case "Compile Error" -> "COMPILE_ERROR";
-            default -> "SYSTEM_ERROR";
-        };
     }
 
     static String normalizeResultCode(String status) {
-        return normalizeResultCode(status, null);
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record SandboxRunResult(String status,
-                                    Integer exitStatus,
-                                    Long time,
-                                    Long memory,
-                                    Long runTime,
-                                    Integer procPeak,
-                                    Map<String, String> files,
-                                    String error,
-                                    List<SandboxFileError> fileError,
-                                    Map<String, String> fileIds) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record SandboxFileError(String name, String type, String message) {
+        return ResultCode.of(status, null).name();
     }
 }
