@@ -1,0 +1,885 @@
+{
+  "judge-cpp-standard" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/g++", "-O2", "-std=c++17", "main.cpp", "-o", "main" ],
+        "clockLimit" : 20000000000,
+        "copyIn" : {
+          "main.cpp" : {
+            "content" : "#include <iostream>\nint main(){std::string s;std::cin>>s;std::cout<<s;}\n"
+          }
+        },
+        "copyOutCached" : [ "main" ],
+        "cpuLimit" : 10000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main" : {
+            "fileId" : "exe-cpp"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "a"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main" : {
+            "fileId" : "exe-cpp"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "b"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "DELETE",
+    "path" : "/file/exe-cpp",
+    "authorization" : "Bearer characterization-token"
+  } ],
+  "judge-java-standard" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/javac", "Main.java" ],
+        "clockLimit" : 20000000000,
+        "copyIn" : {
+          "Main.java" : {
+            "content" : "public class Main { public static void main(String[] a) { System.out.print(new java.util.Scanner(System.in).next()); } }\n"
+          }
+        },
+        "copyOutCached" : [ "Main.class" ],
+        "cpuLimit" : 10000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/java", "-cp", ".", "Main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "Main.class" : {
+            "fileId" : "exe-java"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "a"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/java", "-cp", ".", "Main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "Main.class" : {
+            "fileId" : "exe-java"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "b"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "DELETE",
+    "path" : "/file/exe-java",
+    "authorization" : "Bearer characterization-token"
+  } ],
+  "judge-python-standard" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/python3", "main.py" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main.py" : {
+            "content" : "print(input(), end='')\n"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "a"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/python3", "main.py" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main.py" : {
+            "content" : "print(input(), end='')\n"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "b"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  } ],
+  "judge-cpp-wrong-answer-stops" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/g++", "-O2", "-std=c++17", "main.cpp", "-o", "main" ],
+        "clockLimit" : 20000000000,
+        "copyIn" : {
+          "main.cpp" : {
+            "content" : "#include <iostream>\nint main(){std::string s;std::cin>>s;std::cout<<s;}\n"
+          }
+        },
+        "copyOutCached" : [ "main" ],
+        "cpuLimit" : 10000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main" : {
+            "fileId" : "exe-cpp"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "wa"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "DELETE",
+    "path" : "/file/exe-cpp",
+    "authorization" : "Bearer characterization-token"
+  } ],
+  "judge-cpp-custom-checker" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/g++", "-O2", "-std=c++17", "main.cpp", "-o", "main" ],
+        "clockLimit" : 20000000000,
+        "copyIn" : {
+          "main.cpp" : {
+            "content" : "#include <iostream>\nint main(){std::string s;std::cin>>s;std::cout<<s;}\n"
+          }
+        },
+        "copyOutCached" : [ "main" ],
+        "cpuLimit" : 10000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/g++", "-O2", "-std=c++17", "checker.cpp", "-o", "checker" ],
+        "clockLimit" : 20000000000,
+        "copyIn" : {
+          "checker.cpp" : {
+            "content" : "int main() { return 0; }\n"
+          }
+        },
+        "copyOutCached" : [ "checker" ],
+        "cpuLimit" : 10000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main" : {
+            "fileId" : "exe-cpp"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "a"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./checker", "input.txt", "actual.out", "expected.out", "1" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "actual.out" : {
+            "content" : "a"
+          },
+          "checker" : {
+            "fileId" : "chk-1"
+          },
+          "expected.out" : {
+            "content" : "a"
+          },
+          "input.txt" : {
+            "content" : "a"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "DELETE",
+    "path" : "/file/exe-cpp",
+    "authorization" : "Bearer characterization-token"
+  }, {
+    "method" : "DELETE",
+    "path" : "/file/chk-1",
+    "authorization" : "Bearer characterization-token"
+  } ],
+  "judge-cpp-ioi-custom-checker-scores" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/g++", "-O2", "-std=c++17", "main.cpp", "-o", "main" ],
+        "clockLimit" : 20000000000,
+        "copyIn" : {
+          "main.cpp" : {
+            "content" : "#include <iostream>\nint main(){std::string s;std::cin>>s;std::cout<<s;}\n"
+          }
+        },
+        "copyOutCached" : [ "main" ],
+        "cpuLimit" : 10000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/g++", "-O2", "-std=c++17", "checker.cpp", "-o", "checker" ],
+        "clockLimit" : 20000000000,
+        "copyIn" : {
+          "checker.cpp" : {
+            "content" : "int main() { return 0; }\n"
+          }
+        },
+        "copyOutCached" : [ "checker" ],
+        "cpuLimit" : 10000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main" : {
+            "fileId" : "exe-cpp"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "a"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./checker", "input.txt", "actual.out", "expected.out", "30" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "actual.out" : {
+            "content" : "a"
+          },
+          "checker" : {
+            "fileId" : "chk-1"
+          },
+          "expected.out" : {
+            "content" : "a"
+          },
+          "input.txt" : {
+            "content" : "a"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main" : {
+            "fileId" : "exe-cpp"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "b"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./checker", "input.txt", "actual.out", "expected.out", "70" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "actual.out" : {
+            "content" : "b"
+          },
+          "checker" : {
+            "fileId" : "chk-1"
+          },
+          "expected.out" : {
+            "content" : "b"
+          },
+          "input.txt" : {
+            "content" : "b"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "DELETE",
+    "path" : "/file/exe-cpp",
+    "authorization" : "Bearer characterization-token"
+  }, {
+    "method" : "DELETE",
+    "path" : "/file/chk-1",
+    "authorization" : "Bearer characterization-token"
+  } ],
+  "exec-compile-cpp" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/g++", "-O2", "-std=c++17", "main.cpp", "-o", "main" ],
+        "clockLimit" : 4000000000,
+        "copyIn" : {
+          "main.cpp" : {
+            "content" : "#include <iostream>\nint main(){std::string s;std::cin>>s;std::cout<<s;}\n"
+          }
+        },
+        "copyOutCached" : [ "main" ],
+        "cpuLimit" : 2000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  } ],
+  "exec-run-cpp-with-temporary-compile" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/g++", "-O2", "-std=c++17", "main.cpp", "-o", "main" ],
+        "clockLimit" : 20000000000,
+        "copyIn" : {
+          "main.cpp" : {
+            "content" : "#include <iostream>\nint main(){std::string s;std::cin>>s;std::cout<<s;}\n"
+          }
+        },
+        "copyOutCached" : [ "main" ],
+        "cpuLimit" : 10000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "./main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main" : {
+            "fileId" : "exe-cpp"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "1 2"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  }, {
+    "method" : "DELETE",
+    "path" : "/file/exe-cpp",
+    "authorization" : "Bearer characterization-token"
+  } ],
+  "exec-run-java-precompiled" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/java", "-cp", ".", "Main" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "Main.class" : {
+            "fileId" : "exe-java"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "x"
+        }, {
+          "max" : 4096,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  } ],
+  "exec-run-python" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/usr/bin/python3", "main.py" ],
+        "clockLimit" : 3000000000,
+        "copyIn" : {
+          "main.py" : {
+            "content" : "print(input(), end='')\n"
+          }
+        },
+        "cpuLimit" : 1000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : "x"
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 268435456,
+        "procLimit" : 50
+      } ]
+    }
+  } ],
+  "exec-python-script-paired" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/bin/bash", "-lc", "python3 generator.py\nstatus=$?\nif [ $status -ne 0 ]; then exit $status; fi\npython3 - <<'PY'\nimport json\nfrom pathlib import Path\ntarget_case_count = 5\ncollect_mode = 'PAIRED'\noutput_json = Path('.aioj_generated_files.json')\nmax_entry_bytes = 8388608\nmax_collected_bytes = 52428800\nmax_entry_count = 500\ncollected_bytes = 0\n\ndef bounded_text(path):\n    global collected_bytes\n    size = path.stat().st_size\n    if size > max_entry_bytes:\n        raise RuntimeError(f'generated testcase file exceeds limit: {path.name}')\n    if collected_bytes + size > max_collected_bytes:\n        raise RuntimeError('generated testcase collection exceeds total size limit')\n    collected_bytes += size\n    return path.read_text(encoding='utf-8', errors='replace')\n\ndef candidate_files(root, relative_to_root):\n    items = []\n    if not root.exists():\n        return items\n    for path in sorted(root.rglob('*')):\n        if not path.is_file() or path.suffix not in ('.in', '.out'):\n            continue\n        if len(items) >= max_entry_count:\n            raise RuntimeError('generated testcase collection has too many entries')\n        name = path.name\n        if name.startswith('.aioj_') or name in ('generator.py', 'std.cpp', 'std', 'std.exe', 'main', 'main.cpp'):\n            continue\n        relative = path.as_posix() if relative_to_root == Path('.') else path.relative_to(relative_to_root).as_posix()\n        key = relative[:-len(path.suffix)]\n        items.append((key, path.suffix, relative, path))\n    return items\n\ndef collect(root, relative_to_root):\n    parts = {}\n    input_count = 0\n    output_count = 0\n    for key, suffix, relative, path in candidate_files(root, relative_to_root):\n        if suffix == '.in':\n            input_count += 1\n        elif suffix == '.out':\n            output_count += 1\n        parts.setdefault(key, {})[suffix] = (relative, path)\n    pair_names = sorted(name for name, value in parts.items() if '.in' in value and '.out' in value)\n    input_names = sorted(name for name, value in parts.items() if '.in' in value)\n    return parts, pair_names, input_names, input_count, output_count\n\nparts, pair_names, input_names, input_count, output_count = collect(Path('testcases'), Path('testcases'))\nscan_root = 'testcases'\nif (collect_mode == 'OFFICIAL_INPUTS' and not input_names) or (collect_mode != 'OFFICIAL_INPUTS' and not pair_names):\n    parts, pair_names, input_names, input_count, output_count = collect(Path('.'), Path('.'))\n    scan_root = '.'\n\ndef is_stress_case(name):\n    return Path(name).stem.startswith('stress_small_')\n\nfiles = {}\nif collect_mode == 'OFFICIAL_INPUTS':\n    official_inputs = [name for name in input_names if not is_stress_case(name)]\n    for name in official_inputs[:target_case_count]:\n        for suffix in ('.in', '.out'):\n            if suffix not in parts[name]:\n                continue\n            relative, path = parts[name][suffix]\n            files[relative] = bounded_text(path)\nelse:\n    for name in pair_names[:target_case_count]:\n        for suffix in ('.in', '.out'):\n            relative, path = parts[name][suffix]\n            files[relative] = bounded_text(path)\n\ncross_check_inputs = {}\nfor name in sorted(parts):\n    value = parts[name]\n    if '.in' not in value:\n        continue\n    relative, path = value['.in']\n    if Path(relative).stem.startswith('stress_small_'):\n        cross_check_inputs[relative] = bounded_text(path)\n    if len(cross_check_inputs) >= 30:\n        break\n\nmanifest_json = ''\nfor manifest_path in (Path('testcases') / 'manifest.json', Path('manifest.json')):\n    if manifest_path.exists() and manifest_path.is_file():\n        manifest_json = manifest_path.read_text(encoding='utf-8', errors='replace')[:20000]\n        break\n\noutput_json.write_text(\n    json.dumps({\n        'files': files,\n        'generatedPairCount': len(pair_names),\n        'generatedFileCount': input_count + output_count,\n        'generatedInputCount': input_count,\n        'generatedOutputCount': output_count,\n        'crossCheckInputs': cross_check_inputs,\n        'manifestJson': manifest_json,\n        'scanRoot': scan_root\n    }, ensure_ascii=False),\n    encoding='utf-8'\n)\nPY\n" ],
+        "clockLimit" : 10000000000,
+        "copyIn" : {
+          "generator.py" : {
+            "content" : "print('gen')"
+          }
+        },
+        "copyOut" : [ ".aioj_generated_files.json" ],
+        "copyOutMax" : 52428800,
+        "cpuLimit" : 5000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  } ],
+  "exec-python-script-official-inputs" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/bin/bash", "-lc", "python3 generator.py\nstatus=$?\nif [ $status -ne 0 ]; then exit $status; fi\npython3 - <<'PY'\nimport json\nfrom pathlib import Path\ntarget_case_count = 4\ncollect_mode = 'OFFICIAL_INPUTS'\noutput_json = Path('.aioj_generated_files.json')\nmax_entry_bytes = 8388608\nmax_collected_bytes = 52428800\nmax_entry_count = 500\ncollected_bytes = 0\n\ndef bounded_text(path):\n    global collected_bytes\n    size = path.stat().st_size\n    if size > max_entry_bytes:\n        raise RuntimeError(f'generated testcase file exceeds limit: {path.name}')\n    if collected_bytes + size > max_collected_bytes:\n        raise RuntimeError('generated testcase collection exceeds total size limit')\n    collected_bytes += size\n    return path.read_text(encoding='utf-8', errors='replace')\n\ndef candidate_files(root, relative_to_root):\n    items = []\n    if not root.exists():\n        return items\n    for path in sorted(root.rglob('*')):\n        if not path.is_file() or path.suffix not in ('.in', '.out'):\n            continue\n        if len(items) >= max_entry_count:\n            raise RuntimeError('generated testcase collection has too many entries')\n        name = path.name\n        if name.startswith('.aioj_') or name in ('generator.py', 'std.cpp', 'std', 'std.exe', 'main', 'main.cpp'):\n            continue\n        relative = path.as_posix() if relative_to_root == Path('.') else path.relative_to(relative_to_root).as_posix()\n        key = relative[:-len(path.suffix)]\n        items.append((key, path.suffix, relative, path))\n    return items\n\ndef collect(root, relative_to_root):\n    parts = {}\n    input_count = 0\n    output_count = 0\n    for key, suffix, relative, path in candidate_files(root, relative_to_root):\n        if suffix == '.in':\n            input_count += 1\n        elif suffix == '.out':\n            output_count += 1\n        parts.setdefault(key, {})[suffix] = (relative, path)\n    pair_names = sorted(name for name, value in parts.items() if '.in' in value and '.out' in value)\n    input_names = sorted(name for name, value in parts.items() if '.in' in value)\n    return parts, pair_names, input_names, input_count, output_count\n\nparts, pair_names, input_names, input_count, output_count = collect(Path('testcases'), Path('testcases'))\nscan_root = 'testcases'\nif (collect_mode == 'OFFICIAL_INPUTS' and not input_names) or (collect_mode != 'OFFICIAL_INPUTS' and not pair_names):\n    parts, pair_names, input_names, input_count, output_count = collect(Path('.'), Path('.'))\n    scan_root = '.'\n\ndef is_stress_case(name):\n    return Path(name).stem.startswith('stress_small_')\n\nfiles = {}\nif collect_mode == 'OFFICIAL_INPUTS':\n    official_inputs = [name for name in input_names if not is_stress_case(name)]\n    for name in official_inputs[:target_case_count]:\n        for suffix in ('.in', '.out'):\n            if suffix not in parts[name]:\n                continue\n            relative, path = parts[name][suffix]\n            files[relative] = bounded_text(path)\nelse:\n    for name in pair_names[:target_case_count]:\n        for suffix in ('.in', '.out'):\n            relative, path = parts[name][suffix]\n            files[relative] = bounded_text(path)\n\ncross_check_inputs = {}\nfor name in sorted(parts):\n    value = parts[name]\n    if '.in' not in value:\n        continue\n    relative, path = value['.in']\n    if Path(relative).stem.startswith('stress_small_'):\n        cross_check_inputs[relative] = bounded_text(path)\n    if len(cross_check_inputs) >= 30:\n        break\n\nmanifest_json = ''\nfor manifest_path in (Path('testcases') / 'manifest.json', Path('manifest.json')):\n    if manifest_path.exists() and manifest_path.is_file():\n        manifest_json = manifest_path.read_text(encoding='utf-8', errors='replace')[:20000]\n        break\n\noutput_json.write_text(\n    json.dumps({\n        'files': files,\n        'generatedPairCount': len(pair_names),\n        'generatedFileCount': input_count + output_count,\n        'generatedInputCount': input_count,\n        'generatedOutputCount': output_count,\n        'crossCheckInputs': cross_check_inputs,\n        'manifestJson': manifest_json,\n        'scanRoot': scan_root\n    }, ensure_ascii=False),\n    encoding='utf-8'\n)\nPY\n" ],
+        "clockLimit" : 10000000000,
+        "copyIn" : {
+          "generator.py" : {
+            "content" : "print('gen')"
+          }
+        },
+        "copyOut" : [ ".aioj_generated_files.json" ],
+        "copyOutMax" : 52428800,
+        "cpuLimit" : 5000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 50
+      } ]
+    }
+  } ],
+  "exec-official-package" : [ {
+    "method" : "POST",
+    "path" : "/run",
+    "authorization" : "Bearer characterization-token",
+    "body" : {
+      "cmd" : [ {
+        "args" : [ "/bin/bash", "-lc", "python3 - <<'PY'\nimport hashlib\nimport json\nimport os\nimport shutil\nimport subprocess\nimport sys\nimport time\nimport zipfile\nfrom pathlib import Path\ntry:\n    import resource\nexcept Exception:\n    resource = None\n\nTARGET_CASE_COUNT = 6\nSTANDARD_TIME_LIMIT_SECONDS = max(1, int((1000 + 999) // 1000))\nSTANDARD_MEMORY_LIMIT_BYTES = 268435456\nMAX_CASE_BYTES = 1048576\nMAX_PACKAGE_BYTES = 16777216\nOUTPUT_JSON = Path('.aioj_official_package.json')\nOUTPUT_ZIP = Path('.aioj_official_hidden.zip')\nSOURCE_FILE = 'main.cpp'\nCOMPILE_ARGS = ['/usr/bin/g++', '-O2', '-std=c++17', 'main.cpp', '-o', 'main']\nRUN_ARGS = ['./main']\nHAS_COMPILE = True\n\ndef sha256_file(path):\n    h = hashlib.sha256()\n    with path.open('rb') as f:\n        for chunk in iter(lambda: f.read(1024 * 1024), b''):\n            h.update(chunk)\n    return h.hexdigest()\n\ndef write_package(status, error_code=None, error_message=None, cases=None, scan_root=None, manifest_json='', package_path=None, generated_input_count=0, generated_output_count=0):\n    cases = cases or []\n    total_input = sum(c.get('inputBytes', 0) for c in cases)\n    total_output = sum(c.get('outputBytes', 0) for c in cases)\n    largest_case = 0\n    for c in cases:\n        largest_case = max(largest_case, c.get('inputBytes', 0), c.get('outputBytes', 0))\n    payload = {\n        'status': status,\n        'errorCode': error_code,\n        'errorMessage': error_message,\n        'caseCount': len(cases),\n        'generatedInputCount': generated_input_count,\n        'generatedOutputCount': generated_output_count,\n        'totalInputBytes': total_input,\n        'totalOutputBytes': total_output,\n        'totalBytes': total_input + total_output,\n        'largestCaseBytes': largest_case,\n        'manifestJson': manifest_json,\n        'scanRoot': scan_root,\n        'cases': cases,\n        'packageFileName': OUTPUT_ZIP.name,\n    }\n    if package_path and package_path.exists():\n        payload['packageFileSizeBytes'] = package_path.stat().st_size\n        payload['packageSha256'] = sha256_file(package_path)\n    OUTPUT_JSON.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')\n\ndef ensure_tiny_zip():\n    with zipfile.ZipFile(OUTPUT_ZIP, 'w', compression=zipfile.ZIP_DEFLATED) as zf:\n        zf.writestr('README.txt', 'AI-OJ official package was not materialized. See .aioj_official_package.json.\\n')\n\ndef candidate_inputs(root, relative_to_root):\n    items = []\n    if not root.exists():\n        return items\n    for path in sorted(root.rglob('*.in')):\n        if not path.is_file():\n            continue\n        name = path.name\n        if name.startswith('.aioj_') or Path(name).stem.startswith('stress_small_'):\n            continue\n        relative = path.as_posix() if relative_to_root == Path('.') else path.relative_to(relative_to_root).as_posix()\n        key = relative[:-3]\n        items.append((key, relative, path))\n    return items\n\ndef count_generated(root, relative_to_root):\n    input_count = 0\n    output_count = 0\n    if not root.exists():\n        return 0, 0\n    for path in root.rglob('*'):\n        if not path.is_file():\n            continue\n        if path.suffix == '.in':\n            input_count += 1\n        elif path.suffix == '.out':\n            output_count += 1\n    return input_count, output_count\n\ndef run_generator():\n    return subprocess.run([sys.executable, 'generator.py'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n\ndef compile_standard():\n    if not HAS_COMPILE:\n        return None\n    return subprocess.run(COMPILE_ARGS, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n\ndef child_memory_kb():\n    if resource is None:\n        return None\n    try:\n        value = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss\n        if sys.platform == 'darwin':\n            value = (value + 1023) // 1024\n        return int(value)\n    except Exception:\n        return None\n\ndef run_standard(input_path, output_path):\n    started = time.perf_counter()\n    try:\n        with input_path.open('rb') as fin, output_path.open('wb') as fout:\n            result = subprocess.run(RUN_ARGS, stdin=fin, stdout=fout, stderr=subprocess.PIPE,\n                                    timeout=STANDARD_TIME_LIMIT_SECONDS)\n            elapsed_ms = max(0, int((time.perf_counter() - started) * 1000))\n            return result, elapsed_ms, child_memory_kb()\n    except subprocess.TimeoutExpired as ex:\n        elapsed_ms = max(0, int((time.perf_counter() - started) * 1000))\n        return ex, elapsed_ms, child_memory_kb()\n\ndef safe_entry_name(index, suffix):\n    return f'testcases/{index:03d}{suffix}'\n\ndef manifest_for(cases):\n    return {\n        'version': 'ai-draft-hidden-' + time.strftime('%Y%m%d%H%M%S'),\n        'checker': {'type': 'STANDARD'},\n        'cases': [\n            {\n                'name': c['name'],\n                'input': c['inputPath'],\n                'output': c['outputPath'],\n                'sample': False\n            }\n            for c in cases\n        ]\n    }\n\nensure_tiny_zip()\ngenerator_result = run_generator()\nif generator_result.returncode != 0:\n    detail = (generator_result.stderr or generator_result.stdout or 'generator.py failed')[:2000]\n    write_package('FAILED', 'GENERATOR_PYTHON_FAILED', detail)\n    sys.stderr.write(detail)\n    sys.exit(generator_result.returncode)\n\ninputs = candidate_inputs(Path('testcases'), Path('testcases'))\nscan_root = 'testcases'\ngenerated_input_count, generated_output_count = count_generated(Path('testcases'), Path('testcases'))\nif not inputs:\n    inputs = candidate_inputs(Path('.'), Path('.'))\n    scan_root = '.'\n    generated_input_count, generated_output_count = count_generated(Path('.'), Path('.'))\n\nif len(inputs) < TARGET_CASE_COUNT:\n    write_package('FAILED', 'GENERATOR_MISSING_INPUTS',\n                  f'testcaseGeneratorPython generated {len(inputs)} official .in cases, expected at least {TARGET_CASE_COUNT}',\n                  scan_root=scan_root, generated_input_count=generated_input_count,\n                  generated_output_count=generated_output_count)\n    sys.exit(0)\n\ncompile_result = compile_standard()\nif compile_result is not None and compile_result.returncode != 0:\n    detail = (compile_result.stderr or compile_result.stdout or 'standard solution compile failed')[:2000]\n    write_package('FAILED', 'STANDARD_COMPILE_FAILED', detail, scan_root=scan_root,\n                  generated_input_count=generated_input_count, generated_output_count=generated_output_count)\n    sys.exit(0)\n\npackage_root = Path('.aioj_official_package')\nif package_root.exists():\n    shutil.rmtree(package_root)\n(package_root / 'testcases').mkdir(parents=True, exist_ok=True)\n\ncases = []\ntotal_bytes = 0\nfor index, (key, relative, input_path) in enumerate(inputs[:TARGET_CASE_COUNT], 1):\n    input_size = input_path.stat().st_size\n    if input_size > MAX_CASE_BYTES:\n        write_package('FAILED', 'GENERATOR_CASE_TOO_LARGE',\n                      f'{relative} size {input_size} exceeds per-file limit {MAX_CASE_BYTES}',\n                      cases=cases, scan_root=scan_root, generated_input_count=generated_input_count,\n                      generated_output_count=generated_output_count)\n        sys.exit(0)\n    out_path = package_root / safe_entry_name(index, '.out')\n    in_path = package_root / safe_entry_name(index, '.in')\n    shutil.copyfile(input_path, in_path)\n    run_result, run_time_ms, run_memory_kb = run_standard(in_path, out_path)\n    if isinstance(run_result, subprocess.TimeoutExpired):\n        write_package('FAILED', 'STANDARD_TLE_ON_GENERATED_CASE',\n                      f'standardSolutionCode exceeded time limit on {relative}',\n                      cases=cases, scan_root=scan_root, generated_input_count=generated_input_count,\n                      generated_output_count=generated_output_count)\n        sys.exit(0)\n    if run_result.returncode != 0:\n        detail = (run_result.stderr.decode('utf-8', errors='replace') if isinstance(run_result.stderr, bytes) else (run_result.stderr or 'standard solution runtime error'))[:2000]\n        write_package('FAILED', 'STANDARD_RUNTIME_ON_GENERATED_CASE',\n                      f'{relative}: {detail}', cases=cases, scan_root=scan_root,\n                      generated_input_count=generated_input_count,\n                      generated_output_count=generated_output_count)\n        sys.exit(0)\n    output_size = out_path.stat().st_size if out_path.exists() else 0\n    if not out_path.exists():\n        write_package('FAILED', 'STANDARD_OUTPUT_MATERIALIZATION_FAILED',\n                      f'standardSolutionCode produced no output file for {relative}',\n                      cases=cases, scan_root=scan_root, generated_input_count=generated_input_count,\n                      generated_output_count=generated_output_count)\n        sys.exit(0)\n    if output_size > MAX_CASE_BYTES:\n        write_package('FAILED', 'GENERATOR_CASE_TOO_LARGE',\n                      f'{safe_entry_name(index, \".out\")} size {output_size} exceeds per-file limit {MAX_CASE_BYTES}',\n                      cases=cases, scan_root=scan_root, generated_input_count=generated_input_count,\n                      generated_output_count=generated_output_count)\n        sys.exit(0)\n    total_bytes += input_size + output_size\n    if total_bytes > MAX_PACKAGE_BYTES:\n        write_package('FAILED', 'GENERATOR_PACKAGE_TOO_LARGE',\n                      f'official hidden testcase package size {total_bytes} exceeds limit {MAX_PACKAGE_BYTES}',\n                      cases=cases, scan_root=scan_root, generated_input_count=generated_input_count,\n                      generated_output_count=generated_output_count)\n        sys.exit(0)\n    cases.append({\n        'name': f'{index:03d}',\n        'sourceInputPath': relative,\n        'inputPath': safe_entry_name(index, '.in'),\n        'outputPath': safe_entry_name(index, '.out'),\n        'inputBytes': input_size,\n        'outputBytes': output_size,\n        'inputSha256': sha256_file(in_path),\n        'outputSha256': sha256_file(out_path),\n        'status': 'ACCEPTED',\n        'timeMillis': run_time_ms,\n        'memoryKb': run_memory_kb,\n        'message': 'Accepted'\n    })\n\nmanifest_json = json.dumps(manifest_for(cases), ensure_ascii=False, separators=(',', ':'))\n(package_root / 'manifest.json').write_text(manifest_json, encoding='utf-8')\nwith zipfile.ZipFile(OUTPUT_ZIP, 'w', compression=zipfile.ZIP_DEFLATED) as zf:\n    zf.write(package_root / 'manifest.json', 'manifest.json')\n    for c in cases:\n        zf.write(package_root / c['inputPath'], c['inputPath'])\n        zf.write(package_root / c['outputPath'], c['outputPath'])\nwrite_package('PASSED', cases=cases, scan_root=scan_root, manifest_json=manifest_json,\n              package_path=OUTPUT_ZIP, generated_input_count=generated_input_count,\n              generated_output_count=generated_output_count)\nPY\n" ],
+        "clockLimit" : 16000000000,
+        "copyIn" : {
+          "generator.py" : {
+            "content" : "print('gen')"
+          },
+          "main.cpp" : {
+            "content" : "#include <iostream>\nint main(){std::string s;std::cin>>s;std::cout<<s;}\n"
+          }
+        },
+        "copyOut" : [ ".aioj_official_package.json" ],
+        "copyOutCached" : [ ".aioj_official_hidden.zip" ],
+        "cpuLimit" : 8000000000,
+        "env" : [ "PATH=/usr/bin:/bin" ],
+        "files" : [ {
+          "content" : ""
+        }, {
+          "max" : 65536,
+          "name" : "stdout"
+        }, {
+          "max" : 65536,
+          "name" : "stderr"
+        } ],
+        "memoryLimit" : 536870912,
+        "procLimit" : 80
+      } ]
+    }
+  } ],
+  "exec-download-and-delete" : [ {
+    "method" : "GET",
+    "path" : "/file/zip-1",
+    "authorization" : "Bearer characterization-token"
+  }, {
+    "method" : "DELETE",
+    "path" : "/file/zip-1",
+    "authorization" : "Bearer characterization-token"
+  } ]
+}
