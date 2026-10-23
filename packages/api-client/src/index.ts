@@ -1951,6 +1951,17 @@ export interface AccountImportParseResponse {
 export type AiModelConfigScope = 'TEXT_GENERATION' | 'MEMORY_EXTRACTION' | 'REPORT_ANALYSIS' | 'PROBLEM_DRAFT' | 'ACCOUNT_IMPORT_PARSE' | 'INTENT' | 'AGENT_CURATOR' | 'EMBEDDING';
 export type AiModelConfigKeyAction = 'KEEP' | 'REPLACE' | 'CLEAR';
 
+/** A scope's own call settings (plan A6.2); null means the server default. */
+export interface AiModelCallSettings {
+  connectTimeoutMs?: number | null;
+  firstByteTimeoutMs?: number | null;
+  totalTimeoutMs?: number | null;
+  maxConcurrency?: number | null;
+  maxRetries?: number | null;
+  thinkingFallbackEnabled?: boolean | null;
+  streamingEnabled?: boolean | null;
+}
+
 export interface AiModelConfigResponse {
   scope: AiModelConfigScope;
   enabled: boolean;
@@ -1971,6 +1982,7 @@ export interface AiModelConfigResponse {
   apiKeyEnvName?: string | null;
   updatedAt?: string | null;
   updatedBy?: EntityId | number | null;
+  callSettings?: AiModelCallSettings | null;
 }
 
 export interface AiModelConfigPayload {
@@ -1986,6 +1998,7 @@ export interface AiModelConfigPayload {
   temperature?: number | null;
   maxTokens?: number | null;
   embeddingDimension?: number | null;
+  callSettings?: AiModelCallSettings | null;
 }
 
 export interface AiModelConfigTestPayload extends AiModelConfigPayload {

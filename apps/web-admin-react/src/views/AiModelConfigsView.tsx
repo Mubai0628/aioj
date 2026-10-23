@@ -27,12 +27,34 @@ type FormState = {
   temperature: string;
   maxTokens: string;
   embeddingDimension: string;
+  connectTimeoutMs: string;
+  firstByteTimeoutMs: string;
+  totalTimeoutMs: string;
+  maxConcurrency: string;
+  maxRetries: string;
+  thinkingFallback: TriState;
+  streaming: TriState;
   prompt: string;
 };
 
+/** A switch that can also be left to the server default. */
+type TriState = "default" | "on" | "off";
+
 type ModelCapability = Pick<AiModelOption, "supportsJsonOutput" | "supportsThinking" | "thinkingEffortModes" | "fixedTemperature" | "recommendedTemperature" | "contextLength" | "deprecated"> & {
-  providerKind: "deepseek" | "kimi" | "embedding" | "custom";
+  providerKind: "deepseek" | "kimi" | "compatible" | "embedding" | "custom";
 };
+
+/** Plan A6.2: the same ranges the server checks; blank keeps the default. */
+const CALL_SETTING_FIELDS = [
+  { key: "connectTimeoutMs", min: 100, max: 120_000 },
+  { key: "firstByteTimeoutMs", min: 1_000, max: 600_000 },
+  { key: "totalTimeoutMs", min: 1_000, max: 1_800_000 },
+  { key: "maxConcurrency", min: 1, max: 64 },
+  { key: "maxRetries", min: 0, max: 5 }
+] as const;
+
+/** Plan Q13: these scopes call tools, which run only on DeepSeek or Kimi. */
+const TOOL_SCOPES: AiModelConfigScope[] = ["TEXT_GENERATION", "PROBLEM_DRAFT"];
 
 const SCOPES: AiModelConfigScope[] = ["TEXT_GENERATION", "MEMORY_EXTRACTION", "REPORT_ANALYSIS", "PROBLEM_DRAFT", "ACCOUNT_IMPORT_PARSE", "INTENT", "AGENT_CURATOR", "EMBEDDING"];
 
@@ -200,10 +222,11 @@ function ConfigSection({
   const isText = scope === "TEXT_GENERATION";
   const isEmbedding = scope === "EMBEDDING";
   const inheritsText = !isText && !isEmbedding && !form.enabled;
-  const providerKind = providerKindFor(form.provider, form.model, form.baseUrl, isEmbedding);
+  const providerKind = providerKindFor(form.provider, isEmbedding);
   const effectiveProviderKind = inheritsText && config
-    ? providerKindFor(config.provider, config.model, config.baseUrl, false)
+    ? providerKindFor(config.provider, false)
     : providerKind;
+  const settingErrors = callSettingErrors(form, t);
   const modelQuery = useQuery({
     queryKey: ["admin-ai-models", scope, form.provider.trim(), form.baseUrl.trim()],
     queryFn: () => api.aiModelConfigModels(scope, form.provider.trim(), form.baseUrl.trim()),
@@ -220,7 +243,7 @@ function ConfigSection({
   const showThinking = !isEmbedding && capability.supportsThinking;
   const showEffort = showThinking && form.thinkingEnabled && capability.thinkingEffortModes.length > 0;
   const showTemperature = !isEmbedding && !temperatureControlledByProvider(capability, form.thinkingEnabled);
-  const providerOptions = isEmbedding ? embeddingProviderOptions(t) : textProviderOptions(t);
+  const providerOptions = isEmbedding ? embeddingProviderOptions(t) : textProviderOptions(scope, t);
   const currentApiKeyEnvName = isEmbedding ? (modelList?.apiKeyEnvName || config?.apiKeyEnvName || "") : apiKeyEnvNameFor(effectiveProviderKind);
   const currentApiKeyConfigured = inheritsText ? Boolean(config?.apiKeyConfigured) : apiKeyConfiguredForCurrentForm(config, modelList, currentApiKeyEnvName);
 
@@ -248,11 +271,11 @@ function ConfigSection({
           <p className="mt-1 max-w-[86ch] text-sm leading-6 text-[var(--oj-ink-muted)]">{scopeDescription(scope, t)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" disabled={testing} onClick={onTest}>
+          <Button variant="outline" disabled={testing || settingErrors.length > 0} onClick={onTest}>
             {testing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
             {t("aiModelConfig.test")}
           </Button>
-          <Button disabled={saving || !dirty} onClick={onSave}>
+          <Button disabled={saving || !dirty || settingErrors.length > 0} onClick={onSave}>
             {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
             {t("common.save")}
           </Button>
@@ -274,7 +297,7 @@ function ConfigSection({
           <Field label={isEmbedding ? t("aiModelConfig.provider") : t("aiModelConfig.api")}>
             <select
               className={selectClass}
-              value={isEmbedding ? (sameText(form.provider, "dashscope") ? "dashscope" : "custom") : providerOptionValue(providerKind)}
+              value={isEmbedding ? (providerKind === "embedding" ? "dashscope" : "openai-compatible") : providerOptionValue(providerKind)}
               disabled={inheritsText}
               onChange={(event) => onChange(providerPatch(scope, event.target.value))}
             >
@@ -354,6 +377,47 @@ function ConfigSection({
               <input className={inputClass} value={form.embeddingDimension} onChange={(event) => onChange({ embeddingDimension: event.target.value })} placeholder="1024" inputMode="numeric" />
             </Field>
           ) : null}
+          <div className="space-y-3 rounded-lg border border-[var(--oj-border-soft)] p-3 md:col-span-2">
+            <div>
+              <div className="text-sm font-medium text-[var(--oj-ink)]">{t("aiModelConfig.callSettings")}</div>
+              <p className="mt-1 text-xs leading-5 text-[var(--oj-ink-muted)]">{t("aiModelConfig.callSettingsHint")}</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {CALL_SETTING_FIELDS.filter((field) => !(isEmbedding && field.key === "firstByteTimeoutMs")).map((field) => (
+                <Field key={field.key} label={t(`aiModelConfig.${field.key}`)}>
+                  <input
+                    className={inputClass}
+                    value={form[field.key]}
+                    disabled={inheritsText}
+                    onChange={(event) => onChange({ [field.key]: event.target.value } as Partial<FormState>)}
+                    placeholder={t("aiModelConfig.inheritDefault")}
+                    inputMode="numeric"
+                  />
+                </Field>
+              ))}
+              {!isEmbedding ? (
+                <Field label={t("aiModelConfig.thinkingFallback")}>
+                  <select className={selectClass} value={form.thinkingFallback} disabled={inheritsText} onChange={(event) => onChange({ thinkingFallback: event.target.value as TriState })}>
+                    <option value="default">{t("aiModelConfig.thinkingFallbackDefault")}</option>
+                    <option value="on">{t("aiModelConfig.thinkingFallbackAllowed")}</option>
+                    <option value="off">{t("aiModelConfig.thinkingFallbackForbidden")}</option>
+                  </select>
+                </Field>
+              ) : null}
+              {!isEmbedding ? (
+                <Field label={t("aiModelConfig.streaming")}>
+                  <select className={selectClass} value={form.streaming} disabled={inheritsText} onChange={(event) => onChange({ streaming: event.target.value as TriState })}>
+                    <option value="default">{t("aiModelConfig.streamingDefault")}</option>
+                    <option value="on">{t("aiModelConfig.streamingOn")}</option>
+                    <option value="off">{t("aiModelConfig.streamingOff")}</option>
+                  </select>
+                </Field>
+              ) : null}
+            </div>
+            {settingErrors.length > 0 ? (
+              <p className="text-xs leading-5 text-red-700" role="alert">{settingErrors.join(" ")}</p>
+            ) : null}
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -405,12 +469,20 @@ function emptyForm(scope: AiModelConfigScope): FormState {
     temperature: "",
     maxTokens: "",
     embeddingDimension: scope === "EMBEDDING" ? "1024" : "",
+    connectTimeoutMs: "",
+    firstByteTimeoutMs: "",
+    totalTimeoutMs: "",
+    maxConcurrency: "",
+    maxRetries: "",
+    thinkingFallback: "default",
+    streaming: "default",
     prompt: ""
   };
 }
 
 function formFromConfig(config: AiModelConfigResponse): FormState {
-  const provider = config.scope === "EMBEDDING" ? config.provider || "" : canonicalTextApi(config.provider, config.model, config.baseUrl);
+  const provider = config.scope === "EMBEDDING" ? canonicalEmbeddingProvider(config.provider || "") : canonicalTextApi(config.provider || "");
+  const settings = config.callSettings;
   const baseUrl = config.scope === "EMBEDDING" ? config.baseUrl || "" : normalizedTextBaseUrl(provider, config.baseUrl || "");
   return {
     ...emptyForm(config.scope),
@@ -424,6 +496,13 @@ function formFromConfig(config: AiModelConfigResponse): FormState {
     temperature: config.temperature == null ? "" : String(config.temperature),
     maxTokens: config.maxTokens == null ? "" : String(config.maxTokens),
     embeddingDimension: config.embeddingDimension == null ? "" : String(config.embeddingDimension),
+    connectTimeoutMs: textOf(settings?.connectTimeoutMs),
+    firstByteTimeoutMs: textOf(settings?.firstByteTimeoutMs),
+    totalTimeoutMs: textOf(settings?.totalTimeoutMs),
+    maxConcurrency: textOf(settings?.maxConcurrency),
+    maxRetries: textOf(settings?.maxRetries),
+    thinkingFallback: triStateOf(settings?.thinkingFallbackEnabled),
+    streaming: triStateOf(settings?.streamingEnabled),
     prompt: ""
   };
 }
@@ -432,7 +511,7 @@ function payloadFromForm(scope: AiModelConfigScope, form: FormState): AiModelCon
   const capability = capabilityFor(scope, form);
   return {
     enabled: scope === "TEXT_GENERATION" ? true : form.enabled,
-    provider: scope === "EMBEDDING" ? form.provider.trim() : canonicalTextApi(form.provider, form.model, form.baseUrl),
+    provider: scope === "EMBEDDING" ? canonicalEmbeddingProvider(form.provider) : canonicalTextApi(form.provider),
     baseUrl: form.baseUrl.trim(),
     model: form.model.trim(),
     apiKeyAction: "CLEAR",
@@ -441,7 +520,16 @@ function payloadFromForm(scope: AiModelConfigScope, form: FormState): AiModelCon
     reasoningEffort: capability.supportsThinking && capability.thinkingEffortModes.length > 0 ? form.reasoningEffort : "high",
     temperature: scope !== "EMBEDDING" && !temperatureControlledByProvider(capability, form.thinkingEnabled) ? numberOrNull(form.temperature) : null,
     maxTokens: scope !== "EMBEDDING" ? integerOrNull(form.maxTokens) : undefined,
-    embeddingDimension: scope === "EMBEDDING" ? integerOrNull(form.embeddingDimension) : undefined
+    embeddingDimension: scope === "EMBEDDING" ? integerOrNull(form.embeddingDimension) : undefined,
+    callSettings: {
+      connectTimeoutMs: integerOrNull(form.connectTimeoutMs),
+      firstByteTimeoutMs: scope === "EMBEDDING" ? null : integerOrNull(form.firstByteTimeoutMs),
+      totalTimeoutMs: integerOrNull(form.totalTimeoutMs),
+      maxConcurrency: integerOrNull(form.maxConcurrency),
+      maxRetries: integerOrNull(form.maxRetries),
+      thinkingFallbackEnabled: scope === "EMBEDDING" ? null : triStateValue(form.thinkingFallback),
+      streamingEnabled: scope === "EMBEDDING" ? null : triStateValue(form.streaming)
+    }
   };
 }
 
@@ -457,7 +545,7 @@ function providerPatch(scope: AiModelConfigScope, value: string): Partial<FormSt
         reasoningEffort: "high"
       };
     }
-    return { provider: "custom", baseUrl: "", model: "", jsonOutputEnabled: false, thinkingEnabled: false, reasoningEffort: "high" };
+    return { provider: "openai-compatible", baseUrl: "", model: "", jsonOutputEnabled: false, thinkingEnabled: false, reasoningEffort: "high" };
   }
   if (value === "deepseek") {
     return {
@@ -479,6 +567,9 @@ function providerPatch(scope: AiModelConfigScope, value: string): Partial<FormSt
       reasoningEffort: "high"
     };
   }
+  if (value === "openai-compatible") {
+    return { provider: "openai-compatible", baseUrl: "", model: "", jsonOutputEnabled: true, thinkingEnabled: false, reasoningEffort: "high" };
+  }
   return providerPatch(scope, "deepseek");
 }
 
@@ -495,7 +586,7 @@ function modelPatch(scope: AiModelConfigScope, form: FormState, list: AiModelLis
 }
 
 function capabilityFor(scope: AiModelConfigScope, form: FormState, option?: AiModelOption): ModelCapability {
-  const providerKind = providerKindFor(form.provider, form.model, form.baseUrl, scope === "EMBEDDING");
+  const providerKind = providerKindFor(form.provider, scope === "EMBEDDING");
   if (scope === "EMBEDDING") {
     return emptyCapability(providerKind);
   }
@@ -539,6 +630,9 @@ function capabilityFor(scope: AiModelConfigScope, form: FormState, option?: AiMo
       deprecated: false
     };
   }
+  if (providerKind === "compatible") {
+    return { ...emptyCapability("compatible"), supportsJsonOutput: true };
+  }
   return emptyCapability("custom");
 }
 
@@ -570,26 +664,20 @@ function temperatureHint(capability: ModelCapability, thinkingEnabled: boolean, 
   return t("aiModelConfig.temperatureProviderControlled");
 }
 
-function providerKindFor(provider: string, model: string, baseUrl: string, embedding: boolean): ModelCapability["providerKind"] {
+/** Plan A6.1: the provider is what the admin chose, never guessed from the URL or model name. */
+function providerKindFor(provider: string, embedding: boolean): ModelCapability["providerKind"] {
+  const normalized = provider.trim().toLowerCase();
   if (embedding) {
-    return provider.toLowerCase().includes("dashscope") ? "embedding" : "custom";
+    return ["dashscope", "qwen", "alibaba"].includes(normalized) ? "embedding" : "custom";
   }
-  const normalizedProvider = provider.trim().toLowerCase();
-  if (normalizedProvider === "deepseek") {
+  if (normalized === "deepseek") {
     return "deepseek";
   }
-  if (normalizedProvider === "kimi" || normalizedProvider === "moonshot") {
+  if (normalized === "kimi" || normalized === "moonshot") {
     return "kimi";
   }
-  const combined = `${provider} ${model} ${baseUrl}`.toLowerCase();
-  if (combined.includes("deepseek")) {
-    return "deepseek";
-  }
-  if (model.toLowerCase().startsWith("kimi-") || combined.includes("kimi")) {
-    return "kimi";
-  }
-  if (combined.includes("moonshot")) {
-    return "kimi";
+  if (["openai-compatible", "openai", "custom"].includes(normalized)) {
+    return "compatible";
   }
   return "custom";
 }
@@ -597,20 +685,24 @@ function providerKindFor(provider: string, model: string, baseUrl: string, embed
 function providerOptionValue(providerKind: ModelCapability["providerKind"]) {
   if (providerKind === "deepseek") return "deepseek";
   if (providerKind === "kimi") return "kimi";
+  if (providerKind === "compatible") return "openai-compatible";
   return "deepseek";
 }
 
-function textProviderOptions(t: (key: string, params?: Record<string, string | number>, fallback?: string) => string) {
-  return [
+function textProviderOptions(scope: AiModelConfigScope, t: (key: string, params?: Record<string, string | number>, fallback?: string) => string) {
+  const options = [
     { value: "deepseek", label: t("aiModelConfig.providerDeepSeek") },
     { value: "kimi", label: t("aiModelConfig.providerKimi") }
   ];
+  return TOOL_SCOPES.includes(scope)
+    ? options
+    : [...options, { value: "openai-compatible", label: t("aiModelConfig.providerOpenAiCompatible") }];
 }
 
 function embeddingProviderOptions(t: (key: string, params?: Record<string, string | number>, fallback?: string) => string) {
   return [
     { value: "dashscope", label: t("aiModelConfig.providerDashScope") },
-    { value: "custom", label: t("aiModelConfig.providerCustom") }
+    { value: "openai-compatible", label: t("aiModelConfig.providerCustom") }
   ];
 }
 
@@ -654,6 +746,28 @@ function numberOrNull(value: string) {
   return trimmed ? Number(trimmed) : null;
 }
 
+function textOf(value?: number | null) {
+  return value == null ? "" : String(value);
+}
+
+function triStateOf(value?: boolean | null): TriState {
+  return value == null ? "default" : value ? "on" : "off";
+}
+
+function triStateValue(value: TriState) {
+  return value === "default" ? null : value === "on";
+}
+
+function callSettingErrors(form: FormState, t: (key: string, params?: Record<string, string | number>, fallback?: string) => string) {
+  return CALL_SETTING_FIELDS.flatMap((field) => {
+    const raw = form[field.key].trim();
+    const value = Number(raw);
+    return !raw || (Number.isInteger(value) && value >= field.min && value <= field.max)
+      ? []
+      : [t("aiModelConfig.rangeInvalid", { field: t(`aiModelConfig.${field.key}`), min: field.min, max: field.max })];
+  });
+}
+
 function integerOrNull(value: string) {
   const trimmed = value.trim();
   return trimmed ? Number.parseInt(trimmed, 10) : null;
@@ -666,6 +780,7 @@ function sameText(left: string, right: string) {
 function apiKeyEnvNameFor(providerKind: ModelCapability["providerKind"]) {
   if (providerKind === "kimi") return "KIMI_API_KEY";
   if (providerKind === "deepseek") return "DEEPSEEK_API_KEY";
+  if (providerKind === "compatible") return "OPENAI_COMPATIBLE_API_KEY";
   return "";
 }
 
@@ -683,11 +798,15 @@ function apiKeyConfiguredForCurrentForm(
   return config?.apiKeyEnvName === envName ? config.apiKeyConfigured : false;
 }
 
-function canonicalTextApi(provider: string, model: string, baseUrl: string) {
-  const normalizedProvider = provider.trim().toLowerCase();
-  if (normalizedProvider === "kimi" || normalizedProvider === "moonshot") return "kimi";
-  if (normalizedProvider === "deepseek") return "deepseek";
-  return providerKindFor(provider, model, baseUrl, false) === "kimi" ? "kimi" : "deepseek";
+/** The stored name for a text provider; an unknown one is sent as typed and refused by the server. */
+function canonicalTextApi(provider: string) {
+  const kind = providerKindFor(provider, false);
+  if (kind === "compatible") return "openai-compatible";
+  return kind === "custom" ? provider.trim().toLowerCase() : kind;
+}
+
+function canonicalEmbeddingProvider(provider: string) {
+  return providerKindFor(provider, true) === "embedding" ? "dashscope" : "openai-compatible";
 }
 
 function normalizedTextBaseUrl(provider: string, baseUrl: string) {

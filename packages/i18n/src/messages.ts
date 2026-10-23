@@ -457,6 +457,23 @@ export const messages = {
       maxTokens: 'Max tokens',
       embeddingDimension: 'Embedding 维度',
       inheritDefault: '使用默认值',
+      providerOpenAiCompatible: 'OpenAI-compatible（仅普通补全，不调用工具）',
+      callSettings: '调用设置',
+      callSettingsHint: '留空沿用服务端 aioj.ai.model-client 的默认值；保存后下一次调用即按新值执行。',
+      connectTimeoutMs: '连接超时（毫秒）',
+      firstByteTimeoutMs: '首字节超时（毫秒，仅流式）',
+      totalTimeoutMs: '总时长超时（毫秒）',
+      maxConcurrency: '并发上限',
+      maxRetries: '重试次数',
+      thinkingFallback: '思考降级',
+      thinkingFallbackDefault: '默认（允许）',
+      thinkingFallbackAllowed: '允许',
+      thinkingFallbackForbidden: '不允许，直接报错',
+      streaming: '流式',
+      streamingDefault: '默认',
+      streamingOn: '启用（流式接入运行事件后生效）',
+      streamingOff: '不启用',
+      rangeInvalid: '{field} 需为 {min}–{max} 之间的整数，或留空。',
       deprecated: '将弃用',
       modelLoading: '正在从供应商获取模型列表...',
       modelLoaded: '已获取 {count} 个模型，可从下拉选择。',
@@ -504,11 +521,13 @@ export const messages = {
           MEMORY_EXTRACTION: {
             deepseek: '记忆抽取与合并使用 DEEPSEEK_API_KEY；未启用覆盖时继承默认文本生成。',
             kimi: '记忆抽取与合并使用 KIMI_API_KEY；未启用覆盖时继承默认文本生成。',
+            compatible: '记忆抽取与合并使用 OPENAI_COMPATIBLE_API_KEY，只做普通补全，不调用工具；未启用覆盖时继承默认文本生成。',
             default: '记忆抽取、结构化提交分析和记忆合并使用该配置，默认继承学生辅导文本模型。'
           },
           REPORT_ANALYSIS: {
             deepseek: '赛后与查重分析使用 DEEPSEEK_API_KEY；未启用覆盖时继承默认文本生成。',
             kimi: '赛后与查重分析使用 KIMI_API_KEY；未启用覆盖时继承默认文本生成。',
+            compatible: '赛后与查重分析使用 OPENAI_COMPATIBLE_API_KEY，只做普通补全，不调用工具；未启用覆盖时继承默认文本生成。',
             default: '学生复盘、教师复盘和查重分析使用该配置，默认继承学生辅导文本模型。'
           },
           PROBLEM_DRAFT: {
@@ -519,16 +538,19 @@ export const messages = {
           ACCOUNT_IMPORT_PARSE: {
             deepseek: '账号导入解析使用 DEEPSEEK_API_KEY；未启用覆盖时继承默认文本生成。',
             kimi: '账号导入解析使用 KIMI_API_KEY；未启用覆盖时继承默认文本生成。',
+            compatible: '账号导入解析使用 OPENAI_COMPATIBLE_API_KEY，只做普通补全，不调用工具；未启用覆盖时继承默认文本生成。',
             default: '账号导入解析只返回结构化候选，不会直接创建用户。'
           },
           INTENT: {
             deepseek: '意图分析使用 DEEPSEEK_API_KEY；未启用覆盖时继承默认文本生成。',
             kimi: '意图分析使用 KIMI_API_KEY；未启用覆盖时继承默认文本生成。',
-            default: '意图分析只在 DeepSeek / Kimi 两个 API 间选择；文本类默认模型为 deepseek-v4-pro。'
+            compatible: '意图分析使用 OPENAI_COMPATIBLE_API_KEY，只做普通补全，不调用工具；未启用覆盖时继承默认文本生成。',
+            default: '意图分析可选 DeepSeek、Kimi 或 OpenAI-compatible；文本类默认模型为 deepseek-v4-pro。'
           },
           AGENT_CURATOR: {
             deepseek: 'Agent 整理器使用 DEEPSEEK_API_KEY；未启用覆盖时继承默认文本生成。',
             kimi: 'Agent 整理器使用 KIMI_API_KEY；未启用覆盖时继承默认文本生成。',
+            compatible: 'Agent 整理器使用 OPENAI_COMPATIBLE_API_KEY，只做普通补全，不调用工具；未启用覆盖时继承默认文本生成。',
             default: 'Agent 轮次理解与 TurnDigest 整理使用该配置，默认继承学生辅导文本模型。'
           },
           EMBEDDING: {
@@ -3880,6 +3902,23 @@ export const messages = {
       maxTokens: 'Max tokens',
       embeddingDimension: 'Embedding dimension',
       inheritDefault: 'Use default',
+      providerOpenAiCompatible: 'OpenAI-compatible (plain completions, no tools)',
+      callSettings: 'Call settings',
+      callSettingsHint: 'Leave a field blank to use the server default (aioj.ai.model-client); saved values apply from the next call.',
+      connectTimeoutMs: 'Connect timeout (ms)',
+      firstByteTimeoutMs: 'First-byte timeout (ms, streaming only)',
+      totalTimeoutMs: 'Total timeout (ms)',
+      maxConcurrency: 'Max concurrency',
+      maxRetries: 'Retries',
+      thinkingFallback: 'Thinking fallback',
+      thinkingFallbackDefault: 'Default (allowed)',
+      thinkingFallbackAllowed: 'Allowed',
+      thinkingFallbackForbidden: 'Not allowed: fail instead',
+      streaming: 'Streaming',
+      streamingDefault: 'Default',
+      streamingOn: 'On (applies once streaming reaches run events)',
+      streamingOff: 'Off',
+      rangeInvalid: '{field} must be a whole number from {min} to {max}, or blank.',
       deprecated: 'deprecated soon',
       modelLoading: 'Loading model list from provider...',
       modelLoaded: '{count} models loaded. Choose one from the dropdown.',
@@ -3927,11 +3966,13 @@ export const messages = {
           MEMORY_EXTRACTION: {
             deepseek: 'Memory extraction and merge use DEEPSEEK_API_KEY. Disabled overrides inherit default text generation.',
             kimi: 'Memory extraction and merge use KIMI_API_KEY. Disabled overrides inherit default text generation.',
+            compatible: 'Memory extraction and merge uses OPENAI_COMPATIBLE_API_KEY for plain completions without tools; with the override off it inherits default text generation.',
             default: 'Memory extraction, structured submission analysis, and memory merge review use this scope. It inherits student tutoring by default.'
           },
           REPORT_ANALYSIS: {
             deepseek: 'Postmortem and plagiarism analysis use DEEPSEEK_API_KEY. Disabled overrides inherit default text generation.',
             kimi: 'Postmortem and plagiarism analysis use KIMI_API_KEY. Disabled overrides inherit default text generation.',
+            compatible: 'Postmortem and plagiarism analysis uses OPENAI_COMPATIBLE_API_KEY for plain completions without tools; with the override off it inherits default text generation.',
             default: 'Student postmortems, teacher postmortems, and plagiarism analysis use this scope. It inherits student tutoring by default.'
           },
           PROBLEM_DRAFT: {
@@ -3942,16 +3983,19 @@ export const messages = {
           ACCOUNT_IMPORT_PARSE: {
             deepseek: 'Account import parsing uses DEEPSEEK_API_KEY. Disabled overrides inherit default text generation.',
             kimi: 'Account import parsing uses KIMI_API_KEY. Disabled overrides inherit default text generation.',
+            compatible: 'Account import parsing uses OPENAI_COMPATIBLE_API_KEY for plain completions without tools; with the override off it inherits default text generation.',
             default: 'Account import parsing returns editable candidates only; it does not create users directly.'
           },
           INTENT: {
             deepseek: 'Intent analysis uses DEEPSEEK_API_KEY. Disabled overrides inherit default text generation.',
             kimi: 'Intent analysis uses KIMI_API_KEY. Disabled overrides inherit default text generation.',
-            default: 'Intent analysis chooses only between DeepSeek and Kimi APIs. Text scopes default to deepseek-v4-pro.'
+            compatible: 'Intent analysis uses OPENAI_COMPATIBLE_API_KEY for plain completions without tools; with the override off it inherits default text generation.',
+            default: 'Intent analysis can use DeepSeek, Kimi or an OpenAI-compatible API. Text scopes default to deepseek-v4-pro.'
           },
           AGENT_CURATOR: {
             deepseek: 'Agent curator calls use DEEPSEEK_API_KEY. Disabled overrides inherit default text generation.',
             kimi: 'Agent curator calls use KIMI_API_KEY. Disabled overrides inherit default text generation.',
+            compatible: 'The Agent curator uses OPENAI_COMPATIBLE_API_KEY for plain completions without tools; with the override off it inherits default text generation.',
             default: 'Agent turn understanding and TurnDigest curation use this scope. It inherits student tutoring by default.'
           },
           EMBEDDING: {
