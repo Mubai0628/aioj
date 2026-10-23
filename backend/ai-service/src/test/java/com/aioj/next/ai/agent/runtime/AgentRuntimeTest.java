@@ -67,6 +67,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -644,19 +645,12 @@ class AgentRuntimeTest {
 
     private AgentRuntime runtimeWith(List<AgentTool> tools, ContextFingerprintGuard guard,
                                      AiProperties properties) {
-        ModelClient gateway = adapter;
-        ToolRegistry registry = new ToolRegistry(tools);
-        ToolBroker broker = new ToolBroker(registry,
-                new ToolAuthorizationService(mock(ProblemDraftWorkspaceMapper.class)),
-                new ToolResultSanitizer(objectMapper), auditService, objectMapper, properties);
-        AgentRunStateMachine stateMachine = new AgentRunStateMachine(runMapper, objectMapper);
-        // Chat turns run on the Harness loop over the same tools, audit and state rows (T1.5).
-        HarnessAgentRunner harnessRunner = new HarnessAgentRunner(gateway,
+        // Every run is on the Harness loop over the same tools, audit and state rows (T1.5).
+        return new AgentRuntime(new HarnessAgentRunner(adapter,
                 HarnessToolConfiguration.create(tools, mock(ProblemDraftWorkspaceMapper.class), auditService,
                         properties.getCapacity(), objectMapper),
-                new ContextSectionRenderer(), manifestService, stateMachine, guard);
-        return new AgentRuntime(gateway, registry, broker, new ContextSectionRenderer(),
-                manifestService, stateMachine, objectMapper, guard, properties, harnessRunner);
+                new ContextSectionRenderer(), manifestService, new AgentRunStateMachine(runMapper, objectMapper),
+                guard));
     }
 
     /** Real L3 context layer on top of a mock audit recorder, for the P3-4 tests. */
@@ -796,6 +790,13 @@ class AgentRuntimeTest {
             this.settings.add(callSettings);
             if (delayMillis > 0) {
                 try {
+                    // Like DefaultModelClient, a call that would outlast its deadline times out there.
+                    if (options.deadline() != null
+                            && Instant.now().plusMillis(delayMillis).isAfter(options.deadline())) {
+                        Thread.sleep(Math.max(0, Duration.between(Instant.now(), options.deadline()).toMillis()));
+                        throw new ModelException(ModelErrorKind.TIMEOUT, ProviderId.DEEPSEEK,
+                                request.endpoint().model(), "AI model call ran past its deadline");
+                    }
                     Thread.sleep(delayMillis);
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();

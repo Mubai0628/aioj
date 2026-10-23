@@ -43,7 +43,8 @@ import java.util.Map;
  * Runs an agent request on the Harness loop (plan §3.3, T1.5): the per-run model port,
  * the ai_agent_runs row and its progress, the run's interceptors (C5 tool visibility,
  * the L3 context layer, and whatever the caller adds), the domain-free loop, and back to
- * the result and exceptions the callers of {@link AgentRuntime} always got.
+ * the result and exceptions the callers of {@link AgentRuntime} always got. A run with a
+ * required completion tool (problem drafts) gets that gate as its completion policy.
  */
 @Service
 public class HarnessAgentRunner {
@@ -68,9 +69,6 @@ public class HarnessAgentRunner {
     }
 
     public AgentRuntime.AgentRunResult run(AgentRuntime.AgentRunRequest spec) {
-        if (spec.completionPolicy().isRequired()) {
-            throw new IllegalArgumentException("runs with a required completion tool still use the old loop");
-        }
         boolean fallbackAllowed = spec.allowStandardToolFallback() || spec.profile() == CallProfile.PROBLEM_DRAFT;
         CallOptions options = CallOptions.of("agent." + spec.profile().name().toLowerCase(Locale.ROOT))
                 .withCorrelation(spec.turnId(), spec.userId());
@@ -82,11 +80,16 @@ public class HarnessAgentRunner {
                 endpoint.provider().configName(), endpoint.model(), spec.policySnapshotId(), spec.outputMode(), budget);
         stateMachine.bindWorkspace(run.getId(), spec.serverBindings().get("workspaceId"), budget.maxRunDuration());
 
+        DraftCompletionPolicy gate = spec.completionPolicy().isRequired()
+                ? new DraftCompletionPolicy(spec.completionPolicy().requiredSuccessfulToolName(), port,
+                        fallbackAllowed, spec.turnId())
+                : null;
         List<HarnessMessage> starting = HarnessMessages.fromChat(renderer.render(spec.sections()));
         InterceptorFailures failures = new InterceptorFailures();
         ContextLayerGuard contextLayer = new ContextLayerGuard(contextGuard, spec.turnId(), spec.userId(),
                 spec.conversationId(), spec.contestPolicy(), spec.messageLayerVerdict());
         List<LoopInterceptor> interceptors = new ArrayList<>();
+        interceptors.add(new ExecutionModeWarning(port));
         interceptors.add(new ContestToolFilter(spec.contestPolicy()));
         interceptors.add(contextLayer);
         for (LoopInterceptor interceptor : spec.interceptors()) {
@@ -95,7 +98,7 @@ public class HarnessAgentRunner {
             }
             interceptors.add(interceptor);
         }
-        RunSpec.Builder runSpec = RunSpec.builder(String.valueOf(run.getId()), scenario(spec), toolContext(spec, run))
+        RunSpec.Builder runSpec = RunSpec.builder(String.valueOf(run.getId()), scenario(spec, gate), toolContext(spec, run))
                 .messages(starting)
                 .requireToolCall(spec.requireToolCall())
                 .listener(new RunProgressListener(stateMachine, manifestService, run.getId(), spec.turnId(),
@@ -107,7 +110,8 @@ public class HarnessAgentRunner {
         RunResult result = AgentLoops.create(port, toolRuntime).run(runSpec.build());
 
         if (!result.completed()) {
-            RuntimeException failure = failureOf(result, port, failures, deadline);
+            RuntimeException failure = failureOf(result, port, failures, deadline,
+                    gate != null && gate.emptyTwiceBeforeGate());
             stateMachine.fail(run.getId(), errorCodeOf(failure), result.steps(), result.toolCallCount());
             throw failure;
         }
@@ -120,8 +124,9 @@ public class HarnessAgentRunner {
         stateMachine.advance(run.getId(), AgentRunStateMachine.STATUS_FINAL_DRAFTED);
         stateMachine.advance(run.getId(), AgentRunStateMachine.STATUS_OUTPUT_CHECKED);
         stateMachine.complete(run.getId(), result.steps(), result.toolCallCount());
-        stateMachine.annotate(run.getId(), port.executionMode().name(),
-                "Agent run completed with " + result.toolCallCount() + " controlled tool calls");
+        stateMachine.annotate(run.getId(), port.executionMode().name(), gate != null && !result.completionSatisfied()
+                ? "Agent run ended before required completion tool succeeded"
+                : "Agent run completed with " + result.toolCallCount() + " controlled tool calls");
         return new AgentRuntime.AgentRunResult(run.getId(), result.content(),
                 result.provider() == null ? endpoint.provider().configName() : result.provider(),
                 result.model() == null ? endpoint.model() : result.model(),
@@ -130,9 +135,10 @@ public class HarnessAgentRunner {
                 contextLayer.mergedVerdict(), port.executionMode());
     }
 
-    private static AgentScenario scenario(AgentRuntime.AgentRunRequest spec) {
-        return new AgentScenario("tutor", spec.grantedScopes(), List.of(), CompletionPolicy.anyAnswer(),
-                runBudget(spec.budget()), spec.profile().name(), CallProfile.RECOVERY_ANSWER.name());
+    private static AgentScenario scenario(AgentRuntime.AgentRunRequest spec, DraftCompletionPolicy gate) {
+        return new AgentScenario(gate == null ? "tutor" : "problem_draft", spec.grantedScopes(), List.of(),
+                gate == null ? CompletionPolicy.anyAnswer() : gate, runBudget(spec.budget()), spec.profile().name(),
+                CallProfile.RECOVERY_ANSWER.name());
     }
 
     /** The loop budget's categories, with batch execution also charged to the plain sandbox budget. */
@@ -170,7 +176,7 @@ public class HarnessAgentRunner {
 
     /** The exception the old loop threw for the same ending. */
     static RuntimeException failureOf(RunResult result, ModelClientPort port, InterceptorFailures failures,
-                                      Instant deadline) {
+                                      Instant deadline, boolean emptyBeforeGate) {
         RunFailure failure = result.failure();
         RunFailure.Kind kind = failure == null ? RunFailure.Kind.INTERNAL_ERROR : failure.kind();
         return switch (kind) {
@@ -182,8 +188,9 @@ public class HarnessAgentRunner {
                 yield port.lastFailure().<RuntimeException>map(ex -> ex)
                         .orElseGet(() -> new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "AI model call failed"));
             }
-            case EMPTY_RESPONSE -> new DomainException(ErrorCode.SERVICE_UNAVAILABLE,
-                    "AI provider returned an empty response");
+            case EMPTY_RESPONSE -> new DomainException(ErrorCode.SERVICE_UNAVAILABLE, emptyBeforeGate
+                    ? "AI provider returned an empty response before the required completion gate"
+                    : "AI provider returned an empty response");
             case DEADLINE_EXCEEDED -> deadlineExceeded();
             case CANCELLED -> new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "Agent run was cancelled");
             case INTERCEPTOR_ERROR -> failures.first()

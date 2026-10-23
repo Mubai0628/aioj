@@ -215,9 +215,11 @@ public final class DefaultAgentLoop implements AgentLoop {
             if (!toolBudgetExhausted) {
                 state.warn("step_budget_exhausted");
             }
-            if (!scenario.completionPolicy().satisfied(state)) {
+            CompletionPolicy completion = scenario.completionPolicy();
+            if (!completion.satisfied(state)) {
                 state.warn("required_completion_tool_missing");
-                messages.add(HarnessMessage.system(BUDGET_END_INSTRUCTION));
+                String instruction = completion.budgetEndInstruction();
+                messages.add(HarnessMessage.system(instruction == null ? BUDGET_END_INSTRUCTION : instruction));
             }
             while (true) {
                 ModelTurn turn = callModel(List.of(), ToolChoice.AUTO, scenario.recoveryProfile());

@@ -242,6 +242,39 @@ class AgentLoopTest {
     }
 
     @Test
+    void aPolicyCanWordTheBudgetEndingItself() {
+        Tools.Fake step = Tools.descriptor("work.step").echo();
+        CompletionPolicy required = CompletionPolicy.requireSuccessfulTool("work.finish", "Call work.finish now.");
+        CompletionPolicy worded = new CompletionPolicy() {
+            @Override
+            public Verdict onAnswer(LoopContext context, String answer) {
+                return required.onAnswer(context, answer);
+            }
+
+            @Override
+            public boolean satisfied(LoopContext context) {
+                return required.satisfied(context);
+            }
+
+            @Override
+            public String budgetEndInstruction() {
+                return "Summarize what work.finish still needs.";
+            }
+        };
+        AgentScenario workflow = new AgentScenario("workflow", Set.of("CHAT"), List.of(), worded, budget(1, 4),
+                "normal", "recovery");
+        ScriptedModelPort model = new ScriptedModelPort(false)
+                .toolCalls(call("c1", "work.step", "{\"query\":\"x\"}"))
+                .answer("progress so far");
+
+        RunResult result = run(model, List.of(step), spec(workflow, false));
+
+        assertThat(result.completionSatisfied()).isFalse();
+        assertThat(model.call(2).messages()).last().extracting(HarnessMessage::content)
+                .isEqualTo("Summarize what work.finish still needs.");
+    }
+
+    @Test
     void interceptorsFilterToolsAppendMessagesAndSeeResults() {
         Tools.Fake lookup = Tools.descriptor("kb.lookup").echo();
         Tools.Fake hidden = Tools.descriptor("kb.hidden").echo();

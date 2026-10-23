@@ -12,6 +12,14 @@ public interface CompletionPolicy {
     /** Whether the run met its goal; asked once more when the budget ends the run. */
     boolean satisfied(LoopContext context);
 
+    /**
+     * What the model is told when the budget ends before the goal was met; null keeps
+     * the loop's own wording.
+     */
+    default String budgetEndInstruction() {
+        return null;
+    }
+
     record Verdict(boolean accept, String instruction) {
         public static Verdict accepted() {
             return new Verdict(true, null);
