@@ -42,16 +42,20 @@ import static org.mockito.Mockito.mock;
 
 /**
  * P0 exit gate: one real tool-calling loop per provider, end to end through
- * AgentRuntime (gateway → adapter → broker → tool → final answer). Runs only
- * when the provider API key is present in the environment:
+ * AgentRuntime (gateway → adapter → broker → tool → final answer). Each run
+ * makes billed provider calls, and developer machines often have the keys set
+ * for other reasons, so the tests run only on explicit opt-in
+ * ({@value #OPT_IN}=true) and when the provider API key is present:
  *   DEEPSEEK_API_KEY (+ optional DEEPSEEK_BASE_URL / DEEPSEEK_MODEL)
  *   KIMI_API_KEY     (+ optional KIMI_BASE_URL / KIMI_MODEL)
  */
 class AgentProviderLiveTest {
+    static final String OPT_IN = "AIOJ_LIVE_PROVIDER_TESTS";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
+    @EnabledIfEnvironmentVariable(named = OPT_IN, matches = "true")
     @EnabledIfEnvironmentVariable(named = "DEEPSEEK_API_KEY", matches = ".+")
     void deepSeekRealToolCallingLoop() {
         AiModelEffectiveConfig config = new AiModelEffectiveConfig(AiModelScope.TEXT_GENERATION, true, false,
@@ -73,6 +77,7 @@ class AgentProviderLiveTest {
     }
 
     @Test
+    @EnabledIfEnvironmentVariable(named = OPT_IN, matches = "true")
     @EnabledIfEnvironmentVariable(named = "KIMI_API_KEY", matches = ".+")
     void kimiRealToolCallingLoop() {
         AiModelEffectiveConfig config = new AiModelEffectiveConfig(AiModelScope.TEXT_GENERATION, true, false,
