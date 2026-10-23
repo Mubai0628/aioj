@@ -555,22 +555,6 @@ export interface ContestParticipantResponse {
   updatedAt: string;
 }
 
-export interface AdminContestAiUsageSummary {
-  userId: EntityId;
-  account: string;
-  displayName: string;
-  callCount: number;
-  promptTokens: number;
-  completionTokens: number;
-  conversationCount: number;
-  blockedCount: number;
-  evaluatedCount: number;
-  constrainCount: number;
-  refuseCount: number;
-  degradedCount: number;
-  lastUsedAt: string | null;
-}
-
 /** Canonical V3 ledger view; historical values are explicitly estimated snapshots. */
 export interface AdminContestAiAssistanceSummary {
   userId: EntityId;
@@ -3514,18 +3498,6 @@ export const api = {
       body: JSON.stringify({ problems })
     }),
   contestParticipants: (id: EntityId) => request<ContestParticipantResponse[]>(`/api/v1/contests/${id}/participants`),
-  contestAiUsage: (contestId: EntityId, contestRunId?: EntityId | null) =>
-    request<AdminContestAiUsageSummary[]>(
-      `/api/v1/admin/ai/contests/${contestId}/usage${contestRunId ? `?contestRunId=${contestRunId}` : ''}`
-    ),
-  contestAiUsageConversations: (contestId: EntityId, userId: EntityId, contestRunId?: EntityId | null) =>
-    request<AdminContestAiConversationSummary[]>(
-      `/api/v1/admin/ai/contests/${contestId}/usage/${userId}/conversations${contestRunId ? `?contestRunId=${contestRunId}` : ''}`
-    ),
-  contestAiUsageMessages: (contestId: EntityId, userId: EntityId, conversationId: string) =>
-    request<AdminContestAiMessageResponse[]>(
-      `/api/v1/admin/ai/contests/${contestId}/usage/${userId}/conversations/${conversationId}/messages`
-    ),
   contestAiAssistanceStatistics: (contestId: EntityId, contestRunId?: EntityId | null) =>
     request<AdminContestAiAssistanceSummary[]>(
       `/api/v1/admin/ai/contests/${contestId}/assistance-statistics${contestRunId ? `?contestRunId=${contestRunId}` : ''}`

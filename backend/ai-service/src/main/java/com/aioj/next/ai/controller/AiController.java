@@ -52,7 +52,6 @@ import com.aioj.next.contract.ai.ProblemDraftAgentTurnRequest;
 import com.aioj.next.contract.ai.ProblemDraftAgentTurnResponse;
 import com.aioj.next.contract.ai.ProblemDraftGenerationJobResponse;
 import com.aioj.next.contract.ai.ProblemDraftRefineRequest;
-import com.aioj.next.ai.domain.ContestAiUsageService;
 import com.aioj.next.ai.domain.ContestAiAssistanceStatisticsService;
 import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
 import com.aioj.next.contract.ai.ProblemDraftRequest;
@@ -62,7 +61,6 @@ import com.aioj.next.contract.ai.ProblemDraftWorkspaceMessageResponse;
 import com.aioj.next.contract.ai.ProblemDraftWorkspaceResponse;
 import com.aioj.next.contract.ai.AdminContestAiConversationSummary;
 import com.aioj.next.contract.ai.AdminContestAiMessageResponse;
-import com.aioj.next.contract.ai.AdminContestAiUsageSummary;
 import com.aioj.next.contract.ai.AdminContestAiAssistanceSummary;
 import com.aioj.next.contract.ai.ProblemDraftRejectRequest;
 import tools.jackson.databind.ObjectMapper;
@@ -122,7 +120,6 @@ public class AiController {
     private final Executor problemDraftExecutor;
     private ProblemDraftGenerationJobService problemDraftGenerationJobService;
     private ProblemDraftWorkspaceService problemDraftWorkspaceService;
-    private ContestAiUsageService contestAiUsageService;
     private ContestAiAssistanceStatisticsService contestAiAssistanceStatisticsService;
     private com.aioj.next.ai.agent.runtime.PseudoStreamReplayer pseudoStreamReplayer;
 
@@ -194,11 +191,6 @@ public class AiController {
     }
 
     @Autowired(required = false)
-    public void setContestAiUsageService(ContestAiUsageService contestAiUsageService) {
-        this.contestAiUsageService = contestAiUsageService;
-    }
-
-    @Autowired(required = false)
     public void setContestAiAssistanceStatisticsService(
             ContestAiAssistanceStatisticsService contestAiAssistanceStatisticsService
     ) {
@@ -212,13 +204,6 @@ public class AiController {
     @Autowired(required = false)
     public void setPseudoStreamReplayer(com.aioj.next.ai.agent.runtime.PseudoStreamReplayer pseudoStreamReplayer) {
         this.pseudoStreamReplayer = pseudoStreamReplayer;
-    }
-
-    private ContestAiUsageService requireContestAiUsageService() {
-        if (contestAiUsageService == null) {
-            throw new DomainException(ErrorCode.INTERNAL_ERROR, "Contest AI usage records are unavailable");
-        }
-        return contestAiUsageService;
     }
 
     private ContestAiAssistanceStatisticsService requireContestAiAssistanceStatisticsService() {
@@ -749,37 +734,7 @@ public class AiController {
         return ApiResponse.ok(aiQuotaService.dailyUsage(days));
     }
 
-    @GetMapping("/admin/ai/contests/{contestId}/usage")
-    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
-    public ApiResponse<List<AdminContestAiUsageSummary>> contestAiUsage(
-            @PathVariable Long contestId,
-            @RequestParam(required = false) Long contestRunId
-    ) {
-        return ApiResponse.ok(requireContestAiUsageService().summaries(contestId, contestRunId));
-    }
-
-    @GetMapping("/admin/ai/contests/{contestId}/usage/{userId}/conversations")
-    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
-    public ApiResponse<List<AdminContestAiConversationSummary>> contestAiUsageConversations(
-            @PathVariable Long contestId,
-            @PathVariable Long userId,
-            @RequestParam(required = false) Long contestRunId
-    ) {
-        return ApiResponse.ok(requireContestAiUsageService().conversations(contestId, contestRunId, userId));
-    }
-
-    @GetMapping("/admin/ai/contests/{contestId}/usage/{userId}/conversations/{conversationId}/messages")
-    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
-    public ApiResponse<List<AdminContestAiMessageResponse>> contestAiUsageMessages(
-            @PathVariable Long contestId,
-            @PathVariable Long userId,
-            @PathVariable String conversationId
-    ) {
-        return ApiResponse.ok(requireContestAiUsageService()
-                .messages(contestId, userId, conversationId, SecuritySupport.currentUserId()));
-    }
-
-    /** V3-authoritative contest assistance ledger. The legacy usage route remains for compatibility. */
+    /** V3-authoritative contest assistance ledger. */
     @GetMapping("/admin/ai/contests/{contestId}/assistance-statistics")
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ApiResponse<List<AdminContestAiAssistanceSummary>> contestAiAssistanceStatistics(

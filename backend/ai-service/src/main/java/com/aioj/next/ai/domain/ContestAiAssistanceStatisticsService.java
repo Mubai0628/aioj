@@ -44,8 +44,8 @@ import java.util.Set;
  * <p>Live rows are created only from V3's server-authoritative L1 attribution.
  * The legacy rows are an immutable V63 estimate and are explicitly labelled as
  * such in the response. This service is read-only with respect to the Agent
- * pipeline and preserves the old {@link ContestAiUsageService} API for clients
- * that have not migrated yet.</p>
+ * pipeline. Per-layer guard decisions are listed by
+ * {@link com.aioj.next.ai.agent.policy.GuardDecisionAuditService}.</p>
  */
 @Service
 public class ContestAiAssistanceStatisticsService {
