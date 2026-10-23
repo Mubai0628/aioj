@@ -50,7 +50,7 @@ public record LoopBudget(
                 config.getMaxSearchCalls(), config.getMaxFetchCalls());
     }
 
-    public String categoryOf(String toolName) {
+    public static String categoryOf(String toolName) {
         if ("draft.testcase.generate".equals(toolName)) {
             return "testcase_generate";
         }

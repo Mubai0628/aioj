@@ -41,12 +41,20 @@ public final class DefaultToolRuntime implements ToolRuntime {
     private final List<ToolAuthorizer> authorizers;
     private final ToolAuditSink auditSink;
     private final Bulkheads bulkheads;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ModelPayloadRenderer renderer = new ModelPayloadRenderer(objectMapper);
+    private final ObjectMapper objectMapper;
+    private final ModelPayloadRenderer renderer;
     private final ConcurrentMap<String, Set<FutureTask<ToolResult>>> inFlight = new ConcurrentHashMap<>();
 
     public DefaultToolRuntime(ToolCatalog catalog, List<ToolAuthorizer> authorizers, ToolAuditSink auditSink,
                               BulkheadLimits limits) {
+        this(catalog, authorizers, auditSink, limits, new ObjectMapper());
+    }
+
+    /** {@code objectMapper} parses arguments and serializes tool data for the model. */
+    public DefaultToolRuntime(ToolCatalog catalog, List<ToolAuthorizer> authorizers, ToolAuditSink auditSink,
+                              BulkheadLimits limits, ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
+        this.renderer = new ModelPayloadRenderer(this.objectMapper);
         this.catalog = catalog;
         this.authorizers = authorizers == null ? List.of() : List.copyOf(authorizers);
         this.auditSink = auditSink == null ? ToolAuditSink.NONE : auditSink;

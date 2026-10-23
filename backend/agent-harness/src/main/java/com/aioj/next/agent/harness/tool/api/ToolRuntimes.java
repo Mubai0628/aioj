@@ -1,6 +1,7 @@
 package com.aioj.next.agent.harness.tool.api;
 
 import com.aioj.next.agent.harness.tool.internal.DefaultToolRuntime;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -11,5 +12,14 @@ public final class ToolRuntimes {
     public static ToolRuntime create(ToolCatalog catalog, List<ToolAuthorizer> authorizers, ToolAuditSink auditSink,
                                      BulkheadLimits limits) {
         return new DefaultToolRuntime(catalog, authorizers, auditSink, limits);
+    }
+
+    /**
+     * @param objectMapper the assembling service's mapper, so the model sees tool data
+     *                     serialized the way that service always has
+     */
+    public static ToolRuntime create(ToolCatalog catalog, List<ToolAuthorizer> authorizers, ToolAuditSink auditSink,
+                                     BulkheadLimits limits, ObjectMapper objectMapper) {
+        return new DefaultToolRuntime(catalog, authorizers, auditSink, limits, objectMapper);
     }
 }
