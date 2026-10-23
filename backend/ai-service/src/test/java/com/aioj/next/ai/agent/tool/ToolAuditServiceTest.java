@@ -1,5 +1,9 @@
 package com.aioj.next.ai.agent.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.persistence.entity.AiToolCallEntity;
 import com.aioj.next.ai.persistence.mapper.AiToolCallMapper;
@@ -25,9 +29,9 @@ class ToolAuditServiceTest {
         ToolExecutionContext context = new ToolExecutionContext(7L, "conversation", "turn", 1L,
                 "policy", Set.of("AI_CHAT"), Instant.now(), "trace");
         ToolDescriptor descriptor = new ToolDescriptor("context.search_exact", "1.0.0", "search",
-                new ObjectMapper().readTree("{\"type\":\"object\"}"), ToolRiskLevel.LOW,
-                true, true, Set.of("AI_CHAT"), Set.of(DataClassification.USER_PRIVATE),
-                100, Duration.ofSeconds(1), ToolAuditLevel.FULL);
+                new ObjectMapper().readTree("{\"type\":\"object\"}"), Set.of("AI_CHAT"), 100,
+                Duration.ofSeconds(1), "search", ExecutionClass.READ_ONLY, FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.FULL);
 
         ToolAuditService.AuditHandle handle = service.start(context, 42L, 1, descriptor,
                 descriptor.name(), "call-1", "{\"token\":\"secret\"}", "decision-1");
@@ -52,9 +56,9 @@ class ToolAuditServiceTest {
         ToolExecutionContext context = new ToolExecutionContext(7L, "conversation", "turn", 1L,
                 "policy", Set.of("AI_PROBLEM_DRAFT"), Instant.now(), "trace");
         ToolDescriptor descriptor = new ToolDescriptor("draft.execution.get", "1.0.0", "result",
-                new ObjectMapper().readTree("{\"type\":\"object\"}"), ToolRiskLevel.LOW,
-                true, true, Set.of("AI_PROBLEM_DRAFT"), Set.of(DataClassification.STAFF_ONLY),
-                100, Duration.ofSeconds(1), ToolAuditLevel.NO_ARGUMENTS);
+                new ObjectMapper().readTree("{\"type\":\"object\"}"), Set.of("AI_PROBLEM_DRAFT"), 100,
+                Duration.ofSeconds(1), "other", ExecutionClass.READ_ONLY, FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.NO_ARGUMENTS);
         ToolAuditService.AuditHandle handle = service.start(context, 42L, 1, descriptor,
                 descriptor.name(), "call-2", "{\"executionId\":\"opaque-1\"}", "decision-2");
 

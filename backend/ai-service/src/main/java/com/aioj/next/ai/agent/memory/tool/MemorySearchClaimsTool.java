@@ -1,14 +1,15 @@
 package com.aioj.next.ai.agent.memory.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.SourceRef;
-import com.aioj.next.ai.agent.tool.ToolAuditLevel;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.persistence.entity.AiMemoryClaimEntity;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
@@ -57,15 +58,13 @@ public class MemorySearchClaimsTool implements AgentTool {
                         + "do not call every turn. Returns ACTIVE memory claims only; supporting evidence "
                         + "quotes must be fetched with memory.fetch_evidence.",
                 buildSchema(),
-                ToolRiskLevel.LOW,
-                true,
-                true,
                 Set.of("AI_CHAT"),
-                Set.of(DataClassification.USER_PRIVATE),
                 1500,
                 Duration.ofSeconds(5),
-                ToolAuditLevel.FULL
-        );
+                "search",
+                ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.FULL);
     }
 
     @Override

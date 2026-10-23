@@ -1,10 +1,10 @@
 package com.aioj.next.ai.agent.draft.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftExecutionService;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkingState;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
@@ -50,7 +50,7 @@ public class DraftCodeExecuteTool implements AgentTool {
         this.descriptor = DraftToolSupport.descriptor("draft.code.execute",
                 "Execute the current standard solution, independent reference solution, or a bounded probe in the "
                         + "Docker Sandbox. Returns an opaque executionId and resource summary; use draft.execution.get "
-                        + "for bounded stdout/stderr.", schema, ToolRiskLevel.MEDIUM, false, false, Duration.ofMinutes(2));
+                        + "for bounded stdout/stderr.", schema, "sandbox", ExecutionClass.SANDBOX, Duration.ofMinutes(2));
     }
 
     @Override public ToolDescriptor descriptor() { return descriptor; }

@@ -1,10 +1,10 @@
 package com.aioj.next.ai.agent.draft.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkingState;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
 import com.aioj.next.ai.domain.problem.DraftSandboxClient;
@@ -30,7 +30,7 @@ public class DraftSamplesRunTool implements AgentTool {
         this.descriptor = DraftToolSupport.descriptor("draft.samples.run",
                 "Compile the current standard solution and run every public sample with authoritative output "
                         + "comparison. Returns per-field error summaries and aggregate resources, not internal file ids.",
-                DraftToolSupport.objectSchema(mapper, false), ToolRiskLevel.MEDIUM, false, false,
+                DraftToolSupport.objectSchema(mapper, false), "sandbox", ExecutionClass.SANDBOX,
                 Duration.ofMinutes(3));
     }
 

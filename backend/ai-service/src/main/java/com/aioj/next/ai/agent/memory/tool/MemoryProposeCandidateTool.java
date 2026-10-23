@@ -1,15 +1,16 @@
 package com.aioj.next.ai.agent.memory.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
 import com.aioj.next.ai.agent.memory.MemoryCandidateIngestionService;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.SourceRef;
-import com.aioj.next.ai.agent.tool.ToolAuditLevel;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.agent.tool.ToolStatus;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -67,15 +68,13 @@ public class MemoryProposeCandidateTool implements AgentTool {
                         + "without passing the quality gate and user confirmation. "
                         + "Use evidenceType=EXPLICIT_PREFERENCE when the user stated it directly.",
                 buildSchema(),
-                ToolRiskLevel.MEDIUM,
-                false,
-                true,
                 Set.of("AI_CHAT"),
-                Set.of(DataClassification.USER_PRIVATE),
                 600,
                 Duration.ofSeconds(5),
-                ToolAuditLevel.FULL
-        );
+                "other",
+                ExecutionClass.WRITE_CANDIDATE,
+                FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.FULL);
     }
 
     @Override

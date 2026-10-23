@@ -1,10 +1,10 @@
 package com.aioj.next.ai.agent.draft.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.ProblemDraftTestcaseArtifactService;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkingState;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
@@ -49,7 +49,7 @@ public class DraftTestcaseGenerateTool implements AgentTool {
                         + "number of non-empty .in files in the working directory; the server materializes STANDARD expected outputs, "
                         + "and publish a SHA-bound testcase artifact only when generation succeeds. This does not "
                         + "activate or import a formal problem package.",
-                schema, ToolRiskLevel.HIGH, false, false, Duration.ofMinutes(6));
+                schema, "testcase_generate", ExecutionClass.SANDBOX, Duration.ofMinutes(6));
     }
 
     @Override public ToolDescriptor descriptor() { return descriptor; }

@@ -1,5 +1,9 @@
 package com.aioj.next.ai.agent.runtime;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.assembly.HarnessAgentRunner;
 import com.aioj.next.ai.agent.assembly.HarnessToolConfiguration;
 import com.aioj.next.ai.domain.AiModelConfigEndpointSource;
@@ -40,16 +44,9 @@ import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
 import com.aioj.next.ai.agent.policy.GuardLayer;
 import com.aioj.next.ai.agent.policy.ParticipantStatus;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolAuditLevel;
 import com.aioj.next.ai.agent.tool.ToolAuditService;
-import com.aioj.next.ai.agent.tool.ToolAuthorizationService;
-import com.aioj.next.ai.agent.tool.ToolBroker;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
-import com.aioj.next.ai.agent.tool.ToolRegistry;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolResultSanitizer;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.AiModelConfigService;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
@@ -179,11 +176,13 @@ class AgentRuntimeTest {
         when(configService.effectiveConfig(AiModelScope.PROBLEM_DRAFT)).thenReturn(problemDraftConfig(true));
         adapter.rejectNextThinkingCall = true;
         adapter.script.add(finalResponse("standard answer"));
-        AgentRuntime.AgentRunRequest request = new AgentRuntime.AgentRunRequest(
-                "draft-turn", 7L, "draft-conversation", null, Set.of("AI_CHAT"), sections(), false,
-                "DRAFT", CallProfile.PROBLEM_DRAFT,
-                new LoopBudget(20, 16, 0, 0, 8, 2, 2, Duration.ofMinutes(15)),
-                AiModelScope.PROBLEM_DRAFT, Map.of("workspaceId", "workspace-1"), true);
+        AgentRuntime.AgentRunRequest request = AgentRuntime.AgentRunRequest.builder("draft-turn", 7L, "draft-conversation")
+                .grantedScopes(Set.of("AI_CHAT")).sections(sections()).requireToolCall(false)
+                .output("DRAFT", CallProfile.PROBLEM_DRAFT)
+                .budget(new LoopBudget(20, 16, 0, 0, 8, 2, 2, Duration.ofMinutes(15)))
+                .modelScope(AiModelScope.PROBLEM_DRAFT).serverBindings(Map.of("workspaceId", "workspace-1"))
+                .allowStandardToolFallback(true)
+                .build();
 
         AgentRuntime.AgentRunResult result = runtime.run(request);
 
@@ -208,12 +207,14 @@ class AgentRuntimeTest {
         adapter.script.add(toolResponse("finalize", "draft.finalize"));
         adapter.script.add(finalResponse("Draft finalized for review."));
 
-        AgentRuntime.AgentRunResult result = draftRuntime.run(new AgentRuntime.AgentRunRequest(
-                "draft-turn", 7L, "draft-conversation", null, Set.of("AI_DRAFT"), sections(), true,
-                "DRAFT", CallProfile.PROBLEM_DRAFT,
-                new LoopBudget(10, 8, 0, 0, 4, 1, 1, Duration.ofMinutes(1)),
-                AiModelScope.PROBLEM_DRAFT, Map.of("workspaceId", "workspace-1"), true,
-                AgentRuntime.AgentCompletionPolicy.requireSuccessfulTool("draft.finalize")));
+        AgentRuntime.AgentRunResult result = draftRuntime.run(AgentRuntime.AgentRunRequest.builder("draft-turn", 7L, "draft-conversation")
+                .grantedScopes(Set.of("AI_DRAFT")).sections(sections()).requireToolCall(true)
+                .output("DRAFT", CallProfile.PROBLEM_DRAFT)
+                .budget(new LoopBudget(10, 8, 0, 0, 4, 1, 1, Duration.ofMinutes(1)))
+                .modelScope(AiModelScope.PROBLEM_DRAFT).serverBindings(Map.of("workspaceId", "workspace-1"))
+                .allowStandardToolFallback(true)
+                .completionPolicy(AgentRuntime.AgentCompletionPolicy.requireSuccessfulTool("draft.finalize"))
+                .build());
 
         assertThat(result.content()).isEqualTo("Draft finalized for review.");
         assertThat(result.steps()).isEqualTo(6);
@@ -238,9 +239,9 @@ class AgentRuntimeTest {
         when(configService.effectiveConfig(AiModelScope.PROBLEM_DRAFT)).thenReturn(problemDraftConfig(false));
         AtomicReference<ToolExecutionContext> seenContext = new AtomicReference<>();
         JsonNode schema = objectMapper.readTree("{\"type\":\"object\",\"additionalProperties\":false}");
-        ToolDescriptor descriptor = new ToolDescriptor("draft.state.get", "1.0.0", "state",
-                schema, ToolRiskLevel.LOW, true, true, Set.of("AI_DRAFT"),
-                Set.of(DataClassification.USER_PRIVATE), 1000, Duration.ofSeconds(1), ToolAuditLevel.NO_ARGUMENTS);
+        ToolDescriptor descriptor = new ToolDescriptor("draft.state.get", "1.0.0", "state", schema,
+                Set.of("AI_DRAFT"), 1000, Duration.ofSeconds(1), "other", ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN, ToolAuditLevel.NO_ARGUMENTS);
         AgentTool tool = new AgentTool() {
             @Override
             public ToolDescriptor descriptor() {
@@ -260,10 +261,13 @@ class AgentRuntimeTest {
                 "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro"));
         adapter.script.add(finalResponse("done"));
 
-        draftRuntime.run(new AgentRuntime.AgentRunRequest(
-                "draft-turn", 7L, "draft-conversation", null, Set.of("AI_DRAFT"), sections(), false,
-                "DRAFT", CallProfile.PROBLEM_DRAFT, new LoopBudget(4, 2, 0, 0, 1, 0, 0, Duration.ofMinutes(1)),
-                AiModelScope.PROBLEM_DRAFT, Map.of("workspaceId", "workspace-1"), true));
+        draftRuntime.run(AgentRuntime.AgentRunRequest.builder("draft-turn", 7L, "draft-conversation")
+                .grantedScopes(Set.of("AI_DRAFT")).sections(sections()).requireToolCall(false)
+                .output("DRAFT", CallProfile.PROBLEM_DRAFT)
+                .budget(new LoopBudget(4, 2, 0, 0, 1, 0, 0, Duration.ofMinutes(1)))
+                .modelScope(AiModelScope.PROBLEM_DRAFT).serverBindings(Map.of("workspaceId", "workspace-1"))
+                .allowStandardToolFallback(true)
+                .build());
 
         assertThat(seenContext.get().serverBinding("workspaceId")).isEqualTo("workspace-1");
         assertThat(adapter.requests.get(0).messages())
@@ -275,11 +279,13 @@ class AgentRuntimeTest {
         when(configService.effectiveConfig(AiModelScope.PROBLEM_DRAFT)).thenReturn(problemDraftConfig(false));
         adapter.delayMillis = 5_000;
         adapter.script.add(finalResponse("too late"));
-        AgentRuntime.AgentRunRequest request = new AgentRuntime.AgentRunRequest(
-                "deadline-turn", 7L, "draft-conversation", null, Set.of("AI_DRAFT"), sections(), false,
-                "DRAFT", CallProfile.PROBLEM_DRAFT,
-                new LoopBudget(2, 0, 0, 0, 0, 0, 0, Duration.ofMillis(40)),
-                AiModelScope.PROBLEM_DRAFT, Map.of("workspaceId", "workspace-1"), true);
+        AgentRuntime.AgentRunRequest request = AgentRuntime.AgentRunRequest.builder("deadline-turn", 7L, "draft-conversation")
+                .grantedScopes(Set.of("AI_DRAFT")).sections(sections()).requireToolCall(false)
+                .output("DRAFT", CallProfile.PROBLEM_DRAFT)
+                .budget(new LoopBudget(2, 0, 0, 0, 0, 0, 0, Duration.ofMillis(40)))
+                .modelScope(AiModelScope.PROBLEM_DRAFT).serverBindings(Map.of("workspaceId", "workspace-1"))
+                .allowStandardToolFallback(true)
+                .build();
 
         assertThatThrownBy(() -> runtime.run(request))
                 .isInstanceOf(DomainException.class)
@@ -291,9 +297,7 @@ class AgentRuntimeTest {
         adapter.script.add(toolCallResponse());
         adapter.script.add(finalResponse("最终回答"));
         List<ProviderUsage> observed = new ArrayList<>();
-        AgentRuntime.AgentRunRequest request = new AgentRuntime.AgentRunRequest(
-                "turn-1", 7L, "c1", "ps-1", Set.of("AI_CHAT"), sections(), false,
-                "STREAM", CallProfile.CHAT_STREAM, budget(8, 6, 3, 3), null, null, observed::add);
+        AgentRuntime.AgentRunRequest request = chat(false, budget(8, 6, 3, 3)).usageObserver(observed::add).build();
 
         runtime.run(request);
 
@@ -395,8 +399,8 @@ class AgentRuntimeTest {
                     }
                 };
 
-        AgentRuntime.AgentRunResult result = runtime.run(spec(false, budget(8, 6, 3, 3))
-                .withInterceptors(List.of(finalCheck)));
+        AgentRuntime.AgentRunResult result = runtime.run(chat(false, budget(8, 6, 3, 3)).interceptor(finalCheck)
+                .build());
 
         assertThat(result.content()).isEqualTo("只给思路");
         assertThat(checked).containsExactly("完整代码……", "只给思路");
@@ -460,9 +464,10 @@ class AgentRuntimeTest {
         adapter.script.add(finalResponse("空策略视图同样过滤"));
 
         runtimeWithProblemTool.run(spec(false, budget(8, 6, 3, 3)));
-        AgentRuntime.AgentRunRequest nonParticipantViewSpec = new AgentRuntime.AgentRunRequest(
-                "turn-2", 7L, "c1", "ps-1", Set.of("AI_CHAT"), sections(), false, "STREAM",
-                CallProfile.CHAT_STREAM, budget(8, 6, 3, 3), ContestPolicyView.nonParticipant());
+        AgentRuntime.AgentRunRequest nonParticipantViewSpec = AgentRuntime.AgentRunRequest.builder("turn-2", 7L, "c1")
+                .policySnapshotId("ps-1").grantedScopes(Set.of("AI_CHAT")).sections(sections())
+                .output("STREAM", CallProfile.CHAT_STREAM).budget(budget(8, 6, 3, 3))
+                .contest(ContestPolicyView.nonParticipant(), null).build();
         runtimeWithProblemTool.run(nonParticipantViewSpec);
 
         assertThat(adapter.requests.get(0).tools()).extracting(ToolSpec::name)
@@ -481,9 +486,7 @@ class AgentRuntimeTest {
         adapter.script.add(finalResponse("基于比赛题面的回答"));
         ContestPolicyView view = new ContestPolicyView(ParticipantStatus.PARTICIPANT_ACTIVE, Map.of());
 
-        AgentRuntime.AgentRunResult result = runtimeWithProblemTool.run(new AgentRuntime.AgentRunRequest(
-                "turn-1", 7L, "c1", "ps-1", Set.of("AI_CHAT"), sections(), false, "STREAM",
-                CallProfile.CHAT_STREAM, budget(8, 6, 3, 3), view));
+        AgentRuntime.AgentRunResult result = runtimeWithProblemTool.run(chat(false, budget(8, 6, 3, 3)).contest(view, null).build());
 
         assertThat(result.content()).isEqualTo("基于比赛题面的回答");
         assertThat(adapter.requests.get(0).tools()).extracting(ToolSpec::name)
@@ -575,8 +578,8 @@ class AgentRuntimeTest {
     }
 
     private AgentRuntime.AgentRunRequest participantSpec(List<ContextSection> sections, GuardVerdict messageVerdict) {
-        return new AgentRuntime.AgentRunRequest("turn-1", 7L, "c1", "ps-1", Set.of("AI_CHAT"), sections, false,
-                "STREAM", CallProfile.CHAT_STREAM, budget(8, 6, 3, 3), participantView(), messageVerdict);
+        return chat(false, budget(8, 6, 3, 3)).sections(sections).contest(participantView(), messageVerdict)
+                .build();
     }
 
     private ContestPolicyView participantView() {
@@ -603,8 +606,8 @@ class AgentRuntimeTest {
                  "properties":{"exactTerms":{"type":"array","items":{"type":"string","minLength":1}}}}
                 """);
         ToolDescriptor descriptor = new ToolDescriptor("context.search_exact", "1.0.0", "search", schema,
-                ToolRiskLevel.LOW, true, true, Set.of("AI_CHAT"), Set.of(DataClassification.USER_PRIVATE),
-                2000, Duration.ofSeconds(5), ToolAuditLevel.FULL);
+                Set.of("AI_CHAT"), 2000, Duration.ofSeconds(5), "search", ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN, ToolAuditLevel.FULL);
         return new AgentTool() {
             @Override
             public ToolDescriptor descriptor() {
@@ -625,8 +628,13 @@ class AgentRuntimeTest {
     }
 
     private AgentRuntime.AgentRunRequest spec(boolean requireToolCall, LoopBudget budget) {
-        return new AgentRuntime.AgentRunRequest("turn-1", 7L, "c1", "ps-1", Set.of("AI_CHAT"),
-                sections(), requireToolCall, "STREAM", CallProfile.CHAT_STREAM, budget);
+        return chat(requireToolCall, budget).build();
+    }
+
+    private AgentRuntime.AgentRunRequest.Builder chat(boolean requireToolCall, LoopBudget budget) {
+        return AgentRuntime.AgentRunRequest.builder("turn-1", 7L, "c1").policySnapshotId("ps-1")
+                .grantedScopes(Set.of("AI_CHAT")).sections(sections()).requireToolCall(requireToolCall)
+                .output("STREAM", CallProfile.CHAT_STREAM).budget(budget);
     }
 
     private List<ContextSection> sections() {
@@ -664,8 +672,8 @@ class AgentRuntimeTest {
                  "properties":{"query":{"type":"string","minLength":1}}}
                 """);
         ToolDescriptor descriptor = new ToolDescriptor("problem.search", "1.0.0", "contest problem search", schema,
-                ToolRiskLevel.LOW, true, true, Set.of("AI_CHAT"), Set.of(DataClassification.CONTEST_PUBLIC_ACTIVE),
-                2000, Duration.ofSeconds(5), ToolAuditLevel.FULL);
+                Set.of("AI_CHAT"), 2000, Duration.ofSeconds(5), "other", ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN, ToolAuditLevel.FULL);
         return new AgentTool() {
             @Override
             public ToolDescriptor descriptor() {
@@ -720,8 +728,8 @@ class AgentRuntimeTest {
                  "properties":{"exactTerms":{"type":"array","items":{"type":"string","minLength":1}}}}
                 """);
         ToolDescriptor descriptor = new ToolDescriptor("context.search_exact", "1.0.0", "search", schema,
-                ToolRiskLevel.LOW, true, true, Set.of("AI_CHAT"), Set.of(DataClassification.USER_PRIVATE),
-                2000, Duration.ofSeconds(5), ToolAuditLevel.FULL);
+                Set.of("AI_CHAT"), 2000, Duration.ofSeconds(5), "search", ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN, ToolAuditLevel.FULL);
         return new AgentTool() {
             @Override
             public ToolDescriptor descriptor() {
@@ -740,8 +748,8 @@ class AgentRuntimeTest {
     private AgentTool draftTool(String name, AtomicInteger executions) throws Exception {
         JsonNode schema = objectMapper.readTree("{\"type\":\"object\",\"additionalProperties\":false}");
         ToolDescriptor descriptor = new ToolDescriptor(name, "1.0.0", name, schema,
-                ToolRiskLevel.LOW, false, true, Set.of("AI_DRAFT"), Set.of(DataClassification.STAFF_ONLY),
-                1000, Duration.ofSeconds(1), ToolAuditLevel.NO_ARGUMENTS);
+                Set.of("AI_DRAFT"), 1000, Duration.ofSeconds(1), categoryFor(name), executionClassFor(name),
+                FailurePolicy.FAIL_OPEN, ToolAuditLevel.NO_ARGUMENTS);
         return new AgentTool() {
             @Override
             public ToolDescriptor descriptor() {
@@ -834,5 +842,19 @@ class AgentRuntimeTest {
         public List<ModelInfo> listModels(ModelEndpointConfig candidate, CallOptions options) {
             throw new UnsupportedOperationException();
         }
+    }
+
+    /** The budget category each fake draft tool had under the old name rule. */
+    private static String categoryFor(String name) {
+        return switch (name) {
+            case "draft.testcase.generate" -> "testcase_generate";
+            case "draft.testcase.run_package" -> "testcase_run";
+            case "draft.code.execute", "draft.samples.run" -> "sandbox";
+            default -> "other";
+        };
+    }
+
+    private static ExecutionClass executionClassFor(String name) {
+        return "other".equals(categoryFor(name)) ? ExecutionClass.WRITE_CANDIDATE : ExecutionClass.SANDBOX;
     }
 }

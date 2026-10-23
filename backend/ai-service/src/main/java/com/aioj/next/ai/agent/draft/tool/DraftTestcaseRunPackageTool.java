@@ -1,10 +1,10 @@
 package com.aioj.next.ai.agent.draft.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.ProblemDraftTestcaseArtifactService;
 import com.aioj.next.ai.domain.draftagent.DraftTestcasePackageAcceptanceClient;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkingState;
@@ -47,7 +47,7 @@ public class DraftTestcaseRunPackageTool implements AgentTool {
                 "Execute every manifest case in a current, SHA-verified testcase artifact using formal STANDARD "
                         + "comparison semantics. High-difficulty drafts must also pass an independent reference "
                         + "solution. Only aggregate hidden-case failures and resources are returned.",
-                schema, ToolRiskLevel.HIGH, false, false, Duration.ofMinutes(10));
+                schema, "testcase_run", ExecutionClass.SANDBOX, Duration.ofMinutes(10));
     }
 
     @Override public ToolDescriptor descriptor() { return descriptor; }

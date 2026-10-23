@@ -1,12 +1,12 @@
 package com.aioj.next.ai.agent.assembly;
 
 import com.aioj.next.agent.harness.tool.api.ToolCallRequest;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.agent.harness.tool.api.ToolOutcome;
 import com.aioj.next.agent.harness.tool.api.ToolResult;
 import com.aioj.next.agent.harness.tool.api.ToolStatus;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.tool.ToolAuditService;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

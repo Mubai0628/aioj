@@ -1,10 +1,10 @@
 package com.aioj.next.ai.agent.draft.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -70,7 +70,7 @@ public class DraftStatePatchTool implements AgentTool {
         this.descriptor = DraftToolSupport.descriptor("draft.state.patch",
                 "Patch the current problem state using optimistic concurrency. Changes to verification-relevant fields "
                         + "invalidate prior sample and package acceptance automatically.",
-                schema, ToolRiskLevel.MEDIUM, false, false, Duration.ofSeconds(10));
+                schema, "other", ExecutionClass.WRITE_CANDIDATE, Duration.ofSeconds(10));
     }
 
     @Override public ToolDescriptor descriptor() { return descriptor; }

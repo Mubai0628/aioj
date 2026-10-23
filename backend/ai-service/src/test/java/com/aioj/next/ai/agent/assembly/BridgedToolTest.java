@@ -12,7 +12,6 @@ import com.aioj.next.agent.harness.tool.api.ToolStatus;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -33,35 +32,14 @@ class BridgedToolTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @Test
-    void budgetCategoryAndBulkheadFollowTheToolName() {
-        assertThat(descriptor("context.search_exact", true)).satisfies(d -> {
-            assertThat(d.budgetCategory()).isEqualTo("search");
-            assertThat(d.executionClass()).isEqualTo(ExecutionClass.READ_ONLY);
-        });
-        assertThat(descriptor("context.fetch_sources", true).budgetCategory()).isEqualTo("fetch");
-        assertThat(descriptor("memory.propose_candidate", false)).satisfies(d -> {
-            assertThat(d.budgetCategory()).isEqualTo("other");
-            assertThat(d.executionClass()).isEqualTo(ExecutionClass.WRITE_CANDIDATE);
-        });
-        assertThat(descriptor("draft.code.execute", false)).satisfies(d -> {
-            assertThat(d.budgetCategory()).isEqualTo("sandbox");
-            assertThat(d.executionClass()).isEqualTo(ExecutionClass.SANDBOX);
-        });
-        assertThat(descriptor("draft.testcase.generate", false).budgetCategory()).isEqualTo("testcase_generate");
-        assertThat(descriptor("draft.testcase.run_package", false).executionClass()).isEqualTo(ExecutionClass.SANDBOX);
-    }
+    void theToolDeclaresItsOwnHarnessDescriptor() {
+        AgentTool tool = fake("memory.propose_candidate", false, (context, input) -> null);
 
-    @Test
-    void theRestOfTheDescriptorIsKept() {
-        ToolDescriptor descriptor = descriptor("context.search_exact", true);
+        ToolDescriptor descriptor = new BridgedTool(tool).descriptor();
 
-        assertThat(descriptor.version()).isEqualTo("1.0.0");
-        assertThat(descriptor.description()).isEqualTo("fake tool");
-        assertThat(descriptor.requiredScopes()).containsExactly("AI_CHAT");
-        assertThat(descriptor.maxResultTokens()).isEqualTo(1000);
-        assertThat(descriptor.timeout()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(descriptor).isSameAs(tool.descriptor());
+        assertThat(descriptor.executionClass()).isEqualTo(ExecutionClass.WRITE_CANDIDATE);
         assertThat(descriptor.failurePolicy()).isEqualTo(FailurePolicy.FAIL_OPEN);
-        assertThat(descriptor.auditLevel()).isEqualTo(ToolAuditLevel.NO_ARGUMENTS);
     }
 
     @Test
@@ -145,23 +123,19 @@ class BridgedToolTest {
                 Map.of("agentRunId", "5"), Map.of());
     }
 
-    private static ToolDescriptor descriptor(String name, boolean readOnly) {
-        return new BridgedTool(fake(name, readOnly, (context, input) -> null)).descriptor();
-    }
-
     interface Behavior {
         com.aioj.next.ai.agent.tool.ToolResult<Object> run(com.aioj.next.ai.agent.tool.ToolExecutionContext context,
                                                            JsonNode input);
     }
 
     static AgentTool fake(String name, boolean readOnly, Behavior behavior) {
-        com.aioj.next.ai.agent.tool.ToolDescriptor descriptor = new com.aioj.next.ai.agent.tool.ToolDescriptor(
-                name, "1.0.0", "fake tool", schema(), ToolRiskLevel.LOW, readOnly, true, Set.of("AI_CHAT"),
-                Set.of(DataClassification.USER_PRIVATE), 1000, Duration.ofSeconds(2),
-                com.aioj.next.ai.agent.tool.ToolAuditLevel.NO_ARGUMENTS);
+        ToolDescriptor descriptor = new ToolDescriptor(name, "1.0.0", "fake tool", schema(), Set.of("AI_CHAT"), 1000,
+                Duration.ofSeconds(2), name.startsWith("context.search") ? "search" : "other",
+                readOnly ? ExecutionClass.READ_ONLY : ExecutionClass.WRITE_CANDIDATE, FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.NO_ARGUMENTS);
         return new AgentTool() {
             @Override
-            public com.aioj.next.ai.agent.tool.ToolDescriptor descriptor() {
+            public ToolDescriptor descriptor() {
                 return descriptor;
             }
 

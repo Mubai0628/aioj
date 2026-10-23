@@ -1,5 +1,6 @@
 package com.aioj.next.ai.agent.tool;
 
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import tools.jackson.databind.JsonNode;
 
 /**

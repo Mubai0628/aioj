@@ -3,6 +3,7 @@ package com.aioj.next.ai.agent.assembly;
 import com.aioj.next.agent.harness.tool.api.BulkheadLimits;
 import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.agent.harness.tool.api.ToolCatalog;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.agent.harness.tool.api.ToolRejection;
 import com.aioj.next.agent.harness.tool.api.ToolRuntime;
 import com.aioj.next.agent.harness.tool.api.ToolRuntimes;
@@ -33,7 +34,7 @@ public class HarnessToolConfiguration {
     private static final Logger log = LoggerFactory.getLogger(HarnessToolConfiguration.class);
 
     /** Server-owned draft ids, on top of the Harness's own identity and permission fields. */
-    static final Set<String> DRAFT_FORBIDDEN_INPUT_FIELDS = Set.of("draftid", "generationjobid");
+    public static final Set<String> DRAFT_FORBIDDEN_INPUT_FIELDS = Set.of("draftid", "generationjobid");
 
     @Bean(destroyMethod = "close")
     public ToolRuntime harnessToolRuntime(List<AgentTool> tools, ProblemDraftWorkspaceMapper workspaceMapper,
@@ -46,16 +47,24 @@ public class HarnessToolConfiguration {
     public static ToolRuntime create(List<AgentTool> tools, ProblemDraftWorkspaceMapper workspaceMapper,
                                      ToolAuditService auditService, AiProperties.Capacity capacity,
                                      ObjectMapper objectMapper) {
-        List<BridgedTool> bridged = tools.stream().map(BridgedTool::new).toList();
-        ToolCatalog catalog = ToolCatalog.of(bridged, DRAFT_FORBIDDEN_INPUT_FIELDS);
+        ToolCatalog catalog = catalog(tools);
         for (ToolRejection rejection : catalog.rejections()) {
             log.warn("Agent tool left out of the catalog: tool={} class={} reasons={}", rejection.toolName(),
                     rejection.toolClass(), rejection.reasons());
         }
-        Map<String, com.aioj.next.ai.agent.tool.ToolDescriptor> legacyDescriptors = new LinkedHashMap<>();
-        tools.forEach(tool -> legacyDescriptors.putIfAbsent(tool.descriptor().name(), tool.descriptor()));
+        Map<String, ToolDescriptor> descriptors = new LinkedHashMap<>();
+        tools.forEach(tool -> {
+            if (tool.descriptor() != null && tool.descriptor().name() != null) {
+                descriptors.putIfAbsent(tool.descriptor().name(), tool.descriptor());
+            }
+        });
         return ToolRuntimes.create(catalog, List.of(new WorkspaceOwnershipAuthorizer(workspaceMapper)),
-                new ToolCallAuditSink(auditService, legacyDescriptors), bulkheadLimits(capacity), objectMapper);
+                new ToolCallAuditSink(auditService, descriptors), bulkheadLimits(capacity), objectMapper);
+    }
+
+    /** The tools as the Harness registers them; a tool that breaks the rules is in its rejections. */
+    public static ToolCatalog catalog(List<AgentTool> tools) {
+        return ToolCatalog.of(tools.stream().map(BridgedTool::new).toList(), DRAFT_FORBIDDEN_INPUT_FIELDS);
     }
 
     /**

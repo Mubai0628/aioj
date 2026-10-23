@@ -9,8 +9,10 @@ import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.model.api.CallProfile;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -75,84 +77,112 @@ public class AgentRuntime {
             interceptors = interceptors == null ? List.of() : List.copyOf(interceptors);
         }
 
-        public AgentRunRequest(String turnId, long userId, String conversationId, String policySnapshotId,
-                               Set<String> grantedScopes, List<ContextSection> sections, boolean requireToolCall,
-                               String outputMode, CallProfile profile, LoopBudget budget,
-                               ContestPolicyView contestPolicy, GuardVerdict messageLayerVerdict,
-                               Consumer<ProviderUsage> usageObserver, AiModelScope modelScope,
-                               Map<String, String> serverBindings, boolean allowStandardToolFallback,
-                               AgentCompletionPolicy completionPolicy) {
-            this(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections, requireToolCall,
-                    outputMode, profile, budget, contestPolicy, messageLayerVerdict, usageObserver, modelScope,
-                    serverBindings, allowStandardToolFallback, completionPolicy, List.of());
+        /** One request built in one place (plan A2.2), instead of the positional constructors it replaced. */
+        public static Builder builder(String turnId, long userId, String conversationId) {
+            return new Builder(turnId, userId, conversationId);
         }
 
-        public AgentRunRequest withInterceptors(List<LoopInterceptor> runInterceptors) {
-            return new AgentRunRequest(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections,
-                    requireToolCall, outputMode, profile, budget, contestPolicy, messageLayerVerdict, usageObserver,
-                    modelScope, serverBindings, allowStandardToolFallback, completionPolicy, runInterceptors);
-        }
+        public static final class Builder {
+            private final String turnId;
+            private final long userId;
+            private final String conversationId;
+            private String policySnapshotId;
+            private Set<String> grantedScopes = Set.of();
+            private List<ContextSection> sections = List.of();
+            private boolean requireToolCall;
+            private String outputMode;
+            private CallProfile profile;
+            private LoopBudget budget;
+            private ContestPolicyView contestPolicy;
+            private GuardVerdict messageLayerVerdict;
+            private Consumer<ProviderUsage> usageObserver;
+            private AiModelScope modelScope;
+            private Map<String, String> serverBindings = Map.of();
+            private boolean allowStandardToolFallback;
+            private AgentCompletionPolicy completionPolicy;
+            private final List<LoopInterceptor> interceptors = new ArrayList<>();
 
-        /** Signature before model-scope/resource-binding/fallback support. */
-        public AgentRunRequest(String turnId, long userId, String conversationId, String policySnapshotId,
-                               Set<String> grantedScopes, List<ContextSection> sections, boolean requireToolCall,
-                               String outputMode, CallProfile profile, LoopBudget budget,
-                               ContestPolicyView contestPolicy, GuardVerdict messageLayerVerdict,
-                               Consumer<ProviderUsage> usageObserver) {
-            this(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections, requireToolCall,
-                    outputMode, profile, budget, contestPolicy, messageLayerVerdict, usageObserver,
-                    AiModelScope.TEXT_GENERATION, Map.of(), false, AgentCompletionPolicy.none());
-        }
+            private Builder(String turnId, long userId, String conversationId) {
+                this.turnId = turnId;
+                this.userId = userId;
+                this.conversationId = conversationId;
+            }
 
-        /** Pre-P3-3 signature, kept so existing callers/tests compile unchanged. */
-        public AgentRunRequest(String turnId, long userId, String conversationId, String policySnapshotId,
-                               Set<String> grantedScopes, List<ContextSection> sections, boolean requireToolCall,
-                               String outputMode, CallProfile profile, LoopBudget budget) {
-            this(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections, requireToolCall,
-                    outputMode, profile, budget, null, null, null,
-                    AiModelScope.TEXT_GENERATION, Map.of(), false, AgentCompletionPolicy.none());
-        }
+            public Builder policySnapshotId(String value) {
+                this.policySnapshotId = value;
+                return this;
+            }
 
-        /** Draft/custom-scope signature without contest-only fields. */
-        public AgentRunRequest(String turnId, long userId, String conversationId, String policySnapshotId,
-                               Set<String> grantedScopes, List<ContextSection> sections, boolean requireToolCall,
-                               String outputMode, CallProfile profile, LoopBudget budget,
-                               AiModelScope modelScope, Map<String, String> serverBindings,
-                               boolean allowStandardToolFallback) {
-            this(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections, requireToolCall,
-                    outputMode, profile, budget, null, null, null, modelScope, serverBindings,
-                    allowStandardToolFallback, AgentCompletionPolicy.none());
-        }
+            public Builder grantedScopes(Set<String> value) {
+                this.grantedScopes = value;
+                return this;
+            }
 
-        /** Draft/custom-scope signature with a server-owned terminal gate. */
-        public AgentRunRequest(String turnId, long userId, String conversationId, String policySnapshotId,
-                               Set<String> grantedScopes, List<ContextSection> sections, boolean requireToolCall,
-                               String outputMode, CallProfile profile, LoopBudget budget,
-                               AiModelScope modelScope, Map<String, String> serverBindings,
-                               boolean allowStandardToolFallback, AgentCompletionPolicy completionPolicy) {
-            this(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections, requireToolCall,
-                    outputMode, profile, budget, null, null, null, modelScope, serverBindings,
-                    allowStandardToolFallback, completionPolicy);
-        }
+            public Builder sections(List<ContextSection> value) {
+                this.sections = value;
+                return this;
+            }
 
-        /** P3-3 signature (no message-layer verdict), kept for the same reason. */
-        public AgentRunRequest(String turnId, long userId, String conversationId, String policySnapshotId,
-                               Set<String> grantedScopes, List<ContextSection> sections, boolean requireToolCall,
-                               String outputMode, CallProfile profile, LoopBudget budget,
-                               ContestPolicyView contestPolicy) {
-            this(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections, requireToolCall,
-                    outputMode, profile, budget, contestPolicy, null, null,
-                    AiModelScope.TEXT_GENERATION, Map.of(), false, AgentCompletionPolicy.none());
-        }
+            public Builder requireToolCall(boolean value) {
+                this.requireToolCall = value;
+                return this;
+            }
 
-        /** P3-4 signature before token-observer support. */
-        public AgentRunRequest(String turnId, long userId, String conversationId, String policySnapshotId,
-                               Set<String> grantedScopes, List<ContextSection> sections, boolean requireToolCall,
-                               String outputMode, CallProfile profile, LoopBudget budget,
-                               ContestPolicyView contestPolicy, GuardVerdict messageLayerVerdict) {
-            this(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections, requireToolCall,
-                    outputMode, profile, budget, contestPolicy, messageLayerVerdict, null,
-                    AiModelScope.TEXT_GENERATION, Map.of(), false, AgentCompletionPolicy.none());
+            /** How the answer leaves the run (for example STREAM or BUFFERED) and the profile its calls use. */
+            public Builder output(String mode, CallProfile callProfile) {
+                this.outputMode = mode;
+                this.profile = callProfile;
+                return this;
+            }
+
+            public Builder budget(LoopBudget value) {
+                this.budget = value;
+                return this;
+            }
+
+            /** The contest policy projection and, for P3-4, the message layer's L3 verdict. */
+            public Builder contest(ContestPolicyView policy, GuardVerdict messageVerdict) {
+                this.contestPolicy = policy;
+                this.messageLayerVerdict = messageVerdict;
+                return this;
+            }
+
+            public Builder usageObserver(Consumer<ProviderUsage> value) {
+                this.usageObserver = value;
+                return this;
+            }
+
+            public Builder modelScope(AiModelScope value) {
+                this.modelScope = value;
+                return this;
+            }
+
+            public Builder serverBindings(Map<String, String> value) {
+                this.serverBindings = value;
+                return this;
+            }
+
+            public Builder allowStandardToolFallback(boolean value) {
+                this.allowStandardToolFallback = value;
+                return this;
+            }
+
+            public Builder completionPolicy(AgentCompletionPolicy value) {
+                this.completionPolicy = value;
+                return this;
+            }
+
+            public Builder interceptor(LoopInterceptor value) {
+                interceptors.add(Objects.requireNonNull(value, "interceptor"));
+                return this;
+            }
+
+            public AgentRunRequest build() {
+                return new AgentRunRequest(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections,
+                        requireToolCall, outputMode, Objects.requireNonNull(profile, "profile"),
+                        Objects.requireNonNull(budget, "budget"), contestPolicy, messageLayerVerdict, usageObserver,
+                        modelScope, serverBindings, allowStandardToolFallback, completionPolicy, interceptors);
+            }
         }
     }
 

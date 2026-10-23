@@ -1,5 +1,7 @@
 package com.aioj.next.ai.agent.tool;
 
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.persistence.entity.AiToolCallEntity;
 import com.aioj.next.ai.persistence.mapper.AiToolCallMapper;

@@ -1,10 +1,10 @@
 package com.aioj.next.ai.agent.draft.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -22,7 +22,7 @@ public class DraftStateGetTool implements AgentTool {
         this.descriptor = DraftToolSupport.descriptor("draft.state.get",
                 "Read the authoritative mutable state and current validation summaries of this problem workspace. "
                         + "The workspace identity is server-bound and cannot be selected by arguments.",
-                DraftToolSupport.objectSchema(mapper, false), ToolRiskLevel.LOW, true, true, Duration.ofSeconds(5));
+                DraftToolSupport.objectSchema(mapper, false), "other", ExecutionClass.READ_ONLY, Duration.ofSeconds(5));
     }
 
     @Override public ToolDescriptor descriptor() { return descriptor; }

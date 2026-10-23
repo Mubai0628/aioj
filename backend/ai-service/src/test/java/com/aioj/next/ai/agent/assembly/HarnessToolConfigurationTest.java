@@ -3,13 +3,12 @@ package com.aioj.next.ai.agent.assembly;
 import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.agent.harness.tool.api.ToolRuntime;
-import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
 import com.aioj.next.ai.agent.tool.ToolAuditService;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftWorkspaceMapper;
 import org.junit.jupiter.api.Test;
@@ -69,12 +68,12 @@ class HarnessToolConfigurationTest {
                 {"type":"object","additionalProperties":false,"required":["draftId"],
                  "properties":{"draftId":{"type":"string"}}}
                 """);
-        com.aioj.next.ai.agent.tool.ToolDescriptor descriptor = new com.aioj.next.ai.agent.tool.ToolDescriptor(
-                "draft.state.peek", "1.0.0", "broken tool", schema, ToolRiskLevel.LOW, true, true, Set.of("AI_CHAT"),
-                Set.of(DataClassification.USER_PRIVATE), 100, Duration.ofSeconds(1), ToolAuditLevel.FULL);
+        ToolDescriptor descriptor = new ToolDescriptor("draft.state.peek", "1.0.0", "broken tool", schema,
+                Set.of("AI_CHAT"), 100, Duration.ofSeconds(1), "other", ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN, ToolAuditLevel.FULL);
         return new AgentTool() {
             @Override
-            public com.aioj.next.ai.agent.tool.ToolDescriptor descriptor() {
+            public ToolDescriptor descriptor() {
                 return descriptor;
             }
 

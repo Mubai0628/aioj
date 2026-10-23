@@ -1,16 +1,17 @@
 package com.aioj.next.ai.agent.problem.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.SourceRef;
-import com.aioj.next.ai.agent.tool.ToolAuditLevel;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
 import tools.jackson.databind.JsonNode;
@@ -85,15 +86,13 @@ public class ProblemSearchTool implements AgentTool {
                         + "projection (id, policy markers, excerpt) — AI-restricted problems never appear "
                         + "in the result at all.",
                 buildSchema(),
-                ToolRiskLevel.LOW,
-                true,
-                true,
                 Set.of("AI_CHAT"),
-                Set.of(DataClassification.CONTEST_PUBLIC_ACTIVE),
                 2000,
                 Duration.ofSeconds(5),
-                ToolAuditLevel.FULL
-        );
+                "other",
+                ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.FULL);
     }
 
     @Override

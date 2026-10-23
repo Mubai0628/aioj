@@ -1,7 +1,7 @@
 package com.aioj.next.ai.agent.memory.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
-import com.aioj.next.ai.agent.tool.ToolRegistry;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.persistence.entity.AiMemoryClaimEntity;
@@ -37,10 +37,11 @@ class MemoryFetchEvidenceToolTest {
     @Test
     void descriptorPassesRegistryRules() {
         // Name, schema subset, no identity fields — construction must satisfy the registry contract.
-        new ToolRegistry(List.of(tool));
+        assertThat(com.aioj.next.ai.agent.assembly.HarnessToolConfiguration.catalog(List.of(tool)).rejections()).isEmpty();
         assertThat(tool.descriptor().name()).isEqualTo("memory.fetch_evidence");
         assertThat(tool.descriptor().requiredScopes()).containsExactly("AI_CHAT");
-        assertThat(tool.descriptor().readOnly()).isTrue();
+        assertThat(tool.descriptor().executionClass()).isEqualTo(ExecutionClass.READ_ONLY);
+        assertThat(tool.descriptor().budgetCategory()).isEqualTo("fetch");
     }
 
     @Test

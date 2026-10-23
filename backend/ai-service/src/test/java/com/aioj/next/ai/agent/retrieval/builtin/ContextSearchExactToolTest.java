@@ -30,7 +30,7 @@ class ContextSearchExactToolTest {
     @Test
     void descriptorPassesRegistryRules() {
         // Name, schema subset, no identity fields — construction must satisfy the registry contract.
-        new com.aioj.next.ai.agent.tool.ToolRegistry(List.of(tool));
+        assertThat(com.aioj.next.ai.agent.assembly.HarnessToolConfiguration.catalog(List.of(tool)).rejections()).isEmpty();
         assertThat(tool.descriptor().name()).isEqualTo("context.search_exact");
         assertThat(tool.descriptor().requiredScopes()).containsExactly("AI_CHAT");
     }

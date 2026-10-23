@@ -18,21 +18,19 @@ import java.util.Map;
  */
 public final class ToolCallAuditSink implements ToolAuditSink {
     private final ToolAuditService auditService;
-    private final Map<String, com.aioj.next.ai.agent.tool.ToolDescriptor> legacyDescriptors;
+    private final Map<String, ToolDescriptor> descriptors;
 
-    /** @param legacyDescriptors the tools' own descriptors by name, which the audit rows are built from */
-    public ToolCallAuditSink(ToolAuditService auditService,
-                             Map<String, com.aioj.next.ai.agent.tool.ToolDescriptor> legacyDescriptors) {
+    /** @param descriptors the catalog's descriptors by name, for calls rejected before they had one */
+    public ToolCallAuditSink(ToolAuditService auditService, Map<String, ToolDescriptor> descriptors) {
         this.auditService = auditService;
-        this.legacyDescriptors = Map.copyOf(legacyDescriptors);
+        this.descriptors = Map.copyOf(descriptors);
     }
 
     @Override
     public Object start(ToolExecutionContext context, int callSeq, ToolDescriptor descriptor, ToolCallRequest call,
                         String decisionId) {
-        return auditService.start(BridgedTool.legacyContext(context), runId(context), callSeq,
-                legacyDescriptors.get(call.toolName()), call.toolName(), call.callId(), call.argumentsJson(),
-                decisionId);
+        return auditService.start(BridgedTool.legacyContext(context), runId(context), callSeq, descriptor,
+                call.toolName(), call.callId(), call.argumentsJson(), decisionId);
     }
 
     @Override
@@ -47,7 +45,7 @@ public final class ToolCallAuditSink implements ToolAuditSink {
     @Override
     public void rejected(ToolExecutionContext context, int callSeq, ToolCallRequest call, ToolOutcome outcome) {
         auditService.record(BridgedTool.legacyContext(context), runId(context), callSeq,
-                legacyDescriptors.get(call.toolName()), call.toolName(), call.callId(), call.argumentsJson(),
+                descriptors.get(call.toolName()), call.toolName(), call.callId(), call.argumentsJson(),
                 outcome.decisionId(), status(outcome), classification(outcome), outcome.modelPayload(),
                 outcome.durationMillis(), outcome.result().errorCode());
     }

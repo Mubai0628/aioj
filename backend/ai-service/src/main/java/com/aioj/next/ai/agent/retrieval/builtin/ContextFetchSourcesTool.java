@@ -1,14 +1,15 @@
 package com.aioj.next.ai.agent.retrieval.builtin;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.SourceRef;
-import com.aioj.next.ai.agent.tool.ToolAuditLevel;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.entity.AiMessageEntity;
@@ -72,15 +73,13 @@ public class ContextFetchSourcesTool implements AgentTool {
                         + "scope parameter). Always use this to verify exact wording/code before answering questions "
                         + "about earlier turns — never rely on digest summaries alone for facts, numbers or code.",
                 buildSchema(),
-                ToolRiskLevel.LOW,
-                true,
-                true,
                 Set.of("AI_CHAT"),
-                Set.of(DataClassification.USER_PRIVATE),
                 fetchBudgetTokens,
                 Duration.ofSeconds(8),
-                ToolAuditLevel.FULL
-        );
+                "fetch",
+                ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.FULL);
     }
 
     @Override

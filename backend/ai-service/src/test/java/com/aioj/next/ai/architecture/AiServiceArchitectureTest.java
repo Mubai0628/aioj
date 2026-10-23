@@ -42,6 +42,17 @@ class AiServiceArchitectureTest {
             "com.aioj.next.ai.domain.AiModelCompletionClient",
             "com.aioj.next.ai.domain.AiModelCatalogClient");
 
+    /** T1.5: the agent loop and the tool pipeline are the Harness's; ai-service keeps none of its own. */
+    private static final Set<String> RETIRED_AGENT_PATHS = Set.of(
+            "com.aioj.next.ai.agent.tool.ToolBroker",
+            "com.aioj.next.ai.agent.tool.ToolRegistry",
+            "com.aioj.next.ai.agent.tool.ToolAuthorizationService",
+            "com.aioj.next.ai.agent.tool.ToolResultSanitizer",
+            "com.aioj.next.ai.agent.tool.ToolInputSchemaValidator",
+            "com.aioj.next.ai.agent.tool.ToolDescriptor",
+            "com.aioj.next.ai.agent.tool.ToolRiskLevel",
+            "com.aioj.next.ai.agent.tool.ToolAuditLevel");
+
     /**
      * Plan §3.2.1 rule 1: Provider HTTP calls happen only in the model call package.
      * A Provider call needs its API key, so key reads mark where calls can happen:
@@ -85,6 +96,22 @@ class AiServiceArchitectureTest {
             }
         }
         assertThat(present).as("legacy model call paths (plan §3.2.1 rule 3)").isEmpty();
+    }
+
+    @Test
+    void theOldAgentLoopAndToolPipelineAreGone() {
+        Set<String> present = new TreeSet<>();
+        for (JavaClass type : MAIN) {
+            if (RETIRED_AGENT_PATHS.contains(type.getName())) {
+                present.add(type.getName());
+            }
+        }
+        assertThat(present).as("ai-service's own loop and tool pipeline (T1.5)").isEmpty();
+        // The Harness tool pipeline is reached only through its api: no ai-service class builds the loop's internals.
+        assertThat(AiServiceArchitectureRules.callersOf(MAIN,
+                call -> call.getTargetOwner().getPackageName().startsWith("com.aioj.next.agent.harness")
+                        && call.getTargetOwner().getPackageName().contains(".internal")))
+                .as("callers of Harness internals").isEmpty();
     }
 
     @Test

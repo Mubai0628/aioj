@@ -1,16 +1,17 @@
 package com.aioj.next.ai.agent.problem.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.SourceRef;
-import com.aioj.next.ai.agent.tool.ToolAuditLevel;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.domain.ProblemServiceClient;
 import com.aioj.next.common.error.DomainException;
@@ -69,15 +70,13 @@ public class SubmissionFetchAllowedViewTool implements AgentTool {
                         + "submissions are accessible; anything else returns 'no accessible matching problem'. "
                         + "Never reveal hidden test data — the view never contains it.",
                 buildSchema(),
-                ToolRiskLevel.LOW,
-                true,
-                true,
                 Set.of("AI_CHAT"),
-                Set.of(DataClassification.USER_PRIVATE),
                 4000,
                 Duration.ofSeconds(10),
-                ToolAuditLevel.FULL
-        );
+                "other",
+                ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.FULL);
     }
 
     @Override

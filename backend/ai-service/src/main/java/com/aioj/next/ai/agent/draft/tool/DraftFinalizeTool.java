@@ -1,10 +1,10 @@
 package com.aioj.next.ai.agent.draft.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
 import com.aioj.next.contract.ai.ProblemDraftResponse;
 import tools.jackson.databind.JsonNode;
@@ -26,7 +26,7 @@ public class DraftFinalizeTool implements AgentTool {
                 "Finalize the current fingerprint only after authoritative static validation, public samples, "
                         + "testcase format, and full package execution have passed. Creates PENDING_REVIEW only; "
                         + "never approves, imports, activates, or publishes a problem.",
-                DraftToolSupport.objectSchema(mapper, false), ToolRiskLevel.HIGH, false, true,
+                DraftToolSupport.objectSchema(mapper, false), "other", ExecutionClass.WRITE_CANDIDATE,
                 Duration.ofSeconds(20));
     }
 

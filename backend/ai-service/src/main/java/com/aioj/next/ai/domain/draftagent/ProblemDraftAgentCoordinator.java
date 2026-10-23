@@ -176,28 +176,21 @@ public class ProblemDraftAgentCoordinator {
 
             AiChatMessageResponse currentUserMessage = currentUserMessage(job.getCreatorUserId(), turn);
             long startedNanos = System.nanoTime();
-            AgentRuntime.AgentRunResult result = agentRuntime.run(new AgentRuntime.AgentRunRequest(
-                    turn.getId(),
-                    job.getCreatorUserId(),
-                    workspace.getConversationId(),
-                    null,
-                    Set.of(ProblemDraftWorkspaceService.SCOPE),
-                    contextSections(workspace, currentUserMessage),
-                    true,
-                    "problem_draft_agent",
-                    CallProfile.PROBLEM_DRAFT,
-                    budget(),
-                    null,
-                    null,
-                    usage -> recordUsage(job.getCreatorUserId(), usage),
-                    AiModelScope.PROBLEM_DRAFT,
-                    Map.of(
+            AgentRuntime.AgentRunResult result = agentRuntime.run(AgentRuntime.AgentRunRequest
+                    .builder(turn.getId(), job.getCreatorUserId(), workspace.getConversationId())
+                    .grantedScopes(Set.of(ProblemDraftWorkspaceService.SCOPE))
+                    .sections(contextSections(workspace, currentUserMessage))
+                    .requireToolCall(true)
+                    .output("problem_draft_agent", CallProfile.PROBLEM_DRAFT)
+                    .budget(budget())
+                    .usageObserver(usage -> recordUsage(job.getCreatorUserId(), usage))
+                    .modelScope(AiModelScope.PROBLEM_DRAFT)
+                    .serverBindings(Map.of(
                             "workspaceId", workspace.getId(),
-                            "generationJobId", String.valueOf(job.getId())
-                    ),
-                    true,
-                    AgentRuntime.AgentCompletionPolicy.requireSuccessfulTool("draft.finalize")
-            ));
+                            "generationJobId", String.valueOf(job.getId())))
+                    .allowStandardToolFallback(true)
+                    .completionPolicy(AgentRuntime.AgentCompletionPolicy.requireSuccessfulTool("draft.finalize"))
+                    .build());
             long wallTimeMillis = Duration.ofNanos(System.nanoTime() - startedNanos).toMillis();
             workspaceService.storeAgentRunMetrics(workspace.getId(), job.getCreatorUserId(), Map.of(
                     "wallTimeMillis", wallTimeMillis,

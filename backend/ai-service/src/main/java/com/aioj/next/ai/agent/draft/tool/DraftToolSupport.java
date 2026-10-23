@@ -1,12 +1,13 @@
 package com.aioj.next.ai.agent.draft.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
-import com.aioj.next.ai.agent.tool.ToolAuditLevel;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
@@ -48,12 +49,11 @@ final class DraftToolSupport {
                 TrustLevel.SERVER_AUTHORITATIVE);
     }
 
+    /** Draft tools run in the draft scope and never audit their arguments; every one fails open. */
     static ToolDescriptor descriptor(String name, String description, JsonNode schema,
-                                     ToolRiskLevel risk, boolean readOnly, boolean idempotent,
-                                     Duration timeout) {
-        return new ToolDescriptor(name, "1.0.0", description, schema, risk, readOnly, idempotent,
-                Set.of(ProblemDraftWorkspaceService.SCOPE), Set.of(DataClassification.STAFF_ONLY),
-                4000, timeout, ToolAuditLevel.NO_ARGUMENTS);
+                                     String budgetCategory, ExecutionClass executionClass, Duration timeout) {
+        return new ToolDescriptor(name, "1.0.0", description, schema, Set.of(ProblemDraftWorkspaceService.SCOPE),
+                4000, timeout, budgetCategory, executionClass, FailurePolicy.FAIL_OPEN, ToolAuditLevel.NO_ARGUMENTS);
     }
 
     static ObjectNode objectSchema(ObjectMapper mapper, boolean additionalProperties) {

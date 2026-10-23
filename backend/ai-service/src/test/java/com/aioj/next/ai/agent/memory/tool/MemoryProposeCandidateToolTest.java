@@ -1,9 +1,9 @@
 package com.aioj.next.ai.agent.memory.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.memory.MemoryCandidateIngestionService;
 import com.aioj.next.ai.agent.memory.MemoryDistrustPolicy;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
-import com.aioj.next.ai.agent.tool.ToolRegistry;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.domain.memory.AiMemoryCandidateService;
@@ -47,12 +47,11 @@ class MemoryProposeCandidateToolTest {
     @Test
     void descriptorPassesRegistryRules() {
         // Name, schema subset, no identity fields — construction must satisfy the registry contract.
-        new ToolRegistry(List.of(tool));
+        assertThat(com.aioj.next.ai.agent.assembly.HarnessToolConfiguration.catalog(List.of(tool)).rejections()).isEmpty();
         assertThat(tool.descriptor().name()).isEqualTo("memory.propose_candidate");
         assertThat(tool.descriptor().requiredScopes()).containsExactly("AI_CHAT");
-        assertThat(tool.descriptor().readOnly()).isFalse();
-        assertThat(tool.descriptor().idempotent()).isTrue();
-        assertThat(tool.descriptor().riskLevel().name()).isEqualTo("MEDIUM");
+        assertThat(tool.descriptor().executionClass()).isEqualTo(ExecutionClass.WRITE_CANDIDATE);
+        assertThat(tool.descriptor().budgetCategory()).isEqualTo("other");
         assertThat(tool.descriptor().maxResultTokens()).isEqualTo(600);
         assertThat(tool.descriptor().timeout()).isEqualTo(java.time.Duration.ofSeconds(5));
         assertThat(tool.descriptor().auditLevel().name()).isEqualTo("FULL");

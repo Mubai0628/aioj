@@ -1,14 +1,15 @@
 package com.aioj.next.ai.agent.profile.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.agent.harness.tool.api.FailurePolicy;
+import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.SourceRef;
-import com.aioj.next.ai.agent.tool.ToolAuditLevel;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.persistence.entity.AiLearningProfileEntity;
 import com.aioj.next.ai.persistence.entity.AiProfileSignalEntity;
@@ -67,15 +68,13 @@ public class ProfileSearchTool implements AgentTool {
                         + "only) together with related profile signal snippets. Call only when the answer "
                         + "depends on the user's level, mastery, or weak areas — do not call every turn.",
                 buildSchema(),
-                ToolRiskLevel.LOW,
-                true,
-                true,
                 Set.of("AI_CHAT"),
-                Set.of(DataClassification.USER_PRIVATE),
                 2000,
                 Duration.ofSeconds(5),
-                ToolAuditLevel.FULL
-        );
+                "search",
+                ExecutionClass.READ_ONLY,
+                FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.FULL);
     }
 
     @Override

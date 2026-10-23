@@ -6,8 +6,8 @@ import java.time.Duration;
 
 /**
  * Per-run loop budget (design doc §4.2). Bounds total model steps, total tool
- * calls, and per-category calls (search/fetch) so a model cannot loop forever
- * or hammer one tool category.
+ * calls, and per-category calls (search/fetch/sandbox) so a model cannot loop
+ * forever or hammer one tool category. A tool's category is in its descriptor.
  */
 public record LoopBudget(
         int maxAgentSteps,
@@ -48,47 +48,6 @@ public record LoopBudget(
     public static LoopBudget from(AiProperties.AgentCore config) {
         return new LoopBudget(config.getMaxAgentSteps(), config.getMaxToolCalls(),
                 config.getMaxSearchCalls(), config.getMaxFetchCalls());
-    }
-
-    public static String categoryOf(String toolName) {
-        if ("draft.testcase.generate".equals(toolName)) {
-            return "testcase_generate";
-        }
-        if ("draft.testcase.run_package".equals(toolName)) {
-            return "testcase_run";
-        }
-        if ("draft.code.execute".equals(toolName) || "draft.samples.run".equals(toolName)) {
-            return "sandbox";
-        }
-        if (toolName != null && (toolName.startsWith("context.search") || toolName.startsWith("memory.search")
-                || toolName.startsWith("profile.search"))) {
-            return "search";
-        }
-        if (toolName != null && (toolName.startsWith("context.fetch") || toolName.startsWith("memory.fetch"))) {
-            return "fetch";
-        }
-        return "other";
-    }
-
-    /** Category-level cap; a call over its category cap is rejected as data, not executed. */
-    public boolean categoryExhausted(String toolName, int searchCalls, int fetchCalls) {
-        return categoryExhausted(toolName, searchCalls, fetchCalls, 0, 0, 0);
-    }
-
-    /** Category-level caps including draft Sandbox/package operations. */
-    public boolean categoryExhausted(String toolName, int searchCalls, int fetchCalls,
-                                     int sandboxCalls, int testcaseGenerations,
-                                     int testcasePackageRuns) {
-        return switch (categoryOf(toolName)) {
-            case "search" -> searchCalls >= maxSearchCalls;
-            case "fetch" -> fetchCalls >= maxFetchCalls;
-            case "sandbox" -> sandboxCalls >= maxSandboxCalls;
-            case "testcase_generate" -> sandboxCalls >= maxSandboxCalls
-                    || testcaseGenerations >= maxTestcaseGenerations;
-            case "testcase_run" -> sandboxCalls >= maxSandboxCalls
-                    || testcasePackageRuns >= maxTestcasePackageRuns;
-            default -> false;
-        };
     }
 
     public boolean hasDeadline() {

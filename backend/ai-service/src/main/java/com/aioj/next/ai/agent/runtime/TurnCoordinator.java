@@ -473,21 +473,19 @@ public class TurnCoordinator {
                             ContestAiAssistanceTelemetryService.SOURCE_AGENT_SAFE_REGENERATION),
                     contestAssistanceUsageObserver(telemetryContext,
                             ContestAiAssistanceTelemetryService.SOURCE_AGENT_RECHECK_REGENERATION));
-            AgentRuntime.AgentRunResult runResult = agentRuntime.run(new AgentRuntime.AgentRunRequest(
-                    turn.getId(),
-                    userId,
-                    conversation.getId(),
-                    snapshot.id(),
-                    Set.of("AI_CHAT"),
-                    bootstrap.sections(),
-                    requireToolCall,
-                    restrictedTurn ? "BUFFERED" : "STREAM",
-                    restrictedTurn ? CallProfile.CHAT_BUFFERED : CallProfile.CHAT_STREAM,
-                    LoopBudget.from(properties.getAgentCore()),
-                    contestPolicy,
-                    msgVerdict,
-                    attemptUsage
-            ).withInterceptors(List.of(finalCheck)));
+            AgentRuntime.AgentRunResult runResult = agentRuntime.run(AgentRuntime.AgentRunRequest
+                    .builder(turn.getId(), userId, conversation.getId())
+                    .policySnapshotId(snapshot.id())
+                    .grantedScopes(Set.of("AI_CHAT"))
+                    .sections(bootstrap.sections())
+                    .requireToolCall(requireToolCall)
+                    .output(restrictedTurn ? "BUFFERED" : "STREAM",
+                            restrictedTurn ? CallProfile.CHAT_BUFFERED : CallProfile.CHAT_STREAM)
+                    .budget(LoopBudget.from(properties.getAgentCore()))
+                    .contest(contestPolicy, msgVerdict)
+                    .usageObserver(attemptUsage)
+                    .interceptor(finalCheck)
+                    .build());
             boolean pseudoStream = finalCheck.pseudoStream();
             // Quota semantics (P3-5): exactly one usage record per turn, attributed to the
             // attempt that determined the delivered content (the first on pass, the

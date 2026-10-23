@@ -7,7 +7,6 @@ import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
 import com.aioj.next.ai.agent.policy.GuardLayer;
 import com.aioj.next.ai.agent.policy.ParticipantStatus;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
-import com.aioj.next.ai.agent.tool.ToolRegistry;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolStatus;
 import com.aioj.next.ai.domain.ProblemServiceClient;
@@ -195,14 +194,17 @@ class ProblemFetchAllowedViewToolTest {
 
     @Test
     void allThreeProblemToolDescriptorsPassRegistryStartupValidation() {
-        // The production registry fails startup on any contract violation; pin that the
+        // The Harness catalog leaves out any tool that breaks the contract; pin that the
         // P3-3 tool surface (names, MFJS-safe schemas, no identity fields) is legal.
-        ToolRegistry registry = new ToolRegistry(java.util.List.of(
-                tool,
-                new ProblemSearchTool(recorder, OBJECT_MAPPER, 60_000L, 5),
-                new SubmissionFetchAllowedViewTool(problemServiceClient, recorder, OBJECT_MAPPER)));
+        com.aioj.next.agent.harness.tool.api.ToolCatalog catalog =
+                com.aioj.next.ai.agent.assembly.HarnessToolConfiguration.catalog(java.util.List.of(
+                        tool,
+                        new ProblemSearchTool(recorder, OBJECT_MAPPER, 60_000L, 5),
+                        new SubmissionFetchAllowedViewTool(problemServiceClient, recorder, OBJECT_MAPPER)));
 
-        assertThat(registry.descriptors()).extracting(com.aioj.next.ai.agent.tool.ToolDescriptor::name)
+        assertThat(catalog.rejections()).isEmpty();
+        assertThat(catalog.visible(java.util.Set.of("AI_CHAT")))
+                .extracting(com.aioj.next.agent.harness.tool.api.ToolDescriptor::name)
                 .containsExactly("problem.fetch_allowed_view", "problem.search", "submission.fetch_allowed_view");
     }
 

@@ -1,10 +1,10 @@
 package com.aioj.next.ai.agent.draft.tool;
 
+import com.aioj.next.agent.harness.tool.api.ExecutionClass;
 import com.aioj.next.ai.agent.tool.AgentTool;
-import com.aioj.next.ai.agent.tool.ToolDescriptor;
+import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
-import com.aioj.next.ai.agent.tool.ToolRiskLevel;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftExecutionService;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -29,7 +29,7 @@ public class DraftExecutionGetTool implements AgentTool {
         this.descriptor = DraftToolSupport.descriptor("draft.execution.get",
                 "Read a bounded segment of stdout/stderr and resource metrics for an execution that belongs to the "
                         + "current workspace. Cross-workspace ids are rejected.",
-                schema, ToolRiskLevel.LOW, true, true, Duration.ofSeconds(5));
+                schema, "other", ExecutionClass.READ_ONLY, Duration.ofSeconds(5));
     }
 
     @Override public ToolDescriptor descriptor() { return descriptor; }
