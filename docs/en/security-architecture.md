@@ -44,6 +44,7 @@ agent-sandbox, added for Agent tool execution, reuses the judge Sandbox image an
 
 - it joins only the internal `agent-sandbox-net` network and publishes no port; the only other member of that network is agent-executor, which holds no database, message-queue, JWT, or AI secret;
 - MySQL, Redis, RabbitMQ, business services, and the judge Sandbox are not on its network;
+- ai-service reaches it only through agent-executor over app-net, with agent-executor's own token; ai-service joins no sandbox network and holds no sandbox token;
 - its root filesystem is read-only, `/tmp` is a size-capped tmpfs, and it mounts no business volume; PID, memory, CPU, output, and copy-out are bounded;
 - its token is separate from the judge Sandbox's.
 
@@ -58,7 +59,7 @@ Whether gVisor (`runsc`) can host go-judge and so remove `privileged` has not be
 - Memory writes require a candidate, evidence, conflict checks, and user confirmation.
 - Problem-draft workspace, user, draft, execution, and artifact ownership are server-bound; model tool arguments cannot select or override these resources.
 - Raw DeepSeek `reasoning_content` exists only in memory for the current tool loop and never enters the database, logs, audit, or frontend.
-- Code, generators, and packages reach Sandbox only through judge-worker; hidden cases return aggregate results to the model, and general tool audit excludes raw source and process output.
+- Code, generators, and packages reach agent-sandbox only through agent-executor, never the judge Sandbox; hidden cases return aggregate results to the model, and general tool audit excludes raw source and process output.
 - Manual ZIPs require SHA, manifest, path, symlink, duplicate-entry, expanded-size, and compression-ratio checks; imports without full-package execution acceptance are explicitly `MANUAL_UNVERIFIED`.
 
 ## Secrets and delivery

@@ -13,9 +13,9 @@ The target AI problem-draft path no longer lets a fixed seven-stage provider pip
 administration UI
   -> ProblemDraftAgentCoordinator
   -> AgentRuntime
-  -> ToolBroker
-  -> judge-worker
-  -> Docker / go-judge Sandbox
+  -> agent-harness loop and tool runtime
+  -> agent-executor
+  -> agent-sandbox (go-judge)
 
 ai-service -> problem-service -> problem and testcase package
 ```
@@ -72,11 +72,11 @@ Tools accept only business arguments the model is allowed to choose. Workspace, 
 
 ## Execution and audit
 
-ai-service never talks directly to Docker or go-judge. Every C++17, Java 17, and Python 3 execution passes through judge-worker to Sandbox and is bounded by source, input, batch, file, package, time, memory, process, and output limits. Full-package execution reuses the formal STANDARD comparison semantics. Hidden cases return counts, failure classifications, and aggregate resource data rather than complete hidden input or output.
+ai-service never talks directly to Docker or go-judge. Every C++17, Java 17, and Python 3 execution passes through agent-executor to agent-sandbox and is bounded by source, input, batch, file, package, time, memory, process, and output limits. A program run gets at most 256 MiB and a compile or generator script at most 384 MiB; a request above either cap is rejected, and a draft whose memory limit is above the run cap is reported as exceeding the draft sandbox's limit rather than as a memory-limit failure. Full-package execution reuses the formal STANDARD comparison semantics. Hidden cases return counts, failure classifications, and aggregate resource data rather than complete hidden input or output.
 
-Sandbox defaults both `ES_OUTPUT_LIMIT` and `ES_COPY_OUT_LIMIT` to 64 MiB, which must not be lower than the Agent's 50 MiB testcase-package ceiling. These correspond to go-judge's process-output and copy-out limits. If execution reports success without a cached package handle, judge-worker now returns the structured `PACKAGE_CACHE_FILE_MISSING` failure instead of treating the missing artifact as success. See the [official go-judge documentation](https://github.com/criyle/go-judge) for the parameter semantics.
+agent-sandbox defaults both `ES_OUTPUT_LIMIT` and `ES_COPY_OUT_LIMIT` (`AGENT_SANDBOX_OUTPUT_LIMIT` and `AGENT_SANDBOX_COPY_OUT_LIMIT`) to 64 MiB, which must not be lower than the Agent's 50 MiB testcase-package ceiling. These correspond to go-judge's process-output and copy-out limits. If execution reports success without a cached package handle, agent-executor returns the structured `PACKAGE_CACHE_FILE_MISSING` failure instead of treating the missing artifact as success. See the [official go-judge documentation](https://github.com/criyle/go-judge) for the parameter semantics.
 
-ToolBroker writes a durable `RUNNING` audit record before real execution, then updates status, result hash, safe summary, and resource metrics. Raw code, generators, stdin/stdout/stderr, package bytes, and provider reasoning do not enter general audit fields. Tools have real timeout and cancellation; execution results are paged, truncated, and expire.
+The harness tool runtime writes a durable `RUNNING` audit record before real execution, then updates status, result hash, safe summary, and resource metrics. Raw code, generators, stdin/stdout/stderr, package bytes, and provider reasoning do not enter general audit fields. Tools have real timeout and cancellation; execution results are paged, truncated, and expire.
 
 ## Two testcase-package paths
 

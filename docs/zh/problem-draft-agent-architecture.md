@@ -13,9 +13,9 @@ AI 题目草稿的目标运行路径不再由固定七阶段 Provider 流水线�
 管理端
   -> ProblemDraftAgentCoordinator
   -> AgentRuntime
-  -> ToolBroker
-  -> judge-worker
-  -> Docker / go-judge Sandbox
+  -> agent-harness 循环与工具运行时
+  -> agent-executor
+  -> agent-sandbox（go-judge）
 
 ai-service -> problem-service -> 题目与测试包
 ```
@@ -72,11 +72,11 @@ DeepSeek 思考模式的 `reasoning_content` 只作为当前工具循环的内�
 
 ## 执行与审计
 
-ai-service 不直接访问 Docker 或 go-judge。所有 C++17、Java 17 和 Python 3 执行均经 judge-worker 调用 Sandbox，并受源码、输入、批次数量、文件、包体积、时间、内存、进程与输出硬限制。全包执行复用正式判题的 STANDARD 比较语义；隐藏用例只返回通过数、失败分类和聚合资源数据，不返回完整隐藏输入输出。
+ai-service 不直接访问 Docker 或 go-judge。所有 C++17、Java 17 和 Python 3 执行均经 agent-executor 调用 agent-sandbox，并受源码、输入、批次数量、文件、包体积、时间、内存、进程与输出硬限制。单次运行最多 256 MiB，编译和生成脚本最多 384 MiB；超过上限的请求直接拒绝，题目内存限制超过运行上限时明确报告超出出题沙箱的内存上限，不误报为超内存。全包执行复用正式判题的 STANDARD 比较语义；隐藏用例只返回通过数、失败分类和聚合资源数据，不返回完整隐藏输入输出。
 
-Sandbox 的 `ES_OUTPUT_LIMIT` 与 `ES_COPY_OUT_LIMIT` 默认均为 64 MiB，必须不小于 Agent 测试包 50 MiB 上限。该约束分别对应 go-judge 的进程输出限制与 copy-out 上限；若执行报告成功但未返回缓存包句柄，judge-worker 会返回 `PACKAGE_CACHE_FILE_MISSING` 结构化失败，不再把无工件状态误报为成功。参数语义参见 [go-judge 官方说明](https://github.com/criyle/go-judge)。
+agent-sandbox 的 `ES_OUTPUT_LIMIT` 与 `ES_COPY_OUT_LIMIT`（`AGENT_SANDBOX_OUTPUT_LIMIT`、`AGENT_SANDBOX_COPY_OUT_LIMIT`）默认均为 64 MiB，必须不小于 Agent 测试包 50 MiB 上限。该约束分别对应 go-judge 的进程输出限制与 copy-out 上限；若执行报告成功但未返回缓存包句柄，agent-executor 会返回 `PACKAGE_CACHE_FILE_MISSING` 结构化失败，不再把无工件状态误报为成功。参数语义参见 [go-judge 官方说明](https://github.com/criyle/go-judge)。
 
-ToolBroker 在真正执行前写入 `RUNNING` 审计，结束后更新状态、结果哈希、安全摘要和资源指标。原始代码、生成器、stdin/stdout/stderr、测试包字节和 Provider 思考不进入通用审计字段。工具有真实超时与取消；执行结果分页、截断并设置有效期。
+Harness 工具运行时在真正执行前写入 `RUNNING` 审计，结束后更新状态、结果哈希、安全摘要和资源指标。原始代码、生成器、stdin/stdout/stderr、测试包字节和 Provider 思考不进入通用审计字段。工具有真实超时与取消；执行结果分页、截断并设置有效期。
 
 ## 测试包双路径
 

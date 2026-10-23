@@ -51,7 +51,7 @@ Agent Core V3 为学生 AI 助教和教师 AI 题目草稿提供可审计、可�
 
 ### AI 题目草稿场景
 
-AI 题目草稿路径复用同一 `AgentRuntime` 与 `ToolBroker`，不再运行固定七阶段模型流水线，也不复制第二套 Agent 循环。每道题使用独立持久化 workspace 和专用 `problem_draft_agent` 会话，模型通过九个草稿工具读取、修改、静态校验、执行代码、运行样例、生成/验收测试包并请求最终化；服务器绑定资源并执行所有门禁。旧同步、SSE 和重新生成入口已转接持久 Agent 作业。真实 DeepSeek + Docker 联合链路已在本地完成 CF 800、1400、1800 三档验收，均生成 `PENDING_REVIEW`、`AGENT_VERIFIED` 草稿；生产环境仍为 `IMPLEMENTED_UNVERIFIED`。完整设计见 [AI 题目草稿 Agent 架构](problem-draft-agent-architecture.md)。
+AI 题目草稿路径复用同一 `AgentRuntime` 与 agent-harness 工具运行时，不再运行固定七阶段模型流水线，也不复制第二套 Agent 循环。每道题使用独立持久化 workspace 和专用 `problem_draft_agent` 会话，模型通过九个草稿工具读取、修改、静态校验、执行代码、运行样例、生成/验收测试包并请求最终化；服务器绑定资源并执行所有门禁。旧同步、SSE 和重新生成入口已转接持久 Agent 作业。真实 DeepSeek + Docker 联合链路已在本地完成 CF 800、1400、1800 三档验收，均生成 `PENDING_REVIEW`、`AGENT_VERIFIED` 草稿；生产环境仍为 `IMPLEMENTED_UNVERIFIED`。完整设计见 [AI 题目草稿 Agent 架构](problem-draft-agent-architecture.md)。
 
 DeepSeek 思考模式的 `reasoning_content` 只在当前工具循环内存中完整回传。它不进入数据库、日志、审计或前端；思考不可用时，允许草稿场景显式降级到标准工具循环并记录 `STANDARD_TOOL_FALLBACK`。
 

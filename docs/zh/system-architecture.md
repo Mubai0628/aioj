@@ -42,7 +42,7 @@ problem-service 持久化提交并向 RabbitMQ 发布判题任务。judge-worker
 
 ai-service 在服务器端计算权限与策略，构建最小上下文，调用 Provider 和受权工具，并持久化用量与审计证据。AI 访问 problem-service 使用最小跨服务契约，不直接读取其他服务的数据库表。
 
-AI 题目草稿使用 `ProblemDraftAgentCoordinator → AgentRuntime → ToolBroker`。代码、样例和测试包执行由 ai-service 通过受保护契约交给 judge-worker，再由 judge-worker 调用 Sandbox；ai-service 不直接访问 Docker。通过人工审核的草稿使用可恢复导入 saga 将题目信息和 `READY` 测试包提交给 problem-service。详见 [AI 题目草稿 Agent 架构](problem-draft-agent-architecture.md)。
+AI 题目草稿使用 `ProblemDraftAgentCoordinator → AgentRuntime → agent-harness 循环`。代码、样例、生成器和测试包执行由 ai-service 通过受保护的内部接口交给 agent-executor，再由 agent-executor 调用 agent-sandbox；ai-service 不直接访问 Docker 或任何沙箱，判题 Sandbox 只做正式判题。通过人工审核的草稿使用可恢复导入 saga 将题目信息和 `READY` 测试包提交给 problem-service。详见 [AI 题目草稿 Agent 架构](problem-draft-agent-architecture.md)。
 
 ### 通知
 

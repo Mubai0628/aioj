@@ -44,6 +44,7 @@ problem-service 只发布任务，judge-worker 只编排并调用 Sandbox。Sand
 
 - 只接入 internal 网络 `agent-sandbox-net`，不发布端口；这个网络里另外只有 agent-executor，它不持有数据库、消息队列、JWT 或 AI 秘密；
 - MySQL、Redis、RabbitMQ、业务服务和判题 Sandbox 都不在它的网络里；
+- ai-service 只能经 app-net 调用 agent-executor（用 agent-executor 自己的令牌），不接入任何沙箱网络，也不持有沙箱令牌；
 - 根文件系统只读，`/tmp` 是有容量上限的 tmpfs，没有业务卷；PID、内存、CPU、输出和 copy-out 各有上限；
 - 令牌与判题 Sandbox 分开。
 
@@ -58,7 +59,7 @@ gVisor（`runsc`）能否承载 go-judge、从而去掉 `privileged`，目前还
 - 记忆写入需要候选、证据、冲突检查和用户确认。
 - 题目草稿的 workspace、用户、草稿、执行和工件归属由服务器绑定；模型不能通过工具参数选择或覆盖这些资源。
 - DeepSeek 原始 `reasoning_content` 仅在当前工具循环内存中使用，不进入数据库、日志、审计或前端。
-- 代码、生成器和测试包仍只经 judge-worker 进入 Sandbox；隐藏用例仅向模型返回聚合结果，通用工具审计不保存原始代码或进程输出。
+- 代码、生成器和测试包只经 agent-executor 进入 agent-sandbox，不进入判题 Sandbox；隐藏用例仅向模型返回聚合结果，通用工具审计不保存原始代码或进程输出。
 - 人工 ZIP 需要 SHA、manifest、路径、软链接、重复项、解压体积与压缩比检查；未经全包执行验收的导入必须显式标为 `MANUAL_UNVERIFIED`。
 
 ## 秘密与交付

@@ -42,7 +42,7 @@ problem-service persists a submission and publishes a RabbitMQ job. judge-worker
 
 ai-service calculates permission and policy on the server, builds minimal context, invokes the provider and authorized tools, and persists usage and audit evidence. AI accesses problem-service through minimal service contracts rather than reading another service's database tables.
 
-AI problem drafting follows `ProblemDraftAgentCoordinator → AgentRuntime → ToolBroker`. ai-service delegates code, sample, and package execution through a protected contract to judge-worker, which calls Sandbox; ai-service never accesses Docker directly. After human approval, a recoverable import saga commits the problem content and a `READY` package through problem-service. See [AI problem-draft Agent architecture](problem-draft-agent-architecture.md).
+AI problem drafting follows `ProblemDraftAgentCoordinator → AgentRuntime → agent-harness loop`. ai-service sends code, sample, generator, and package execution through a protected internal API to agent-executor, which calls agent-sandbox; ai-service never accesses Docker or a sandbox directly, and the judge Sandbox serves formal judging only. After human approval, a recoverable import saga commits the problem content and a `READY` package through problem-service. See [AI problem-draft Agent architecture](problem-draft-agent-architecture.md).
 
 ### Notifications
 
