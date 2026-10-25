@@ -7,6 +7,7 @@ import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.persistence.entity.AiToolCallEntity;
 import com.aioj.next.ai.persistence.mapper.AiToolCallMapper;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -76,5 +77,28 @@ class ToolAuditServiceTest {
                 .doesNotContain("stdout", "stderr", "hidden-output", "private-error");
         assertThat(row.getSafeSummaryJson()).contains("ACCEPTED")
                 .doesNotContain("hidden-output", "private-error");
+    }
+
+    @Test
+    void theSummaryNamesTheSourcesACallReturnedButNotTheirContent() throws Exception {
+        ToolExecutionContext context = new ToolExecutionContext(7L, "conversation", "turn", 1L,
+                "policy", Set.of("AI_CHAT"), Instant.now(), "trace");
+        ToolDescriptor descriptor = new ToolDescriptor("context.fetch_sources", "1.1.0", "fetch",
+                new ObjectMapper().readTree("{\"type\":\"object\"}"), Set.of("AI_CHAT"), 100,
+                Duration.ofSeconds(1), "fetch", ExecutionClass.READ_ONLY, FailurePolicy.FAIL_OPEN,
+                ToolAuditLevel.FULL);
+        ToolAuditService.AuditHandle handle = service.start(context, 42L, 1, descriptor,
+                descriptor.name(), "call-3", "{\"hitIds\":[\"msg-100\"]}", "decision-3");
+
+        service.complete(handle, ToolStatus.SUCCESS, DataClassification.USER_PRIVATE, """
+                {"status":"SUCCESS","data":{"sources":[{"hitId":"msg-100","content":"planted statement"}],
+                "sourceCount":1},"sources":[{"type":"MESSAGE","id":"100"},{"type":"MESSAGE","id":""}]}
+                """, 9L, null);
+
+        ArgumentCaptor<AiToolCallEntity> completed = ArgumentCaptor.forClass(AiToolCallEntity.class);
+        verify(mapper).updateById(completed.capture());
+        JsonNode summary = new ObjectMapper().readTree(completed.getValue().getSafeSummaryJson());
+        assertThat(summary.path("sourceRefs").toString()).isEqualTo("[\"MESSAGE:100\"]");
+        assertThat(completed.getValue().getSafeSummaryJson()).doesNotContain("planted statement");
     }
 }

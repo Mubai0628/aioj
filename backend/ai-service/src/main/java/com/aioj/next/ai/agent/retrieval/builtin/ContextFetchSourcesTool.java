@@ -35,15 +35,19 @@ import java.util.regex.Pattern;
 /**
  * Built-in retrieval tool {@code context.fetch_sources} (design doc §4.2/§6.4 第四层):
  * the evidence-fetch counterpart of search_digests — resolves digest hits ({@code dg-*})
- * or direct message references ({@code msg-*}) back to the ORIGINAL user/assistant
+ * or direct message references ({@code msg-*}, or a bare message id) back to the ORIGINAL user/assistant
  * messages (定位与取证分离). Server-side ownership is enforced on every hop: digest and
  * message rows must belong to the calling user. Since P4-1 (design doc §10) fetches may
  * reach the user's OTHER conversations (cross-conversation recall) — the userId check is
  * the hard boundary, so another user's rows still resolve to NOT_FOUND. Content is
- * returned under a per-call token budget with explicit truncation markers.
+ * returned under a per-call token budget with explicit truncation markers. A call that
+ * fetches nothing is a NOT_FOUND failure that says why for each reference: an empty
+ * success let the model believe it had read a source it never got (B1, 2026-10-23).
  */
 @Component
 public class ContextFetchSourcesTool implements AgentTool {
+    /** The hitId prefix of a message, as context.search_exact and fetched sources give it. */
+    public static final String MESSAGE_HIT_PREFIX = "msg-";
 
     private static final int MAX_HIT_IDS = 5;
     private static final int DEFAULT_MAX_TOKENS = 4000;
@@ -67,9 +71,10 @@ public class ContextFetchSourcesTool implements AgentTool {
         this.fetchBudgetTokens = properties == null ? 8000 : properties.getAgentCore().getFetchBudgetTokens();
         this.descriptor = new ToolDescriptor(
                 "context.fetch_sources",
-                "1.0.0",
-                "Fetch the ORIGINAL messages behind search hits (dg-* from context.search_digests, or msg-* "
-                        + "message ids). Hits may come from any of your own conversations (see the search_digests "
+                "1.1.0",
+                "Fetch the ORIGINAL messages behind search hits: pass their hitId (dg-* from "
+                        + "context.search_digests, msg-* from context.search_exact; a bare message id also works). "
+                        + "Hits may come from any of your own conversations (see the search_digests "
                         + "scope parameter). Always use this to verify exact wording/code before answering questions "
                         + "about earlier turns — never rely on digest summaries alone for facts, numbers or code.",
                 buildSchema(),
@@ -106,13 +111,16 @@ public class ContextFetchSourcesTool implements AgentTool {
         for (String hitId : hitIds) {
             if (hitId.startsWith(ContextSearchDigestsTool.HIT_ID_PREFIX)) {
                 resolveDigestHit(context, hitId, includeUser, includeAssistant, messageIds, skipped);
-            } else if (hitId.startsWith("msg-")) {
-                Long messageId = parseId(hitId.substring(4));
+            } else if (hitId.startsWith(MESSAGE_HIT_PREFIX)) {
+                Long messageId = parseId(hitId.substring(MESSAGE_HIT_PREFIX.length()));
                 if (messageId == null) {
                     skipped.add(skipEntry(hitId, "INVALID_REFERENCE"));
                 } else {
                     messageIds.add(messageId);
                 }
+            } else if (bareMessageId(hitId) != null) {
+                // Models copy the bare messageId of a hit; it means the same message.
+                messageIds.add(bareMessageId(hitId));
             } else {
                 skipped.add(skipEntry(hitId, "INVALID_REFERENCE"));
             }
@@ -129,7 +137,7 @@ public class ContextFetchSourcesTool implements AgentTool {
                 return ToolResult.failure(null, ToolStatus.EXECUTION_ERROR, "FETCH_FAILED", "message fetch failed");
             }
             if (message == null || !isOwned(message, context)) {
-                skipped.add(skipEntry("msg-" + messageId, "NOT_FOUND"));
+                skipped.add(skipEntry(MESSAGE_HIT_PREFIX + messageId, "NOT_FOUND"));
                 continue;
             }
             String content = message.getContent() == null ? "" : message.getContent();
@@ -138,7 +146,7 @@ public class ContextFetchSourcesTool implements AgentTool {
                 int remainingChars = Math.max(0, (maxTokens - tokensUsed) * 4);
                 if (remainingChars < 200) {
                     truncated = true;
-                    skipped.add(skipEntry("msg-" + messageId, "BUDGET_EXCEEDED"));
+                    skipped.add(skipEntry(MESSAGE_HIT_PREFIX + messageId, "BUDGET_EXCEEDED"));
                     continue;
                 }
                 content = content.substring(0, remainingChars) + "\n…[TRUNCATED]";
@@ -147,6 +155,7 @@ public class ContextFetchSourcesTool implements AgentTool {
             }
             tokensUsed += messageTokens;
             Map<String, Object> source = new LinkedHashMap<>();
+            source.put("hitId", MESSAGE_HIT_PREFIX + message.getId());
             source.put("messageId", String.valueOf(message.getId()));
             source.put("role", message.getRole());
             source.put("createdAt", message.getCreatedAt() == null ? null : message.getCreatedAt().toString());
@@ -168,6 +177,11 @@ public class ContextFetchSourcesTool implements AgentTool {
         data.put("truncated", truncated);
         if (!skipped.isEmpty()) {
             data.put("skipped", skipped);
+        }
+        if (sources.isEmpty()) {
+            return new ToolResult<>(null, ToolStatus.NOT_FOUND, data, List.of(), DataClassification.USER_PRIVATE,
+                    TrustLevel.USER_PROVIDED, null, truncated, null, null, List.of(), "NO_SOURCE_FETCHED",
+                    nothingFetched(skipped));
         }
         List<SourceRef> refs = sources.stream()
                 .map(source -> new SourceRef("MESSAGE", String.valueOf(source.get("messageId"))))
@@ -271,6 +285,20 @@ public class ContextFetchSourcesTool implements AgentTool {
         return hitIds;
     }
 
+    /** A bare number, as models copy it from a hit's messageId; null when the reference is not one. */
+    private Long bareMessageId(String hitId) {
+        return !hitId.isEmpty() && hitId.chars().allMatch(Character::isDigit) ? parseId(hitId) : null;
+    }
+
+    private static String nothingFetched(List<Map<String, Object>> skipped) {
+        StringBuilder message = new StringBuilder("No source was fetched:");
+        for (Map<String, Object> skip : skipped) {
+            message.append(' ').append(skip.get("hitId")).append(" (").append(skip.get("reason")).append(')');
+        }
+        return message.append(". Pass the hitId of a hit: msg-* from context.search_exact, dg-* from "
+                + "context.search_digests.").toString();
+    }
+
     private Long parseId(String raw) {
         try {
             return Long.parseLong(raw.trim());
@@ -294,7 +322,8 @@ public class ContextFetchSourcesTool implements AgentTool {
         ObjectNode properties = schema.putObject("properties");
         ObjectNode hitIds = properties.putObject("hitIds");
         hitIds.put("type", "array");
-        hitIds.put("description", "References from context.search_digests (dg-*) or message ids (msg-*).");
+        hitIds.put("description", "hitId values: dg-* from context.search_digests, msg-* from "
+                + "context.search_exact or fetched sources; a bare number is read as a message id.");
         hitIds.put("minItems", 1);
         hitIds.put("maxItems", MAX_HIT_IDS);
         hitIds.putObject("items").put("type", "string").put("minLength", 1);

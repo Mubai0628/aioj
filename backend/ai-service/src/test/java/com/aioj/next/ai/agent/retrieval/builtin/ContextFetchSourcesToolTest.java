@@ -43,6 +43,7 @@ class ContextFetchSourcesToolTest {
         List<Map<String, Object>> sources = sources(data);
         assertThat(sources).hasSize(2);
         Map<String, Object> first = sources.get(0);
+        assertThat(first.get("hitId")).isEqualTo("msg-100");
         assertThat(first.get("messageId")).isEqualTo("100");
         assertThat(first.get("role")).isEqualTo("user");
         assertThat(first.get("trustLevel")).isEqualTo("USER_PROVIDED");
@@ -69,6 +70,9 @@ class ContextFetchSourcesToolTest {
 
         ToolResult<Object> result = tool.execute(context(), readTree("{\"hitIds\":[\"msg-100\"]}"));
 
+        assertThat(result.status()).isEqualTo(ToolStatus.NOT_FOUND);
+        assertThat(result.errorCode()).isEqualTo("NO_SOURCE_FETCHED");
+        assertThat(result.sources()).isEmpty();
         Map<String, Object> data = data(result);
         assertThat(sources(data)).isEmpty();
         List<Map<String, Object>> skipped = (List<Map<String, Object>>) data.get("skipped");
@@ -111,6 +115,7 @@ class ContextFetchSourcesToolTest {
 
         ToolResult<Object> result = tool.execute(context(), readTree("{\"hitIds\":[\"msg-100\"]}"));
 
+        assertThat(result.status()).isEqualTo(ToolStatus.NOT_FOUND);
         Map<String, Object> data = data(result);
         assertThat(sources(data)).isEmpty();
         List<Map<String, Object>> skipped = (List<Map<String, Object>>) data.get("skipped");
@@ -133,11 +138,50 @@ class ContextFetchSourcesToolTest {
     }
 
     @Test
-    void invalidHitIdIsSchemaError() {
-        ToolResult<Object> result = tool.execute(context(), readTree("{\"hitIds\":[\"???\"]}"));
+    void aFetchThatGetsNothingFailsWithEachReasonAndAHint() {
+        when(messageMapper.selectById(100L)).thenReturn(message(100L, 99L, "c-1", "user", "别人的消息"));
+
+        ToolResult<Object> result = tool.execute(context(), readTree("{\"hitIds\":[\"???\",\"msg-100\"]}"));
+
+        assertThat(result.status()).isEqualTo(ToolStatus.NOT_FOUND);
+        assertThat(result.errorCode()).isEqualTo("NO_SOURCE_FETCHED");
+        assertThat(result.errorMessage()).isEqualTo("No source was fetched: ??? (INVALID_REFERENCE) msg-100 (NOT_FOUND). "
+                + "Pass the hitId of a hit: msg-* from context.search_exact, dg-* from context.search_digests.");
+        List<Map<String, Object>> skipped = (List<Map<String, Object>>) data(result).get("skipped");
+        assertThat(skipped).extracting(skip -> skip.get("reason")).containsExactly("INVALID_REFERENCE", "NOT_FOUND");
+    }
+
+    @Test
+    void aBareNumberIsReadAsAMessageId() {
+        // B1 (2026-10-23): models pass the bare messageId a search hit shows.
+        when(messageMapper.selectById(100L)).thenReturn(message(100L, 7L, "c-1", "user", "埋下的题面"));
+
+        ToolResult<Object> result = tool.execute(context(), readTree("{\"hitIds\":[\"100\"]}"));
+
+        assertThat(result.status()).isEqualTo(ToolStatus.SUCCESS);
+        List<Map<String, Object>> sources = sources(data(result));
+        assertThat(sources).singleElement().satisfies(source -> {
+            assertThat(source.get("hitId")).isEqualTo("msg-100");
+            assertThat(source.get("content")).isEqualTo("埋下的题面");
+        });
+        assertThat(result.sources()).extracting(ref -> ref.id()).containsExactly("100");
+    }
+
+    @Test
+    void aPartlyValidFetchSucceedsAndListsWhatItSkipped() {
+        when(messageMapper.selectById(100L)).thenReturn(message(100L, 7L, "c-1", "user", "u"));
+
+        ToolResult<Object> result = tool.execute(context(), readTree(
+                "{\"hitIds\":[\"msg-100\",\"99999999999999999999\"]}"));
+
+        assertThat(result.status()).isEqualTo(ToolStatus.SUCCESS);
         Map<String, Object> data = data(result);
+        assertThat(sources(data)).hasSize(1);
         List<Map<String, Object>> skipped = (List<Map<String, Object>>) data.get("skipped");
-        assertThat(skipped.get(0).get("reason")).isEqualTo("INVALID_REFERENCE");
+        assertThat(skipped).singleElement().satisfies(skip -> {
+            assertThat(skip.get("hitId")).isEqualTo("99999999999999999999");
+            assertThat(skip.get("reason")).isEqualTo("INVALID_REFERENCE");
+        });
     }
 
     @Test

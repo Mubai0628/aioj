@@ -50,6 +50,7 @@ class ContextSearchExactToolTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> hits = (List<Map<String, Object>>) data.get("hits");
         assertThat(hits).hasSize(2);
+        assertThat(hits.get(0).get("hitId")).as("the reference fetch_sources takes").isEqualTo("msg-2");
         assertThat(hits.get(0).get("messageId")).isEqualTo("2");
         assertThat((List<?>) hits.get(0).get("matchedTerms")).hasSize(2);
         assertThat(hits.get(0).get("excerpt").toString()).contains("二分");

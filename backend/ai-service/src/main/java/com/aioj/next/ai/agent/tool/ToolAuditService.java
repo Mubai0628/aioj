@@ -30,6 +30,8 @@ public class ToolAuditService {
 
     private static final Logger log = LoggerFactory.getLogger(ToolAuditService.class);
     private static final int MAX_AUDIT_ARGUMENTS_CHARS = 2_000;
+    /** Source references kept per call: ids only, never content. */
+    private static final int MAX_SAFE_SOURCE_REFS = 20;
     private static final Set<String> SAFE_METRIC_FIELDS = Set.of(
             "timeMillis", "memoryKb", "procPeak", "runTimeMillis", "outputTruncated",
             "passedCaseCount", "totalCaseCount", "maxTimeMillis", "maxMemoryKb", "maxProcessCount",
@@ -142,6 +144,17 @@ public class ToolAuditService {
             summary.put("resultHash", sha256(payload));
             summary.put("resultTokens", estimateTokens(payload));
             JsonNode envelope = payload == null ? null : objectMapper.readTree(payload);
+            JsonNode returnedSources = envelope == null ? null : envelope.path("sources");
+            if (returnedSources != null && returnedSources.isArray() && !returnedSources.isEmpty()) {
+                // What the call actually returned (e.g. the messages a fetch got), as type:id.
+                ArrayNode refs = summary.putArray("sourceRefs");
+                for (JsonNode source : returnedSources) {
+                    String id = source.path("id").asString("");
+                    if (refs.size() < MAX_SAFE_SOURCE_REFS && !id.isBlank()) {
+                        refs.add(truncateSafeText(source.path("type").asString("") + ":" + id, 128));
+                    }
+                }
+            }
             JsonNode data = envelope == null ? null : envelope.path("data");
             if (data != null && data.isObject()) {
                 JsonNode toolStatus = data.get("status");

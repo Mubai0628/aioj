@@ -53,10 +53,11 @@ public class ContextSearchExactTool implements AgentTool {
         this.objectMapper = objectMapper;
         this.descriptor = new ToolDescriptor(
                 "context.search_exact",
-                "1.0.0",
+                "1.1.0",
                 "Search the current conversation for messages containing the given exact substrings "
                         + "(case-insensitive). Use when you need to recall what was said earlier; "
-                        + "prefer specific, distinctive terms. Returns excerpts only — cite message ids.",
+                        + "prefer specific, distinctive terms. Returns excerpts only; pass a hit's hitId (msg-*) to "
+                        + "context.fetch_sources for the whole message.",
                 buildSchema(),
                 Set.of("AI_CHAT"),
                 2000,
@@ -110,6 +111,7 @@ public class ContextSearchExactTool implements AgentTool {
                 continue;
             }
             Map<String, Object> hit = new LinkedHashMap<>();
+            hit.put("hitId", ContextFetchSourcesTool.MESSAGE_HIT_PREFIX + message.getId());
             hit.put("messageId", String.valueOf(message.getId()));
             hit.put("role", message.getRole());
             hit.put("createdAt", message.getCreatedAt() == null ? null : message.getCreatedAt().toString());
