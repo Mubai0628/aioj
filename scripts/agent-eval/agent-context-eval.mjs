@@ -6,7 +6,8 @@
  * /api/v1/ai/chat/send, then measures from the observability plane
  * (ai_agent_runs / ai_tool_calls / ai_context_manifests / ai_turn_digests):
  *
- *   - digest recall proxy:  target digest/message present in fetch_sources args
+ *   - digest recall proxy:  a fetch_sources call returned the target turn's messages
+ *                           (the sourceRefs the tool audit records), however it named them
  *   - source_fetch_success_rate: SUCCESS share of context.fetch_sources calls
  *   - long_range_recall:      same as above for the ~500k-token-gap case
  *   - exact_detail_accuracy:  assistant answer contains the planted marker
@@ -275,10 +276,23 @@ function sleepSync(ms) {
 /** Tool calls recorded for a run: [{toolName, status, args}]. */
 function toolCalls(turnId) {
   const rows = query(
-    `SELECT tool_name, status, COALESCE(CAST(arguments_redacted AS CHAR), '') ` +
+    `SELECT tool_name, status, COALESCE(CAST(arguments_redacted AS CHAR), ''), ` +
+    `COALESCE(CAST(safe_summary_json AS CHAR), '') ` +
     `FROM ai_tool_calls WHERE turn_id = '${turnId}' ORDER BY call_seq`
   );
-  return rows.map(([toolName, status, args]) => ({ toolName, status, args: args || "" }));
+  return rows.map(([toolName, status, args, summary]) => ({
+    toolName, status, args: args || "", returnedIds: returnedMessageIds(summary),
+  }));
+}
+
+/** Message ids a call actually returned: the audit's safe summary lists them as MESSAGE:<id>. */
+function returnedMessageIds(summaryJson) {
+  try {
+    const refs = JSON.parse(summaryJson || "{}").sourceRefs || [];
+    return refs.filter((ref) => ref.startsWith("MESSAGE:")).map((ref) => ref.slice("MESSAGE:".length));
+  } catch {
+    return [];
+  }
 }
 
 function manifestWarnings(turnId) {
@@ -520,10 +534,12 @@ function instrument(turn, expectations) {
   const searchCalls = calls.filter((c) => c.toolName === "context.search_digests" || c.toolName === "context.search_exact");
   const fetchCalls = calls.filter((c) => c.toolName === "context.fetch_sources");
   const fetchSuccess = fetchCalls.filter((c) => c.status === "SUCCESS");
-  const expectedRefs = expectations.expectedFetchRefs || [];
-  const fetchHit = expectedRefs.length === 0
+  // A fetch counts when it actually returned one of the target turn's messages, whether it
+  // named them msg-*, dg-* or by a bare id (B1, 2026-10-23: a bare id once failed silently).
+  const expectedIds = (expectations.expectedSourceIds || []).map(String);
+  const fetchHit = expectedIds.length === 0
     ? null
-    : fetchCalls.some((c) => expectedRefs.some((ref) => c.args.includes(ref)));
+    : fetchCalls.some((c) => c.returnedIds.some((id) => expectedIds.includes(id)));
   const markerHit = expectations.marker ? turn.content.includes(expectations.marker) : null;
   const missedRequired = warnings.includes("missed_required_tool");
   return {
@@ -537,6 +553,7 @@ function instrument(turn, expectations) {
     missedRequired,
     searchArgsPreview: searchCalls.map((c) => c.args.slice(0, 200)),
     fetchArgsPreview: fetchCalls.map((c) => c.args.slice(0, 200)),
+    fetchReturnedIds: fetchCalls.map((c) => c.returnedIds),
     answerPreview: turn.content.slice(0, 160),
   };
 }
@@ -617,12 +634,10 @@ async function main() {
   for (const spec of casesA) {
     const answer = await sendTurn(token, conversationId, spec.ask, spec.name);
     const target = planted[spec.target];
-    const targetDigest = digestStates[spec.target];
-    const expectedRefs = [`msg-${target.userMessageId}`, `msg-${target.messageId}`];
-    if (targetDigest.digestId) {
-      expectedRefs.push(`dg-${targetDigest.digestId}`);
-    }
-    const info = instrument(answer, { marker: markers[spec.target], expectedFetchRefs: expectedRefs });
+    // A dg-* fetch of the target's digest returns these same two messages.
+    const info = instrument(answer, {
+      marker: markers[spec.target], expectedSourceIds: [target.userMessageId, target.messageId],
+    });
     const fetchOk = spec.requireFetch ? info.fetchHit === true : true;
     const pass = info.markerHit === true && fetchOk && info.runStatus === "COMPLETED";
     recordCase({
@@ -661,8 +676,9 @@ async function main() {
   console.log("\n[B] long-range recall (~" + config.fillerTokens + " token gap)");
   const longMarker = "LONG-9527";
   const requirementMarker = "MAGIC-OUTPUT-7315";
-  // The requirement marker sits past the digest summary preview (~100 chars) so the
-  // answer must come from a fetch_sources dereference, not from the search hit.
+  // The Curator may summarize the requirement marker into the digest (verified live,
+  // 2026-10-23), and a search_exact excerpt around it shows the whole requirement, so the
+  // marker alone proves nothing: B1 also needs a fetch that returned the planted messages.
   const longProblem =
     `【题目】树上的路径查询（定位标记 ${longMarker}）\n` +
     `给定一棵 n 个结点、结点带权的树，以及 q 组查询。每组查询给出两个结点 u 和 v，需要回答 u 到 v 的简单路径上的某种聚合结果。树以 n-1 条边的形式给出。\n` +
@@ -682,11 +698,9 @@ async function main() {
     `最开始我发给你的那道带 ${longMarker} 标记的题，它的输出格式要求是什么？原样告诉我要求打印的前缀。`,
     "B long-range"
   );
-  const bExpectedRefs = [`msg-${bPlant.userMessageId}`, `msg-${bPlant.messageId}`];
-  if (bDigest.digestId) {
-    bExpectedRefs.push(`dg-${bDigest.digestId}`);
-  }
-  const bInfo = instrument(bAnswer, { marker: requirementMarker, expectedFetchRefs: bExpectedRefs });
+  const bInfo = instrument(bAnswer, {
+    marker: requirementMarker, expectedSourceIds: [bPlant.userMessageId, bPlant.messageId],
+  });
   recordCase({
     group: "B", name: "B1 long-range recall over token gap", pass: bInfo.markerHit === true && bInfo.fetchHit === true && bInfo.runStatus === "COMPLETED",
     marker: requirementMarker, ...bInfo,

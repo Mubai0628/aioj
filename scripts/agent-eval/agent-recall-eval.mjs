@@ -258,10 +258,23 @@ function sleepSync(ms) {
 
 function toolCalls(turnId) {
   const rows = query(
-    `SELECT tool_name, status, COALESCE(CAST(arguments_redacted AS CHAR), '') ` +
+    `SELECT tool_name, status, COALESCE(CAST(arguments_redacted AS CHAR), ''), ` +
+    `COALESCE(CAST(safe_summary_json AS CHAR), '') ` +
     `FROM ai_tool_calls WHERE turn_id = '${turnId}' ORDER BY call_seq`
   );
-  return rows.map(([toolName, status, args]) => ({ toolName, status, args: args || "" }));
+  return rows.map(([toolName, status, args, summary]) => ({
+    toolName, status, args: args || "", returnedIds: returnedMessageIds(summary),
+  }));
+}
+
+/** Message ids a call actually returned: the audit's safe summary lists them as MESSAGE:<id>. */
+function returnedMessageIds(summaryJson) {
+  try {
+    const refs = JSON.parse(summaryJson || "{}").sourceRefs || [];
+    return refs.filter((ref) => ref.startsWith("MESSAGE:")).map((ref) => ref.slice("MESSAGE:".length));
+  } catch {
+    return [];
+  }
 }
 
 function runRow(turnId) {
@@ -359,10 +372,12 @@ function instrument(turn, expectations) {
   const searchCalls = calls.filter((c) => c.toolName === "context.search_digests" || c.toolName === "context.search_exact");
   const fetchCalls = calls.filter((c) => c.toolName === "context.fetch_sources");
   const fetchSuccess = fetchCalls.filter((c) => c.status === "SUCCESS");
-  const expectedRefs = expectations.expectedFetchRefs || [];
-  const fetchHit = expectedRefs.length === 0
+  // A fetch counts when it actually returned one of the planted turn's messages, whether it
+  // named them msg-*, dg-* or by a bare id (B1, 2026-10-23: a bare id once failed silently).
+  const expectedIds = (expectations.expectedSourceIds || []).map(String);
+  const fetchHit = expectedIds.length === 0
     ? null
-    : fetchCalls.some((c) => expectedRefs.some((ref) => c.args.includes(ref)));
+    : fetchCalls.some((c) => c.returnedIds.some((id) => expectedIds.includes(id)));
   const markerHit = expectations.marker ? turn.content.includes(expectations.marker) : null;
   return {
     runStatus: run ? run[0] : "MISSING",
@@ -374,17 +389,14 @@ function instrument(turn, expectations) {
     markerHit,
     searchArgsPreview: searchCalls.map((c) => c.args.slice(0, 200)),
     fetchArgsPreview: fetchCalls.map((c) => c.args.slice(0, 200)),
+    fetchReturnedIds: fetchCalls.map((c) => c.returnedIds),
     answerPreview: turn.content.slice(0, 160),
   };
 }
 
-/** Expected refs for one planted turn: both message sides plus its digest when known. */
-function expectedRefsFor(plantedTurn, digest) {
-  const refs = [`msg-${plantedTurn.userMessageId}`, `msg-${plantedTurn.messageId}`];
-  if (digest && digest.digestId) {
-    refs.push(`dg-${digest.digestId}`);
-  }
-  return refs;
+/** The planted turn's two messages; a dg-* fetch of its digest returns these same two. */
+function expectedSourceIdsFor(plantedTurn) {
+  return [plantedTurn.userMessageId, plantedTurn.messageId];
 }
 
 /** Heuristic: the model asked a clarifying question instead of guessing (counts as correct for N3). */
@@ -456,7 +468,7 @@ async function main() {
       `我在另一个会话里发过一道带 ${xMarker} 标记的题。那道题的输入格式是什么？原样回答。`,
       "X1 cross-conversation ask"
     );
-    const xInfo = instrument(xAsk, { marker: "第一行两个整数 n 和 q", expectedFetchRefs: expectedRefsFor(xPlant, xDigest) });
+    const xInfo = instrument(xAsk, { marker: "第一行两个整数 n 和 q", expectedSourceIds: expectedSourceIdsFor(xPlant) });
     // The input-format answer proves the model read the conv1 statement; the marker
     // alone could be echoed from the question itself, so assert on the format text.
     const xMarkerHit = xAsk.content.includes("第一行两个整数 n 和 q");
@@ -499,7 +511,7 @@ async function main() {
 
     const s1 = await sendTurn(token, sConv,
       "我之前发过一道可以用异或前缀和来做的题，它的校验标记是什么？原样回答。", "S1 semantic 异或前缀和");
-    const s1Info = instrument(s1, { marker: sMarker1, expectedFetchRefs: expectedRefsFor(sPlant1, sDigests[0]) });
+    const s1Info = instrument(s1, { marker: sMarker1, expectedSourceIds: expectedSourceIdsFor(sPlant1) });
     recordCase({
       group: "S", name: "S1 semantic-only reference (前缀和 not in statement)",
       pass: s1Info.markerHit === true && s1Info.runStatus === "COMPLETED",
@@ -509,7 +521,7 @@ async function main() {
 
     const s2 = await sendTurn(token, sConv,
       "那道可以用莫队算法维护的区间统计题，标记是什么？原样回答。", "S2 semantic 莫队");
-    const s2Info = instrument(s2, { marker: sMarker2, expectedFetchRefs: expectedRefsFor(sPlant2, sDigests[1]) });
+    const s2Info = instrument(s2, { marker: sMarker2, expectedSourceIds: expectedSourceIdsFor(sPlant2) });
     recordCase({
       group: "S", name: "S2 semantic-only reference (莫队 not in statement)",
       pass: s2Info.markerHit === true && s2Info.runStatus === "COMPLETED",
@@ -554,7 +566,7 @@ async function main() {
     const m1 = await sendTurn(token, mConv,
       "我发过三道滑动窗口最值题，数据范围是 n 和 q 都不超过 1e5 的那道，它的校验标记是什么？原样回答。",
       "M1 disambiguate by constraint");
-    const m1Info = instrument(m1, { marker: "RCM-2216", expectedFetchRefs: expectedRefsFor(mPlanted[1], mDigests[1]) });
+    const m1Info = instrument(m1, { marker: "RCM-2216", expectedSourceIds: expectedSourceIdsFor(mPlanted[1]) });
     recordCase({
       group: "M", name: "M1 pick by distinguishing constraint",
       pass: m1Info.markerHit === true && m1Info.runStatus === "COMPLETED",
@@ -564,7 +576,7 @@ async function main() {
 
     const m2 = await sendTurn(token, mConv,
       "这三道里的第二道呢？原样告诉我它的标记。", "M2 ordinal among similar set");
-    const m2Info = instrument(m2, { marker: "RCM-2216", expectedFetchRefs: expectedRefsFor(mPlanted[1], mDigests[1]) });
+    const m2Info = instrument(m2, { marker: "RCM-2216", expectedSourceIds: expectedSourceIdsFor(mPlanted[1]) });
     recordCase({
       group: "M", name: "M2 ordinal within highly-similar set",
       pass: m2Info.markerHit === true && m2Info.runStatus === "COMPLETED",
@@ -598,7 +610,7 @@ async function main() {
     );
     const r1 = await sendTurn(token, rConv,
       `我刚发的带 ${rMarker} 标记的那道括号题，输出要求是什么？原样回答。`, "R1 immediate ask");
-    const r1Info = instrument(r1, { marker: "对每个查询输出一行答案", expectedFetchRefs: expectedRefsFor(rPlant, null) });
+    const r1Info = instrument(r1, { marker: "对每个查询输出一行答案", expectedSourceIds: expectedSourceIdsFor(rPlant) });
     const rMarkerHit = r1.content.includes("对每个查询输出一行答案");
     recordCase({
       group: "R", name: "R1 recall before curator digest READY",
@@ -645,7 +657,7 @@ async function main() {
 
     const n1 = await sendTurn(token, nConv,
       "这一批的第 1 题，它的校验标记是什么？原样回答。", "N1 this-batch ordinal");
-    const n1Info = instrument(n1, { marker: nMarkers.b2p1, expectedFetchRefs: expectedRefsFor(nPlanted.b2p1, nDigests.b2p1) });
+    const n1Info = instrument(n1, { marker: nMarkers.b2p1, expectedSourceIds: expectedSourceIdsFor(nPlanted.b2p1) });
     recordCase({
       group: "N", name: "N1 这一批第1题 -> batch2 problem1",
       pass: n1Info.markerHit === true && n1Info.runStatus === "COMPLETED",
@@ -655,7 +667,7 @@ async function main() {
 
     const n2 = await sendTurn(token, nConv,
       "最开始那批的第 2 题呢？原样告诉我标记。", "N2 earliest-batch ordinal");
-    const n2Info = instrument(n2, { marker: nMarkers.b1p2, expectedFetchRefs: expectedRefsFor(nPlanted.b1p2, nDigests.b1p2) });
+    const n2Info = instrument(n2, { marker: nMarkers.b1p2, expectedSourceIds: expectedSourceIdsFor(nPlanted.b1p2) });
     recordCase({
       group: "N", name: "N2 最开始那批第2题 -> batch1 problem2",
       pass: n2Info.markerHit === true && n2Info.runStatus === "COMPLETED",
