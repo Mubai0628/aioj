@@ -52,7 +52,7 @@ services:
     cpus: "0.25"
 
   rabbitmq:
-    image: rabbitmq:4.3-management
+    image: rabbitmq:4.4-management
     profiles: ["core", "infra"]
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-aioj}

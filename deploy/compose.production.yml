@@ -58,7 +58,7 @@ services:
     logging: *bounded-logging
 
   rabbitmq:
-    image: rabbitmq:4.3-management@sha256:84352fa7b36f80b3669f5c40963cb2f0f4cf0ecc67d4cf77a5282c2b5934cffc
+    image: rabbitmq:4.4-management@sha256:c200fd496482cda18c412be4e6f244830e1e75949b8cf5f0e887cea9ea456109
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER is required}
