@@ -1,5 +1,6 @@
 package com.aioj.next.ai.agent.runtime;
 
+import com.aioj.next.agent.harness.runtime.api.CancellationToken;
 import com.aioj.next.ai.agent.AgentChatFacade.TurnHandle;
 import com.aioj.next.ai.agent.AgentChatFacade.TurnResult;
 import com.aioj.next.ai.agent.assembly.ContestFinalAnswerCheck;
@@ -232,6 +233,7 @@ public class TurnCoordinator {
     }
 
     public TurnHandle start(Long userId, AiChatRequest request) {
+        long startedNanos = System.nanoTime();
         AiTurnEntity turn = null;
         boolean ownsTurn = false;
         try {
@@ -303,9 +305,13 @@ public class TurnCoordinator {
             aiTurnService.attachMessages(turn.getId(), user.id(), assistant.id());
             AiTurnEntity scheduledTurn = turn;
             ContestAiAssistanceTelemetryService.TrackingContext scheduledTelemetryContext = telemetryContext;
+            CancellationToken cancellation = new CancellationToken();
+            LoopBudget budget = LoopBudget.from(properties.getAgentCore());
+            TurnEventBuffer events = new TurnEventBuffer(TurnEventBuffer.capacityFor(budget), startedNanos);
             CompletableFuture<TurnResult> rawResult = CompletableFuture.supplyAsync(
                     () -> complete(userId, conversation, request, bootstrap, snapshot, msgVerdict,
-                            user, assistant, scheduledTurn, scheduledTelemetryContext, participation.attributed()),
+                            user, assistant, scheduledTurn, scheduledTelemetryContext, participation.attributed(),
+                            budget, events, cancellation),
                     executor
             );
             CompletableFuture<TurnResult> result = rawResult
@@ -315,14 +321,23 @@ public class TurnCoordinator {
                             return value;
                         }
                         if (isTimeout(ex)) {
+                            try {
+                                cancellation.cancel();
+                            } catch (RuntimeException cancelFailure) {
+                                log.warn("turn cancellation failed turn={} errorType={}", scheduledTurn.getId(), cancelFailure.getClass().getSimpleName());
+                            }
                             failTimedOutTurn(userId, scheduledTurn.getId(), assistant.id());
                             throw new CompletionException(turnTimeoutFailure());
                         }
                         throw asCompletionException(ex);
                     });
             inFlightTurns.put(scheduledTurn.getId(), result);
-            result.whenComplete((value, ex) -> inFlightTurns.remove(scheduledTurn.getId()));
-            return new TurnHandle(conversation, new AiChatContext("", "", "", "", ""), user, assistant, result, scheduledTurn.getId());
+            result.whenComplete((value, ex) -> {
+                events.close();
+                inFlightTurns.remove(scheduledTurn.getId());
+            });
+            return new TurnHandle(conversation, new AiChatContext("", "", "", "", ""), user, assistant, result,
+                    scheduledTurn.getId(), events);
         } catch (RuntimeException ex) {
             // Only a turn created by this request may be failed here; a duplicate request
             // attaching to someone else's in-flight turn must never mutate its state.
@@ -474,7 +489,10 @@ public class TurnCoordinator {
             AiChatMessageResponse assistant,
             AiTurnEntity turn,
             ContestAiAssistanceTelemetryService.TrackingContext telemetryContext,
-            RunningContestParticipation attributedParticipation
+            RunningContestParticipation attributedParticipation,
+            LoopBudget budget,
+            TurnEventBuffer events,
+            CancellationToken cancellation
     ) {
         try {
             // CAS non-terminal -> GENERATING. Losing this CAS means the timeout cleanup
@@ -529,7 +547,8 @@ public class TurnCoordinator {
                     .requireToolCall(requireToolCall)
                     .output(restrictedTurn ? "BUFFERED" : "STREAM",
                             restrictedTurn ? CallProfile.CHAT_BUFFERED : CallProfile.CHAT_STREAM)
-                    .budget(LoopBudget.from(properties.getAgentCore()))
+                    .budget(budget)
+                    .turnProgress(!restrictedTurn, restrictedTurn ? null : events, cancellation)
                     .contest(contestPolicy, msgVerdict)
                     .serverBindings(codeToolBindings(request, conversation))
                     .usageObserver(attemptUsage)

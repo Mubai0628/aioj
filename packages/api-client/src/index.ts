@@ -4216,9 +4216,28 @@ export const api = {
     })
 };
 
+/** The restricted-turn replay predates step numbers, so step remains optional. */
+export interface AiChatStreamDelta {
+  text: string;
+  step?: number;
+}
+
+/** Tool progress contains no tool arguments or results. */
+export interface AiChatStreamToolEvent {
+  phase: 'started' | 'finished';
+  step: number;
+  name: string;
+  status: string;
+  durationMs: number;
+}
+
+export type AiChatStreamEvent =
+  | 'meta' | 'context' | 'delta' | 'tool' | 'message' | 'clarification' | 'memory' | 'error' | 'done'
+  | (string & {});
+
 export async function streamAi(
   payload: AiChatPayload,
-  onEvent: (event: 'meta' | 'message' | 'clarification' | 'error' | 'done' | string, data: string) => void,
+  onEvent: (event: AiChatStreamEvent, data: string) => void,
   options?: { signal?: AbortSignal; resumeTurnId?: string }
 ) {
   return streamAiRequest(payload, onEvent, options, true);
@@ -4339,7 +4358,7 @@ async function readUserNotificationStream(
 
 async function streamAiRequest(
   payload: AiChatPayload,
-  onEvent: (event: 'meta' | 'message' | 'clarification' | 'error' | 'done' | string, data: string) => void,
+  onEvent: (event: AiChatStreamEvent, data: string) => void,
   options: { signal?: AbortSignal; resumeTurnId?: string } | undefined,
   retry: boolean
 ): Promise<void> {

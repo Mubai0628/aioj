@@ -101,8 +101,12 @@ public class HarnessAgentRunner {
         RunSpec.Builder runSpec = RunSpec.builder(String.valueOf(run.getId()), scenario(spec, gate), toolContext(spec, run))
                 .messages(starting)
                 .requireToolCall(spec.requireToolCall())
+                .streaming(spec.streamingRequested()
+                        && spec.modelScope() == com.aioj.next.ai.domain.AiModelScope.TEXT_GENERATION
+                        && port.streamingAllowed())
+                .cancellation(spec.cancellation())
                 .listener(new RunProgressListener(stateMachine, manifestService, run.getId(), spec.turnId(),
-                        endpoint.model(), spec.policySnapshotId(), spec.sections(), spec.contextWarnings()));
+                        endpoint.model(), spec.policySnapshotId(), spec.sections(), spec.contextWarnings(), spec.progressEvents()));
         interceptors.forEach(interceptor -> runSpec.interceptor(failures.watch(interceptor)));
         stateMachine.advance(run.getId(), AgentRunStateMachine.STATUS_CONTEXT_PLANNED);
         Instant deadline = budget.hasDeadline() ? Instant.now().plus(budget.maxRunDuration()) : null;

@@ -88,6 +88,16 @@ public final class ModelClientPort implements ModelPort {
 
     @Override
     public ModelTurn complete(ModelCall call) {
+        return execute(call, null);
+    }
+
+    @Override
+    public ModelTurn stream(ModelCall call, com.aioj.next.agent.harness.runtime.api.ModelStreamListener listener) {
+        return execute(call, listener == null ? delta -> { } : listener);
+    }
+
+    private ModelTurn execute(ModelCall call,
+                              com.aioj.next.agent.harness.runtime.api.ModelStreamListener listener) {
         ModelRequest request = ModelRequest.builder(scope).endpoint(endpoint).messages(HarnessMessages.toChat(call.messages()))
                 .tools(toolSpecs(call.tools())).toolChoice(toolChoice(call)).profile(CallProfile.valueOf(call.profile()))
                 .build();
@@ -100,7 +110,7 @@ public final class ModelClientPort implements ModelPort {
         List<String> warnings = new ArrayList<>();
         ModelResponse response;
         try {
-            response = invoke(request, callOptions, warnings);
+            response = invoke(request, callOptions, warnings, listener);
         } catch (ModelException ex) {
             lastFailure = ex;
             throw new ModelCallException(kindOf(ex.kind()), ex.getMessage());
@@ -144,21 +154,37 @@ public final class ModelClientPort implements ModelPort {
         return Optional.ofNullable(lastFailure);
     }
 
-    private ModelResponse invoke(ModelRequest request, CallOptions callOptions, List<String> warnings) {
+    /** Whether this endpoint can stream; null tuning means the default, which is enabled. */
+    public boolean streamingAllowed() {
+        return capabilities.streaming() && !Boolean.FALSE.equals(endpoint.tuning().streaming());
+    }
+
+    private ModelResponse invoke(ModelRequest request, CallOptions callOptions, List<String> warnings,
+                                 com.aioj.next.agent.harness.runtime.api.ModelStreamListener listener) {
         if (standardFallback) {
-            return modelClient.complete(request.withThinkingDisabled(), callOptions);
+            return invokeOnce(request.withThinkingDisabled(), callOptions, listener);
         }
         try {
-            return modelClient.complete(request, callOptions);
+            return invokeOnce(request, callOptions, listener);
         } catch (ModelException ex) {
-            if (ex.kind() != ModelErrorKind.THINKING_UNAVAILABLE || !fallbackAllowed) {
+            if (ex.kind() != ModelErrorKind.THINKING_UNAVAILABLE || !fallbackAllowed || ex.outputStarted()) {
                 throw ex;
             }
             // Exactly one controlled downgrade; the provider body and reasoning are neither logged nor kept.
             standardFallback = true;
             warnings.add(STANDARD_TOOL_FALLBACK);
-            return modelClient.complete(request.withThinkingDisabled(), callOptions);
+            return invokeOnce(request.withThinkingDisabled(), callOptions, listener);
         }
+    }
+
+    private ModelResponse invokeOnce(ModelRequest request, CallOptions callOptions,
+                                     com.aioj.next.agent.harness.runtime.api.ModelStreamListener listener) {
+        if (listener == null) {
+            return modelClient.complete(request, callOptions);
+        }
+        return modelClient.stream(request, callOptions, new com.aioj.next.ai.model.api.ModelStreamListener() {
+            @Override public void onTextDelta(String delta) { listener.onTextDelta(delta); }
+        });
     }
 
     private void observe(ModelResponse response) {

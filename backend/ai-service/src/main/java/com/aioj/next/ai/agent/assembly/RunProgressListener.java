@@ -5,10 +5,13 @@ import com.aioj.next.agent.harness.runtime.api.ModelCall;
 import com.aioj.next.agent.harness.runtime.api.ModelTool;
 import com.aioj.next.agent.harness.runtime.api.ModelTurn;
 import com.aioj.next.agent.harness.runtime.api.RunListener;
+import com.aioj.next.agent.harness.tool.api.ToolCallRequest;
+import com.aioj.next.agent.harness.tool.api.ToolOutcome;
 import com.aioj.next.ai.agent.context.BootstrapContextBuilder;
 import com.aioj.next.ai.agent.context.ContextManifestService;
 import com.aioj.next.ai.agent.context.ContextSection;
 import com.aioj.next.ai.agent.runtime.AgentRunStateMachine;
+import com.aioj.next.ai.agent.runtime.TurnEventBuffer;
 import com.aioj.next.ai.model.api.ChatMessage;
 
 import java.util.ArrayList;
@@ -30,12 +33,20 @@ final class RunProgressListener implements RunListener {
     private final String policySnapshotId;
     private final List<ContextSection> sections;
     private final List<String> contextWarnings;
+    private final TurnEventBuffer events;
     private String toolDefinitionsHash;
     private int pendingProgressStep;
+    private long toolStartedNanos;
 
     RunProgressListener(AgentRunStateMachine stateMachine, ContextManifestService manifestService, long runId,
                         String turnId, String model, String policySnapshotId, List<ContextSection> sections,
                         List<String> contextWarnings) {
+        this(stateMachine, manifestService, runId, turnId, model, policySnapshotId, sections, contextWarnings, null);
+    }
+
+    RunProgressListener(AgentRunStateMachine stateMachine, ContextManifestService manifestService, long runId,
+                        String turnId, String model, String policySnapshotId, List<ContextSection> sections,
+                        List<String> contextWarnings, TurnEventBuffer events) {
         this.stateMachine = stateMachine;
         this.manifestService = manifestService;
         this.runId = runId;
@@ -44,10 +55,14 @@ final class RunProgressListener implements RunListener {
         this.policySnapshotId = policySnapshotId;
         this.sections = sections;
         this.contextWarnings = contextWarnings == null ? List.of() : List.copyOf(contextWarnings);
+        this.events = events;
     }
 
     @Override
     public void onModelCall(LoopContext context, int callSeq, ModelCall call) {
+        if (events != null) {
+            events.beginStep(callSeq);
+        }
         if (pendingProgressStep > 0) {
             stateMachine.recordProgress(runId, pendingProgressStep, context.toolCallCount());
             pendingProgressStep = 0;
@@ -77,6 +92,36 @@ final class RunProgressListener implements RunListener {
         if (turn.hasToolCalls()) {
             stateMachine.advance(runId, AgentRunStateMachine.STATUS_TOOL_CALLING);
             pendingProgressStep = context.step();
+        }
+    }
+
+    @Override
+    public void onTextDelta(LoopContext context, String delta) {
+        if (events != null) {
+            events.text(delta);
+        }
+    }
+
+    @Override
+    public void onToolStarted(LoopContext context, ToolCallRequest call) {
+        if (events != null) {
+            toolStartedNanos = System.nanoTime();
+            events.toolStarted(call.toolName());
+        }
+    }
+
+    @Override
+    public void onToolOutcome(LoopContext context, ToolCallRequest call, ToolOutcome outcome) {
+        if (events != null) {
+            events.toolFinished(call.toolName(), outcome.result().status().name(), outcome.durationMillis());
+        }
+    }
+
+    @Override
+    public void onToolFailed(LoopContext context, ToolCallRequest call) {
+        if (events != null) {
+            long durationMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - toolStartedNanos);
+            events.toolFinished(call.toolName(), "EXECUTION_ERROR", durationMs);
         }
     }
 

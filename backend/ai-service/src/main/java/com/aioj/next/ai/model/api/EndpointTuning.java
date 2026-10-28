@@ -10,7 +10,7 @@ import java.time.Duration;
  * @param maxConcurrency   the scope's bulkhead; a change counts for permits taken afterwards
  * @param thinkingFallback whether a call may drop thinking by itself (after THINKING_UNAVAILABLE,
  *                         after an empty answer, or in a workflow's recovery); false fails instead
- * @param streaming        stored now; the Agent loop streams from plan T1.12
+ * @param streaming        TEXT_GENERATION tutor calls stream by default when supported; false disables it
  */
 public record EndpointTuning(
         Duration connectTimeout,

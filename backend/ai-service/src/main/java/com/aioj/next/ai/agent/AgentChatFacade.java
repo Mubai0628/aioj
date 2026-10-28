@@ -1,6 +1,7 @@
 package com.aioj.next.ai.agent;
 
 import com.aioj.next.ai.agent.runtime.TurnCoordinator;
+import com.aioj.next.ai.agent.runtime.TurnEventBuffer;
 import com.aioj.next.ai.domain.AiChatContext;
 import com.aioj.next.ai.domain.AiCompletion;
 import com.aioj.next.ai.domain.response.AiAssistantResponseNormalizer;
@@ -39,8 +40,14 @@ public class AgentChatFacade {
             AiChatMessageResponse user,
             AiChatMessageResponse assistant,
             CompletableFuture<TurnResult> result,
-            String turnId
+            String turnId,
+            TurnEventBuffer progressEvents
     ) {
+        /** Existing handles, including resume, never replay old progress. */
+        public TurnHandle(AiConversationEntity conversation, AiChatContext context, AiChatMessageResponse user,
+                          AiChatMessageResponse assistant, CompletableFuture<TurnResult> result, String turnId) {
+            this(conversation, context, user, assistant, result, turnId, null);
+        }
     }
 
     /** Same shape as the legacy result so the controller surface is unchanged. */

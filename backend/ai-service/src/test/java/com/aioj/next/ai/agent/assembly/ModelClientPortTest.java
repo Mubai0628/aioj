@@ -117,6 +117,57 @@ class ModelClientPortTest {
     }
 
     @Test
+    void streamsVisibleFragmentsAndMapsTheCompleteToolTurnWithoutExposingReasoning() {
+        client.streamFragments.addAll(List.of("可见", "正文"));
+        client.reply(new ModelResponse("可见正文", "private reasoning", List.of(new ToolCall("c1", "code.run_samples", "{}")),
+                "tool_calls", new ModelUsage(12, 8, 4, true), ProviderId.DEEPSEEK, "deepseek-flash"));
+        List<String> deltas = new ArrayList<>();
+        CancellationToken token = new CancellationToken();
+
+        ModelTurn turn = open(CallProfile.CHAT_STREAM, false)
+                .stream(call("CHAT_STREAM", Duration.ofSeconds(10), token), deltas::add);
+
+        assertThat(deltas).containsExactly("可见", "正文");
+        assertThat(turn.content()).isEqualTo("可见正文");
+        assertThat(turn.reasoningContent()).isEqualTo("private reasoning");
+        assertThat(turn.toolCalls()).containsExactly(new ToolCallRequest("c1", "code.run_samples", "{}"));
+        assertThat(turn.usage().inputTokens()).isEqualTo(12);
+        assertThat(turn.usage().cacheHitTokens()).isEqualTo(4);
+        assertThat(observed).hasSize(1);
+        assertThat(client.streamCalls).isEqualTo(1);
+        token.cancel();
+        assertThat(client.options.get(0).cancellation().isCancelled()).isTrue();
+    }
+
+    @Test
+    void refusesThinkingFallbackAfterAnyStreamOutput() {
+        client.streamFragments.add("partial");
+        ModelException failed = refused(ModelErrorKind.THINKING_UNAVAILABLE).afterOutput();
+        client.reply(failed);
+        ModelClientPort port = open(CallProfile.CHAT_STREAM, true);
+        List<String> deltas = new ArrayList<>();
+
+        assertThatThrownBy(() -> port.stream(call("CHAT_STREAM", null, null), deltas::add))
+                .isInstanceOf(ModelCallException.class);
+        assertThat(deltas).containsExactly("partial");
+        assertThat(port.lastFailure()).containsSame(failed);
+        assertThat(client.requests).hasSize(1);
+        assertThat(port.standardFallback()).isFalse();
+    }
+
+    @Test
+    void streamingDefaultsOnButHonoursAnExplicitDisabledSetting() {
+        assertThat(open(CallProfile.CHAT_STREAM, false).streamingAllowed()).isTrue();
+        ModelEndpointConfig disabled = ModelEndpointConfig.builder(ProviderId.DEEPSEEK)
+                .baseUrl("http://127.0.0.1:9/chat/completions").apiKey("test-key").model("deepseek-flash")
+                .enabled(true).thinking(true, "high")
+                .tuning(new EndpointTuning(null, null, null, null, null, null, false)).build();
+        ModelClientPort port = ModelClientPort.open(new FakeModelClient(disabled, DEEPSEEK_CAPS),
+                "TEXT_GENERATION", CallProfile.CHAT_STREAM, options("chat_stream"), false, null);
+        assertThat(port.streamingAllowed()).isFalse();
+    }
+
+    @Test
     void fallsBackToStandardToolsOnceWhenThinkingIsRefused() {
         client.reply(refused(ModelErrorKind.THINKING_UNAVAILABLE));
         client.reply(answer("first"));
@@ -328,6 +379,8 @@ class ModelClientPortTest {
         private final Deque<Object> replies = new ArrayDeque<>();
         private final List<ModelRequest> requests = new ArrayList<>();
         private final List<CallOptions> options = new ArrayList<>();
+        private final List<String> streamFragments = new ArrayList<>();
+        private int streamCalls;
 
         FakeModelClient(ModelEndpointConfig endpoint, ProviderCapabilities capabilities) {
             this.endpoint = endpoint;
@@ -366,7 +419,15 @@ class ModelClientPortTest {
 
         @Override
         public ModelResponse stream(ModelRequest request, CallOptions callOptions, ModelStreamListener listener) {
-            throw new UnsupportedOperationException();
+            streamCalls++;
+            requests.add(request);
+            options.add(callOptions);
+            streamFragments.forEach(listener::onTextDelta);
+            Object next = replies.removeFirst();
+            if (next instanceof ModelException ex) {
+                throw ex;
+            }
+            return (ModelResponse) next;
         }
 
         @Override

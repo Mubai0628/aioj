@@ -155,6 +155,48 @@ class AgentRuntimeTest {
     }
 
     @Test
+    void tutorStreamSendsSafeDeltasAndPairedToolProgress() throws Exception {
+        adapter.script.add(TestModelResponses.response("先检索", "private reasoning", List.of(
+                new ToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"private-argument\"]}")),
+                "tool_calls", 10, 5, 0, "deepseek", "deepseek-v4-pro"));
+        adapter.script.add(finalResponse("最终答案"));
+        LoopBudget budget = budget(8, 6, 3, 3);
+        TurnEventBuffer events = new TurnEventBuffer(TurnEventBuffer.capacityFor(budget), System.nanoTime());
+
+        AgentRuntime.AgentRunResult result = runtime.run(chat(false, budget)
+                .turnProgress(true, events, new com.aioj.next.agent.harness.runtime.api.CancellationToken()).build());
+        events.close();
+        List<TurnEventBuffer.Event> progress = events.awaitBatch(1);
+
+        assertThat(result.content()).isEqualTo("最终答案");
+        assertThat(adapter.streamCalls.get()).isEqualTo(2);
+        assertThat(progress).extracting(TurnEventBuffer.Event::type).containsExactly("delta", "tool", "tool", "delta");
+        assertThat(progress.get(0).text()).isEqualTo("先检索");
+        assertThat(progress.get(0).step()).isEqualTo(1);
+        assertThat(progress.get(1).phase()).isEqualTo("started");
+        assertThat(progress.get(2).phase()).isEqualTo("finished");
+        assertThat(progress.get(3).step()).isEqualTo(2);
+        assertThat(progress.toString()).doesNotContain("private reasoning", "private-argument", "二分查找的讨论");
+    }
+
+    @Test
+    void explicitStreamingDisabledUsesNonStreamModelCall() throws Exception {
+        when(configService.effectiveConfig(AiModelScope.TEXT_GENERATION)).thenReturn(config().withTuning(
+                new com.aioj.next.ai.model.api.EndpointTuning(null, null, null, null, null, null, false)));
+        adapter.script.add(finalResponse("完整回复"));
+        LoopBudget budget = budget(8, 6, 3, 3);
+        TurnEventBuffer events = new TurnEventBuffer(TurnEventBuffer.capacityFor(budget), System.nanoTime());
+
+        AgentRuntime.AgentRunResult result = runtime.run(chat(false, budget)
+                .turnProgress(true, events, new com.aioj.next.agent.harness.runtime.api.CancellationToken()).build());
+        events.close();
+
+        assertThat(result.content()).isEqualTo("完整回复");
+        assertThat(adapter.streamCalls.get()).isZero();
+        assertThat(events.awaitBatch(1)).isEmpty();
+    }
+
+    @Test
     void reasoningContentStaysInMemoryAndIsReplayedToNextToolLoopRequest() {
         adapter.script.add(TestModelResponses.response("", "private reasoning", List.of(
                 new ToolCall("call-1", "context.search_exact", "{\"exactTerms\":[\"x\"]}")),
@@ -778,6 +820,7 @@ class AgentRuntimeTest {
         private final DeepSeekAdapter deepSeek = new DeepSeekAdapter();
         private boolean rejectNextThinkingCall;
         private long delayMillis;
+        private final AtomicInteger streamCalls = new AtomicInteger();
         private volatile CountDownLatch gate;
 
         @Override
@@ -830,7 +873,12 @@ class AgentRuntimeTest {
 
         @Override
         public ModelResponse stream(ModelRequest request, CallOptions options, ModelStreamListener listener) {
-            throw new UnsupportedOperationException("the Agent loop does not stream yet");
+            streamCalls.incrementAndGet();
+            ModelResponse response = complete(request, options);
+            if (!response.content().isEmpty()) {
+                listener.onTextDelta(response.content());
+            }
+            return response;
         }
 
         @Override

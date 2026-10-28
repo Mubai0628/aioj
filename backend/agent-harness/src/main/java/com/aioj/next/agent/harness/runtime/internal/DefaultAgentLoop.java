@@ -254,7 +254,14 @@ public final class DefaultAgentLoop implements AgentLoop {
                     messages.add(HarnessMessage.toolResult(call.callId(), budgetExceededPayload(call.toolName())));
                     continue;
                 }
-                ToolOutcome outcome = toolRuntime.execute(spec.toolContext(), ++toolSeq, call, remaining());
+                listen(listener -> listener.onToolStarted(state, call));
+                ToolOutcome outcome;
+                try {
+                    outcome = toolRuntime.execute(spec.toolContext(), ++toolSeq, call, remaining());
+                } catch (RuntimeException ex) {
+                    listen(listener -> listener.onToolFailed(state, call));
+                    throw ex;
+                }
                 state.countToolCall();
                 anyToolExecuted = true;
                 ledger.charge(descriptor.budgetCategory());

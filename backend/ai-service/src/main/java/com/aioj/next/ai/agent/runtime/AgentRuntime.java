@@ -1,6 +1,7 @@
 package com.aioj.next.ai.agent.runtime;
 
 import com.aioj.next.agent.harness.runtime.api.LoopInterceptor;
+import com.aioj.next.agent.harness.runtime.api.CancellationToken;
 import com.aioj.next.ai.agent.assembly.HarnessAgentRunner;
 import com.aioj.next.ai.agent.context.ContextSection;
 import com.aioj.next.ai.agent.guard.GuardVerdict;
@@ -70,7 +71,10 @@ public class AgentRuntime {
             /** Per-run Harness interceptors of the caller, for example the L4 final-answer check. */
             List<LoopInterceptor> interceptors,
             /** T1.6: how the sections were assembled (degraded contributors, budget trims); every manifest lists them. */
-            List<String> contextWarnings
+            List<String> contextWarnings,
+            boolean streamingRequested,
+            TurnEventBuffer progressEvents,
+            CancellationToken cancellation
     ) {
         public AgentRunRequest {
             modelScope = modelScope == null ? AiModelScope.TEXT_GENERATION : modelScope;
@@ -78,6 +82,7 @@ public class AgentRuntime {
             completionPolicy = completionPolicy == null ? AgentCompletionPolicy.none() : completionPolicy;
             interceptors = interceptors == null ? List.of() : List.copyOf(interceptors);
             contextWarnings = contextWarnings == null ? List.of() : List.copyOf(contextWarnings);
+            cancellation = cancellation == null ? CancellationToken.none() : cancellation;
         }
 
         /** One request built in one place (plan A2.2), instead of the positional constructors it replaced. */
@@ -105,6 +110,9 @@ public class AgentRuntime {
             private AgentCompletionPolicy completionPolicy;
             private final List<LoopInterceptor> interceptors = new ArrayList<>();
             private List<String> contextWarnings = List.of();
+            private boolean streamingRequested;
+            private TurnEventBuffer progressEvents;
+            private CancellationToken cancellation;
 
             private Builder(String turnId, long userId, String conversationId) {
                 this.turnId = turnId;
@@ -186,12 +194,20 @@ public class AgentRuntime {
                 return this;
             }
 
+            /** The turn coordinator owns cancellation and decides whether output may stream. */
+            public Builder turnProgress(boolean streaming, TurnEventBuffer events, CancellationToken token) {
+                this.streamingRequested = streaming;
+                this.progressEvents = events;
+                this.cancellation = token;
+                return this;
+            }
+
             public AgentRunRequest build() {
                 return new AgentRunRequest(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections,
                         requireToolCall, outputMode, Objects.requireNonNull(profile, "profile"),
                         Objects.requireNonNull(budget, "budget"), contestPolicy, messageLayerVerdict, usageObserver,
                         modelScope, serverBindings, allowStandardToolFallback, completionPolicy, interceptors,
-                        contextWarnings);
+                        contextWarnings, streamingRequested, progressEvents, cancellation);
             }
         }
     }

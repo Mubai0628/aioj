@@ -1,6 +1,7 @@
 package com.aioj.next.ai.controller;
 
 import com.aioj.next.ai.agent.AgentChatFacade;
+import com.aioj.next.ai.agent.runtime.TurnEventBuffer;
 import com.aioj.next.ai.agent.context.ContextDebugService;
 import com.aioj.next.ai.domain.AccountImportParseService;
 import com.aioj.next.ai.domain.AiChatContext;
@@ -22,6 +23,7 @@ import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.aioj.next.contract.ai.AiChatRequest;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -39,6 +41,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -46,6 +49,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -99,10 +105,12 @@ class AgentChatSseControllerTest {
 
     private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().build();
     private MockMvc mockMvc;
+    private AiController controller;
+    private SimpleMeterRegistry meters;
 
     @BeforeEach
     void setUp() {
-        AiController controller = new AiController(
+        controller = new AiController(
                 agentChatFacade,
                 aiQuotaService,
                 accountImportParseService,
@@ -118,6 +126,8 @@ class AgentChatSseControllerTest {
                 objectMapper,
                 Runnable::run
         );
+        meters = new SimpleMeterRegistry();
+        controller.setMeterRegistry(meters);
         controller.setPseudoStreamReplayer(new com.aioj.next.ai.agent.runtime.PseudoStreamReplayer(
                 new com.aioj.next.ai.config.AiProperties(), objectMapper));
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
@@ -205,6 +215,118 @@ class AgentChatSseControllerTest {
         assertThat(reassembled.toString()).isEqualTo(content);
         Map<String, Object> message = readJson(events(body).get("message"));
         assertThat(message.get("contentMarkdown")).isEqualTo(content);
+    }
+
+    @Test
+    void progressWaitsForTheRecheckAndContainsOnlySafeToolMetadata() throws Exception {
+        TurnEventBuffer progress = new TurnEventBuffer(8, System.nanoTime());
+        CompletableFuture<AgentChatFacade.TurnResult> pending = new CompletableFuture<>();
+        pending.whenComplete((value, failure) -> progress.close());
+        AgentChatFacade.TurnHandle old = handle("turn-live", pending);
+        AgentChatFacade.TurnHandle live = new AgentChatFacade.TurnHandle(old.conversation(), old.context(), old.user(),
+                old.assistant(), old.result(), old.turnId(), progress);
+        when(agentChatFacade.start(eq(USER_ID), any(AiChatRequest.class))).thenReturn(live);
+        var response = controller.stream(chatRequest("client-9"), null);
+        CountDownLatch sawDelta = new CountDownLatch(1);
+        ByteArrayOutputStream output = new ByteArrayOutputStream() {
+            @Override public synchronized void flush() {
+                if (toString(StandardCharsets.UTF_8).contains("event: delta")) {
+                    sawDelta.countDown();
+                }
+            }
+        };
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread writer = new Thread(() -> {
+            try {
+                response.getBody().writeTo(output);
+            } catch (Throwable ex) {
+                failure.set(ex);
+            }
+        });
+        writer.start();
+        try {
+            progress.beginStep(1);
+            progress.text("先看样例");
+            assertThat(sawDelta.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(pending).isNotDone();
+            progress.toolStarted("code.run_samples");
+            progress.toolFinished("code.run_samples", "SUCCESS", 12);
+            progress.beginStep(2);
+            progress.text("最终回复");
+            pending.complete(completedResult("最终回复").join());
+            assertThat(sawDelta.await(3, TimeUnit.SECONDS)).isTrue();
+            writer.join(3000);
+
+            assertThat(writer.isAlive()).isFalse();
+            assertThat(failure.get()).isNull();
+            String body = output.toString(StandardCharsets.UTF_8);
+            assertThat(body.indexOf("event: delta")).isLessThan(body.indexOf("event: message"));
+            assertThat(body).contains("\"step\":1", "\"phase\":\"started\"", "\"phase\":\"finished\"",
+                    "code.run_samples", "\"durationMs\":12");
+            assertThat(body).doesNotContain("arguments", "reasoning_content", "modelPayload");
+            assertThat(meters.get("aioj.ai.chat.first.delta").timer().count()).isEqualTo(1);
+        } finally {
+            pending.completeExceptionally(new IllegalStateException("test cleanup"));
+            progress.close();
+            writer.join(3000);
+        }
+    }
+
+    @Test
+    void newlyRestrictedTurnDiscardsAllSpeculativeProgressAndReplaysOnlySafeAnswer() throws Exception {
+        TurnEventBuffer progress = new TurnEventBuffer(8, System.nanoTime());
+        progress.beginStep(1);
+        progress.text("不得泄露的原始草稿");
+        progress.toolStarted("code.run_samples");
+        progress.toolFinished("code.run_samples", "SUCCESS", 12);
+        progress.close();
+        AgentChatFacade.TurnHandle old = handle("turn-1", completedResult("安全拒答", true));
+        when(agentChatFacade.start(eq(USER_ID), any(AiChatRequest.class))).thenReturn(
+                new AgentChatFacade.TurnHandle(old.conversation(), old.context(), old.user(), old.assistant(),
+                        old.result(), old.turnId(), progress));
+
+        String body = performStream("client-9");
+
+        assertThat(body).contains("event: delta", "安全拒答", "event: message");
+        assertThat(body).doesNotContain("不得泄露的原始草稿", "event: tool", "code.run_samples");
+    }
+
+    @Test
+    void failedRecheckNeverReleasesSpeculativeProgress() throws Exception {
+        TurnEventBuffer progress = new TurnEventBuffer(8, System.nanoTime());
+        progress.beginStep(1);
+        progress.text("不得泄露的草稿");
+        progress.toolStarted("code.run_samples");
+        progress.close();
+        CompletableFuture<AgentChatFacade.TurnResult> failed = CompletableFuture.failedFuture(
+                new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "比赛策略确认暂时不可用，请稍后重试"));
+        AgentChatFacade.TurnHandle old = handle("turn-1", failed);
+        when(agentChatFacade.start(eq(USER_ID), any(AiChatRequest.class))).thenReturn(
+                new AgentChatFacade.TurnHandle(old.conversation(), old.context(), old.user(), old.assistant(),
+                        old.result(), old.turnId(), progress));
+
+        String body = performStream("client-9");
+
+        assertThat(body).contains("event: error");
+        assertThat(body).doesNotContain("event: delta", "event: tool", "不得泄露的草稿", "code.run_samples");
+    }
+
+    @Test
+    void progressOverflowFallsBackToTheCompleteFinalMessage() throws Exception {
+        TurnEventBuffer progress = new TurnEventBuffer(2, System.nanoTime());
+        progress.beginStep(1);
+        progress.text("甲".repeat(TurnEventBuffer.MAX_BUFFERED_TEXT_CHARS));
+        progress.text("乙");
+        progress.close();
+        AgentChatFacade.TurnHandle old = handle("turn-overflow", completedResult("完整最终答复"));
+        when(agentChatFacade.start(eq(USER_ID), any(AiChatRequest.class))).thenReturn(
+                new AgentChatFacade.TurnHandle(old.conversation(), old.context(), old.user(), old.assistant(),
+                        old.result(), old.turnId(), progress));
+
+        String body = performStream("client-overflow");
+
+        assertThat(body).contains("event: message", "完整最终答复", "event: done");
+        assertThat(body).doesNotContain("event: delta", "event: tool");
     }
 
     @Test

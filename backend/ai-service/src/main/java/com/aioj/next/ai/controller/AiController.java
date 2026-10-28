@@ -1,6 +1,7 @@
 package com.aioj.next.ai.controller;
 
 import com.aioj.next.ai.agent.AgentChatFacade;
+import com.aioj.next.ai.agent.runtime.TurnEventBuffer;
 import com.aioj.next.ai.agent.context.ContextDebugService;
 import com.aioj.next.ai.domain.AiCompletion;
 import com.aioj.next.ai.domain.AiChatContext;
@@ -62,6 +63,7 @@ import com.aioj.next.contract.ai.AdminContestAiConversationSummary;
 import com.aioj.next.contract.ai.AdminContestAiMessageResponse;
 import com.aioj.next.contract.ai.AdminContestAiAssistanceSummary;
 import com.aioj.next.contract.ai.ProblemDraftRejectRequest;
+import io.micrometer.core.instrument.MeterRegistry;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -120,6 +122,7 @@ public class AiController {
     private ProblemDraftWorkspaceService problemDraftWorkspaceService;
     private ContestAiAssistanceStatisticsService contestAiAssistanceStatisticsService;
     private com.aioj.next.ai.agent.runtime.PseudoStreamReplayer pseudoStreamReplayer;
+    private MeterRegistry meters;
 
     AiController(
             AgentChatFacade agentChatFacade,
@@ -201,6 +204,11 @@ public class AiController {
         this.pseudoStreamReplayer = pseudoStreamReplayer;
     }
 
+    @Autowired(required = false)
+    public void setMeterRegistry(MeterRegistry meters) {
+        this.meters = meters;
+    }
+
     private ContestAiAssistanceStatisticsService requireContestAiAssistanceStatisticsService() {
         if (contestAiAssistanceStatisticsService == null) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "Contest AI assistance statistics are unavailable");
@@ -212,6 +220,9 @@ public class AiController {
     public ApiResponse<AiChatMessageResponse> send(@RequestBody @Valid AiChatRequest request) {
         Long userId = SecuritySupport.currentUserId();
         AgentChatFacade.TurnHandle turn = agentChatFacade.start(userId, request);
+        if (turn.progressEvents() != null) {
+            turn.progressEvents().detach();
+        }
         AgentChatFacade.TurnResult result = awaitTurn(turn);
         return ApiResponse.ok(result.assistant());
     }
@@ -238,11 +249,23 @@ public class AiController {
                 if (context.hasContent() || !problemContext.isEmpty() || !submissionContext.isEmpty()) {
                     writeSseEvent(output, "context", objectMapper.writeValueAsString(contextPayload(context, problemContext, submissionContext, renderHints)));
                 }
+                // P3-6 checks fresh contest state just before completion. Nothing from the
+                // model or tools may leave this buffer until that fail-closed check succeeds.
                 AgentChatFacade.TurnResult result = awaitTurn(turn);
                 AiCompletion completion = result.completion();
+                if (turn.progressEvents() != null && turn.progressEvents().overflowed()) {
+                    log.warn("Chat progress buffer exceeded its text limit; delivering final message only turn={}", turn.turnId());
+                }
+                if (!result.pseudoStream()) {
+                    writeTurnProgress(output, turn.progressEvents());
+                } else if (turn.progressEvents() != null) {
+                    // A restricted or newly restricted turn may have regenerated/refused;
+                    // never replay its unchecked pre-recheck progress.
+                    turn.progressEvents().detach();
+                }
                 // P3-5 (§5.4, Q2): restricted turns were buffered for the L4 output
                 // guard; replay the verified content as delta slices before the full
-                // message event. Non-restricted turns are byte-for-byte unchanged.
+                // message event, preserving the pre-existing restricted-turn payload.
                 if (result.pseudoStream() && pseudoStreamReplayer != null) {
                     for (String deltaPayload : pseudoStreamReplayer.deltaPayloads(completion.content())) {
                         writeSseEvent(output, "delta", deltaPayload);
@@ -261,6 +284,10 @@ public class AiController {
                 // The browser left the page. The background turn keeps running and will be visible in history.
             } catch (RuntimeException ex) {
                 sendStreamError(output, ex);
+            } finally {
+                if (turn.progressEvents() != null) {
+                    turn.progressEvents().detach();
+                }
             }
         };
         return ResponseEntity.ok()
@@ -781,6 +808,43 @@ public class AiController {
             return domainException;
         }
         return new DomainException(ErrorCode.INTERNAL_ERROR, "AI provider call failed: " + ex.getMessage());
+    }
+
+    private void writeTurnProgress(OutputStream output, TurnEventBuffer events) throws IOException {
+        if (events == null) {
+            return;
+        }
+        while (!events.drained()) {
+            List<TurnEventBuffer.Event> batch;
+            try {
+                batch = events.awaitBatch(50);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Chat stream interrupted", ex);
+            }
+            for (TurnEventBuffer.Event event : batch) {
+                if ("delta".equals(event.type())) {
+                    writeSseEvent(output, "delta", objectMapper.writeValueAsString(
+                            Map.of("text", event.text(), "step", event.step())));
+                    long elapsed = events.firstDeltaElapsedNanos();
+                    if (elapsed >= 0 && meters != null) {
+                        try {
+                            meters.timer("aioj.ai.chat.first.delta").record(elapsed, TimeUnit.NANOSECONDS);
+                        } catch (RuntimeException ignored) {
+                            // Metrics must not change the turn.
+                        }
+                    }
+                } else if ("tool".equals(event.type())) {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("phase", event.phase());
+                    payload.put("step", event.step());
+                    payload.put("name", event.name());
+                    payload.put("status", event.status() == null ? "RUNNING" : event.status());
+                    payload.put("durationMs", event.durationMs() == null ? 0L : event.durationMs());
+                    writeSseEvent(output, "tool", objectMapper.writeValueAsString(payload));
+                }
+            }
+        }
     }
 
     private AgentChatFacade.TurnResult awaitTurn(AgentChatFacade.TurnHandle turn) {

@@ -23,8 +23,14 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -150,6 +156,43 @@ class TurnCoordinatorTest {
                 org.mockito.ArgumentCaptor.forClass(AgentRuntime.AgentRunRequest.class);
         verify(agentRuntime).run(runRequest.capture());
         assertThat(runRequest.getValue().requireToolCall()).isFalse();
+    }
+
+    @Test
+    void turnTimeoutCancelsTheInFlightRunAndRecordsOnlyOneFailure() throws Exception {
+        stubUnrestrictedTurn("client-timeout", "你好");
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch cancelled = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicReference<com.aioj.next.agent.harness.runtime.api.CancellationToken> token = new AtomicReference<>();
+        when(turnService.failTurn(eq("t-1"), anyString(), anyString())).thenReturn(true, false);
+        when(agentRuntime.run(any(AgentRuntime.AgentRunRequest.class))).thenAnswer(invocation -> {
+            AgentRuntime.AgentRunRequest spec = invocation.getArgument(0);
+            token.set(spec.cancellation());
+            spec.cancellation().onCancel(cancelled::countDown);
+            entered.countDown();
+            release.await(3, TimeUnit.SECONDS);
+            throw new com.aioj.next.common.error.DomainException(
+                    com.aioj.next.common.error.ErrorCode.SERVICE_UNAVAILABLE, "cancelled");
+        });
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            coordinator = new TurnCoordinator(agentRuntime, bootstrapBuilder, policySnapshotService, participationService,
+                    fingerprintMatcher, guardDecisionRecorder, contestOutputGuard, quotaService, conversationService,
+                    responseNormalizer, turnService, turnDigestService, turnUnderstandingService, new AiProperties(),
+                    executor, 500);
+            TurnHandle handle = coordinator.start(USER_ID, request("client-timeout", "你好"));
+            assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(() -> handle.result().join()).hasRootCauseMessage("AI provider call timed out");
+            assertThat(cancelled.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(token.get().isCancelled()).isTrue();
+            verify(quotaService, org.mockito.Mockito.times(1)).record(USER_ID, null, null, 0, 0, false);
+        } finally {
+            release.countDown();
+            executor.shutdown();
+            assertThat(executor.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+        verify(quotaService, org.mockito.Mockito.times(1)).record(USER_ID, null, null, 0, 0, false);
     }
 
     @Test

@@ -24,7 +24,14 @@ public interface RunListener {
     default void onTextDelta(LoopContext context, String delta) {
     }
 
+    default void onToolStarted(LoopContext context, ToolCallRequest call) {
+    }
+
     default void onToolOutcome(LoopContext context, ToolCallRequest call, ToolOutcome outcome) {
+    }
+
+    /** The tool runtime threw before it could return an outcome. */
+    default void onToolFailed(LoopContext context, ToolCallRequest call) {
     }
 
     default void onRunFinished(LoopContext context, RunResult result) {
