@@ -109,6 +109,26 @@ class AgentLoopTest {
     }
 
     @Test
+    void everyToolCallOfATurnGetsAResultWhenTheBudgetRunsOutMidTurn() {
+        Tools.Fake lookup = Tools.descriptor("kb.lookup").echo();
+        ScriptedModelPort model = new ScriptedModelPort(false)
+                .toolCalls(call("c1", "kb.lookup", "{\"query\":\"a\"}"), call("c2", "kb.lookup", "{\"query\":\"b\"}"),
+                        call("c3", "kb.lookup", "{\"query\":\"c\"}"))
+                .answer("summary");
+
+        RunResult result = run(model, List.of(lookup), spec(scenario(budget(6, 1)), false));
+
+        assertThat(result.status()).isEqualTo(RunStatus.COMPLETED);
+        assertThat(lookup.calls()).isEqualTo(1);
+        // A Provider rejects an assistant message whose tool calls are not each followed by a result.
+        List<HarnessMessage> answerOnly = model.call(2).messages();
+        assertThat(answerOnly).filteredOn(message -> message.role() == HarnessMessage.Role.TOOL)
+                .extracting(HarnessMessage::toolCallId).containsExactly("c1", "c2", "c3");
+        assertThat(answerOnly.get(answerOnly.size() - 1).content())
+                .contains("\"status\":\"BUDGET_EXCEEDED\"", "tool call budget exhausted");
+    }
+
+    @Test
     void aChildCategoryCountsAgainstItsParent() {
         Tools.Fake single = Tools.descriptor("code.run").category("execute").echo();
         Tools.Fake batch = Tools.descriptor("code.run_batch").category("execute.batch").echo();

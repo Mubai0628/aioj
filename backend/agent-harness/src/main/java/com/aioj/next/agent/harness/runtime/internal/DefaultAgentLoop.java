@@ -240,8 +240,12 @@ public final class DefaultAgentLoop implements AgentLoop {
             offered.forEach(descriptor -> offeredByName.put(descriptor.name(), descriptor));
             for (ToolCallRequest call : calls) {
                 if (state.toolCallCount() >= budget.maxToolCalls()) {
+                    // Every tool call of the turn still needs its result, or the next request is
+                    // malformed and the Provider rejects it (plan appendix C.7, HTTP 400).
                     toolBudgetExhausted = true;
-                    break;
+                    messages.add(HarnessMessage.toolResult(call.callId(),
+                            budgetExceededPayload(call.toolName(), "tool call budget exhausted")));
+                    continue;
                 }
                 checkpoint();
                 ToolDescriptor descriptor = offeredByName.get(call.toolName());
@@ -252,7 +256,8 @@ public final class DefaultAgentLoop implements AgentLoop {
                 }
                 if (ledger.exhausted(descriptor.budgetCategory())) {
                     state.warn("tool_category_budget_exhausted");
-                    messages.add(HarnessMessage.toolResult(call.callId(), budgetExceededPayload(call.toolName())));
+                    messages.add(HarnessMessage.toolResult(call.callId(),
+                            budgetExceededPayload(call.toolName(), "tool category budget exhausted")));
                     continue;
                 }
                 listen(listener -> listener.onToolStarted(state, call));
@@ -409,13 +414,13 @@ public final class DefaultAgentLoop implements AgentLoop {
                     missedRequired, satisfied, failure, provider, model);
         }
 
-        private String budgetExceededPayload(String toolName) {
+        private String budgetExceededPayload(String toolName, String budget) {
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("status", "BUDGET_EXCEEDED");
             payload.putNull("data");
             payload.put("tool", toolName == null ? "" : toolName);
             payload.put("instructionAllowed", false);
-            payload.putArray("warnings").add("tool category budget exhausted; answer with what you have");
+            payload.putArray("warnings").add(budget + "; answer with what you have");
             return payload.toString();
         }
 
