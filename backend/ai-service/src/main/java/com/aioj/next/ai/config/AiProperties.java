@@ -32,6 +32,7 @@ public class AiProperties {
     private Recall recall = new Recall();
     private MemoryJobs memoryJobs = new MemoryJobs();
     private AgentJobs agentJobs = new AgentJobs();
+    private Channel channel = new Channel();
     private ProblemDraft problemDraft = new ProblemDraft();
     private AgentCore agentCore = new AgentCore();
 
@@ -201,6 +202,51 @@ public class AiProperties {
 
     public void setAgentJobs(AgentJobs agentJobs) {
         this.agentJobs = agentJobs == null ? new AgentJobs() : agentJobs;
+    }
+
+    public Channel getChannel() {
+        return channel;
+    }
+
+    public void setChannel(Channel channel) {
+        this.channel = channel == null ? new Channel() : channel;
+    }
+
+    /**
+     * The unified data channel (plan T1.7, A3.3/A3.4); prefix aioj.ai.channel.*. In UNIFIED mode
+     * every cross-turn job is an event on the channel and runs on the agent job worker; in
+     * LEGACY mode the memory jobs keep their own table and worker. The switch exists for the
+     * migration only and goes with T1.13.
+     */
+    public static class Channel {
+        public enum Mode {
+            UNIFIED,
+            LEGACY
+        }
+
+        private Mode mode = Mode.UNIFIED;
+        /** How often the backlog gauges are refreshed. */
+        private long metricsRefreshMs = 30_000L;
+
+        public Mode getMode() {
+            return mode;
+        }
+
+        public void setMode(Mode mode) {
+            this.mode = mode == null ? Mode.UNIFIED : mode;
+        }
+
+        public boolean isUnified() {
+            return mode == Mode.UNIFIED;
+        }
+
+        public long getMetricsRefreshMs() {
+            return metricsRefreshMs;
+        }
+
+        public void setMetricsRefreshMs(long metricsRefreshMs) {
+            this.metricsRefreshMs = Math.max(1_000L, metricsRefreshMs);
+        }
     }
 
     public Recall getRecall() {

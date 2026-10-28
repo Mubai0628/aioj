@@ -17,8 +17,36 @@ public class AiDomainEventEntity {
     private String idempotencyKey;
     private String payloadJson;
     private String sensitivity;
+    /** V72 (T1.7): the channel's envelope; NULL on rows written before it. */
+    private Integer schemaVersion;
+    private String producer;
+    private String traceId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    public Integer getSchemaVersion() {
+        return schemaVersion;
+    }
+
+    public void setSchemaVersion(Integer schemaVersion) {
+        this.schemaVersion = schemaVersion;
+    }
+
+    public String getProducer() {
+        return producer;
+    }
+
+    public void setProducer(String producer) {
+        this.producer = producer;
+    }
+
+    public String getTraceId() {
+        return traceId;
+    }
+
+    public void setTraceId(String traceId) {
+        this.traceId = traceId;
+    }
 
     public Long getId() {
         return id;

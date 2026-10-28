@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Persistence and lifecycle for ai_async_jobs (V60): idempotent enqueue, lease-based
@@ -67,16 +69,31 @@ public class AgentAsyncJobService {
      * expires and the row becomes claimable again.
      */
     public List<AiAsyncJobEntity> claimDueJobs(int batchSize, long leaseSeconds, String workerId) {
+        return claimDueJobs(batchSize, leaseSeconds, workerId, null);
+    }
+
+    /**
+     * As above, skipping the given job types (T1.7: a switched-off subscriber's jobs wait PENDING).
+     * Every other type is claimed, so a job nobody handles still reaches the worker and is parked.
+     */
+    public List<AiAsyncJobEntity> claimDueJobs(int batchSize, long leaseSeconds, String workerId,
+                                               Collection<String> skippedTypes) {
         LocalDateTime now = LocalDateTime.now();
-        List<AiAsyncJobEntity> candidates = mapper.selectList(new QueryWrapper<AiAsyncJobEntity>()
+        QueryWrapper<AiAsyncJobEntity> due = new QueryWrapper<AiAsyncJobEntity>()
                 .eq("status", STATUS_PENDING)
-                .le("next_retry_at", now)
+                .le("next_retry_at", now);
+        QueryWrapper<AiAsyncJobEntity> expired = new QueryWrapper<AiAsyncJobEntity>()
+                .eq("status", STATUS_RUNNING)
+                .lt("lease_expires_at", now);
+        if (skippedTypes != null && !skippedTypes.isEmpty()) {
+            due.notIn("job_type", skippedTypes);
+            expired.notIn("job_type", skippedTypes);
+        }
+        List<AiAsyncJobEntity> candidates = mapper.selectList(due
                 .orderByAsc("next_retry_at")
                 .last("LIMIT " + Math.max(1, batchSize)));
         // Recover jobs whose previous worker died holding a lease.
-        List<AiAsyncJobEntity> expiredLeases = mapper.selectList(new QueryWrapper<AiAsyncJobEntity>()
-                .eq("status", STATUS_RUNNING)
-                .lt("lease_expires_at", now)
+        List<AiAsyncJobEntity> expiredLeases = mapper.selectList(expired
                 .orderByAsc("lease_expires_at")
                 .last("LIMIT " + Math.max(1, batchSize)));
         List<AiAsyncJobEntity> claimed = new ArrayList<>();
@@ -146,6 +163,40 @@ public class AgentAsyncJobService {
                 .set("last_error", message == null ? "unknown" : message.substring(0, Math.min(1000, message.length())))
                 .set("completed_at", now)
                 .set("updated_at", now));
+    }
+
+    /**
+     * Operator replay (T1.7): puts up to {@code limit} dead letters (FAILED jobs) of one consumer
+     * back to PENDING with a fresh attempt budget; with {@code eventId}, only that event's job.
+     *
+     * @return how many jobs were requeued
+     */
+    public int requeueFailed(String jobType, String eventId, int limit) {
+        LocalDateTime now = LocalDateTime.now();
+        UpdateWrapper<AiAsyncJobEntity> update = new UpdateWrapper<AiAsyncJobEntity>()
+                .eq("job_type", jobType)
+                .eq("status", STATUS_FAILED);
+        if (eventId != null && !eventId.isBlank()) {
+            update.eq("idempotency_key", eventId.strip() + ":" + jobType);
+        }
+        update.set("status", STATUS_PENDING)
+                .set("attempt_count", 0)
+                .set("next_retry_at", now)
+                .set("lease_owner", null)
+                .set("lease_expires_at", null)
+                .set("completed_at", null)
+                .set("updated_at", now)
+                .orderByAsc("id")
+                .last("LIMIT " + Math.min(500, Math.max(1, limit)));
+        return mapper.update(null, update);
+    }
+
+    /** Per job type and status: how many jobs and the oldest one's creation time (T1.7 backlog gauges). */
+    public List<Map<String, Object>> countsByTypeAndStatus() {
+        return mapper.selectMaps(new QueryWrapper<AiAsyncJobEntity>()
+                .select("job_type", "status", "COUNT(*) AS job_count", "MIN(created_at) AS oldest_created_at")
+                .in("status", STATUS_PENDING, STATUS_RUNNING, STATUS_FAILED)
+                .groupBy("job_type", "status"));
     }
 
     private List<AiAsyncJobEntity> concat(List<AiAsyncJobEntity> first, List<AiAsyncJobEntity> second) {
