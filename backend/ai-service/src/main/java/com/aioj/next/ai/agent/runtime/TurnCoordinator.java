@@ -442,6 +442,27 @@ public class TurnCoordinator {
         }
     }
 
+    /**
+     * T1.11: what the code tools may run, bound by the server for this turn: the code the user
+     * selected, the conversation's problem and the submission it is about. The model only names
+     * a source; it never passes code.
+     */
+    static Map<String, String> codeToolBindings(AiChatRequest request, AiConversationEntity conversation) {
+        Map<String, String> bindings = new java.util.LinkedHashMap<>();
+        Long problemId = request.problemId() != null ? request.problemId() : conversation.getProblemId();
+        if (problemId != null) {
+            bindings.put("turn.problemId", String.valueOf(problemId));
+        }
+        if (request.submissionContext() != null && request.submissionContext().submissionId() != null) {
+            bindings.put("turn.submissionId", String.valueOf(request.submissionContext().submissionId()));
+        }
+        String selected = request.selectionContext() == null ? null : request.selectionContext().selectedText();
+        if (selected != null && !selected.isBlank()) {
+            bindings.put("turn.selection", selected.length() > 65_536 ? selected.substring(0, 65_536) : selected);
+        }
+        return bindings;
+    }
+
     private TurnResult complete(
             Long userId,
             AiConversationEntity conversation,
@@ -510,6 +531,7 @@ public class TurnCoordinator {
                             restrictedTurn ? CallProfile.CHAT_BUFFERED : CallProfile.CHAT_STREAM)
                     .budget(LoopBudget.from(properties.getAgentCore()))
                     .contest(contestPolicy, msgVerdict)
+                    .serverBindings(codeToolBindings(request, conversation))
                     .usageObserver(attemptUsage)
                     .interceptor(finalCheck)
                     .build());
