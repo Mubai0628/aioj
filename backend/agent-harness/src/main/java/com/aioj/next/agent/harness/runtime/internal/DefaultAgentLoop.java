@@ -34,6 +34,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -267,6 +268,10 @@ public final class DefaultAgentLoop implements AgentLoop {
                 ledger.charge(descriptor.budgetCategory());
                 if (outcome.result().ok()) {
                     state.succeeded(call.toolName());
+                } else if (outcome.result().status().infrastructureFailure()) {
+                    // §6.3: the next model call's manifest records the degraded tool, like a degraded contributor.
+                    state.warn("tool_degraded:" + call.toolName() + ":"
+                            + outcome.result().status().name().toLowerCase(Locale.ROOT));
                 }
                 listen(listener -> listener.onToolOutcome(state, call, outcome));
                 for (LoopInterceptor interceptor : spec.interceptors()) {

@@ -484,6 +484,40 @@ class AgentLoopTest {
     }
 
     @Test
+    void aBrokenOrSlowToolIsListedInTheNextManifestAndTheRunGoesOn() {
+        Tools.Fake broken = Tools.descriptor("kb.search").behaving((context, input) -> {
+            throw new IllegalStateException("index down");
+        });
+        Tools.Fake slow = Tools.descriptor("kb.slow").timeout(Duration.ofMillis(150)).behaving((context, input) -> {
+            try {
+                Thread.sleep(5_000);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+            return ToolResult.success("late", List.of(), null, null);
+        });
+        List<ModelCallManifest> manifests = new CopyOnWriteArrayList<>();
+        ScriptedModelPort model = new ScriptedModelPort(false)
+                .toolCalls(call("c1", "kb.search", "{\"query\":\"a\"}"), call("c2", "kb.slow", "{\"query\":\"b\"}"),
+                        call("c3", "kb.search", "not json"))
+                .answer("answered without both tools");
+
+        RunResult result = run(model, List.of(broken, slow), RunSpec.builder("run-1", scenario(budget(6, 4)),
+                        Tools.context(Set.of("CHAT"))).message(HarnessMessage.user(USER))
+                .manifestSink(manifests::add).build());
+
+        assertThat(result.status()).isEqualTo(RunStatus.COMPLETED);
+        assertThat(result.content()).isEqualTo("answered without both tools");
+        assertThat(manifests).extracting(ModelCallManifest::callSeq).containsExactly(1, 2);
+        assertThat(manifests.get(0).warnings()).isEmpty();
+        // A bad argument is the model's mistake, not a degraded tool.
+        assertThat(manifests.get(1).warnings()).containsExactly("tool_degraded:kb.search:execution_error",
+                "tool_degraded:kb.slow:timeout");
+        assertThat(result.warnings()).containsExactly("tool_degraded:kb.search:execution_error",
+                "tool_degraded:kb.slow:timeout");
+    }
+
+    @Test
     void listenersSeeTheRunInOrderAndCannotBreakIt() {
         Tools.Fake lookup = Tools.descriptor("kb.lookup").echo();
         List<String> events = new CopyOnWriteArrayList<>();
