@@ -3,6 +3,7 @@ package com.aioj.next.agent.harness.tool.api;
 import com.aioj.next.agent.harness.tool.internal.DescriptorValidator;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -68,5 +69,14 @@ public final class ToolCatalog {
 
     public List<ToolRejection> rejections() {
         return rejections;
+    }
+
+    /**
+     * The required tools this catalog does not offer, whether left out or never registered, in
+     * the order given (A2.4): a scenario that misses one is degraded, the service still starts.
+     */
+    public List<String> missing(Collection<String> requiredTools) {
+        return requiredTools == null ? List.of()
+                : requiredTools.stream().filter(name -> !toolsByName.containsKey(name)).toList();
     }
 }

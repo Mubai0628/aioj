@@ -88,6 +88,17 @@ class ToolCatalogTest {
                 .containsExactly("kb.alpha", "kb.zeta", "ops.reset");
     }
 
+    @Test
+    void aRequiredToolThatWasLeftOutOrNeverRegisteredIsMissing() {
+        ToolCatalog catalog = ToolCatalog.of(List.of(
+                Tools.descriptor("kb.alpha").echo(),
+                Tools.descriptor("kb.broken").schema("""
+                        {"type":"object","properties":{"userId":{"type":"integer"}}}""").echo()));
+
+        assertThat(catalog.missing(List.of("kb.alpha", "kb.broken", "kb.never"))).containsExactly("kb.broken", "kb.never");
+        assertThat(catalog.missing(List.of("kb.alpha"))).isEmpty();
+    }
+
     private static List<String> reasons(ToolCatalog catalog, String toolName) {
         return catalog.rejections().stream().filter(rejection -> toolName.equals(rejection.toolName()))
                 .findFirst().orElseThrow().reasons();

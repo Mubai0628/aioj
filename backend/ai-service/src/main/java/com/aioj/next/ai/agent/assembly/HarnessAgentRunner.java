@@ -136,7 +136,8 @@ public class HarnessAgentRunner {
     }
 
     private static AgentScenario scenario(AgentRuntime.AgentRunRequest spec, DraftCompletionPolicy gate) {
-        return new AgentScenario(gate == null ? "tutor" : "problem_draft", spec.grantedScopes(), List.of(),
+        return new AgentScenario(gate == null ? AgentScenarios.TUTOR : AgentScenarios.PROBLEM_DRAFT,
+                spec.grantedScopes(), List.of(),
                 gate == null ? CompletionPolicy.anyAnswer() : gate, runBudget(spec.budget()), spec.profile().name(),
                 CallProfile.RECOVERY_ANSWER.name());
     }
