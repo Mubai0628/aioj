@@ -13,7 +13,8 @@
  * Part D, problem drafting: from every problem-draft run's tool calls already in the database
  * (no model calls): first-pass rate (runs that reached draft.finalize without a draft.state.patch
  * after their first draft.samples.run), repair rounds (those patches), tool error rate and the
- * repeated-call rate (same tool, same arguments, same run).
+ * repeated-call rate (same tool, same arguments, same run, with no successful draft.state.patch in
+ * between: re-checking after an edit is not a repeat).
  *
  * This is a BASELINE: the script exits 0 on a completed measurement (non-zero only on FATAL).
  * Run it with ai-service's agent jobs off: then the turns make no curator or embedding calls.
@@ -192,7 +193,8 @@ const VERDICT_WORDS = {
   TLE: /超时|time limit|\bTLE\b|死循环|无限循环|infinite loop|不会结束|永远不/i,
   RE: /运行(时)?错误|runtime error|\bRE\b|除(以)?零|ZeroDivisionError|段错误|segmentation|空指针|nullptr|崩溃/i,
 };
-const CONTRADICTS = { CE: /编译(通过|成功)|compiles (fine|successfully)/i };
+// "编译通过之后再提交" is advice, not a claim that this code compiles (the first baseline counted it).
+const CONTRADICTS = { CE: /编译(通过|成功)(?!\s*(之后|以后|后))|compiles (fine|successfully)/i };
 
 function judgeCase(spec, turn) {
   const calls = toolCalls(turn.turnId);
@@ -249,11 +251,14 @@ function draftMetrics() {
         errors++;
       }
       const key = `${call.toolName}|${call.argsHash}`;
-      // Reads of state between edits repeat by design; only repeated work counts.
+      // Reads of state repeat by design, and an edit makes every check worth running again.
       if (seen.has(key) && call.toolName !== "draft.state.get" && call.toolName !== "draft.execution.get") {
         repeated++;
       }
       seen.add(key);
+      if (call.toolName === "draft.state.patch" && call.status === "SUCCESS") {
+        seen.clear();
+      }
       if (call.toolName === "draft.samples.run" && firstSamples < 0) {
         firstSamples = index;
       }
@@ -334,6 +339,7 @@ function cleanupEvalData() {
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   const token = await login();
+  // AIOJ_EVAL_CASES=NONE measures only the draft part (no model calls).
   const selected = CASES.filter((spec) => !config.cases.length || config.cases.includes(spec.id));
   const results = [];
   for (const spec of selected) {
