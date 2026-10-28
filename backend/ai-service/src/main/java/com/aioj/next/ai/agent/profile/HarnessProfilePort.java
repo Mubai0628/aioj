@@ -6,16 +6,16 @@ import com.aioj.next.ai.agent.port.PortToolResults;
 import com.aioj.next.ai.persistence.entity.AiLearningProfileEntity;
 import com.aioj.next.ai.persistence.mapper.AiLearningProfileMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import org.springframework.stereotype.Component;
 
 import java.time.ZoneId;
 import java.util.List;
 
 /**
- * The Harness profile port over ai_learning_profiles (plan T1.6, A3.1): read-only, through
- * {@link PortCalls}. Only ACTIVE profiles that are neither disabled nor deleted are visible
- * (frozen decision Q4); each comes back as one signal (topic = category, signal = label).
- * Writing signals moves onto the event channel with T1.7 (A3.5).
+ * The Harness profile port over ai_learning_profile. Reads use {@link PortCalls}; only ACTIVE
+ * rows that are neither disabled nor deleted are visible. Explicit changes write synchronously
+ * in the caller's transaction and do not publish an event.
  */
 @Component
 public class HarnessProfilePort implements ProfilePort {
@@ -54,5 +54,31 @@ public class HarnessProfilePort implements ProfilePort {
     @Override
     public void submit(ProfileSignal signal) {
         throw new UnsupportedOperationException("profile signals are not written through the port yet (T1.7, A3.5)");
+    }
+
+    @Override
+    public void update(ProfileChange change) {
+        if (change == null) {
+            throw new IllegalArgumentException("profile change is required");
+        }
+        long userId = Long.parseLong(change.subjectId());
+        long itemId = Long.parseLong(change.itemId());
+        if (change.clearDisabledAt()) {
+            profileMapper.update(null, new UpdateWrapper<AiLearningProfileEntity>()
+                    .eq("id", itemId).eq("user_id", userId)
+                    .set("label", change.label()).set("state", change.state())
+                    .set("confidence", change.confidence()).setSql("disabled_at = NULL")
+                    .set("updated_at", change.updatedAt()));
+        } else {
+            AiLearningProfileEntity profile = new AiLearningProfileEntity();
+            profile.id = itemId;
+            profile.label = change.label();
+            profile.state = change.state();
+            profile.confidence = change.confidence();
+            profile.disabledAt = change.disabledAt();
+            profile.updatedAt = change.updatedAt();
+            profileMapper.update(profile, new UpdateWrapper<AiLearningProfileEntity>()
+                    .eq("id", itemId).eq("user_id", userId));
+        }
     }
 }

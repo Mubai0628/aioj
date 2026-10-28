@@ -2,10 +2,8 @@ package com.aioj.next.ai.agent.profile;
 
 import com.aioj.next.agent.harness.channel.api.EventPublisher;
 import com.aioj.next.agent.harness.channel.api.HarnessEvent;
-import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobService;
 import com.aioj.next.ai.agent.channel.ChannelEventTypes;
 import org.mockito.ArgumentCaptor;
-import com.aioj.next.ai.config.AiProperties;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -23,35 +21,24 @@ import static org.mockito.Mockito.when;
 
 class ProfileAggregateJobProducerTest {
 
-    private final AgentAsyncJobService jobService = mock(AgentAsyncJobService.class);
     private final EventPublisher publisher = mock(EventPublisher.class);
     private final ProfileAggregateJobProducer producer =
-            new ProfileAggregateJobProducer(jobService, new ObjectMapper(), legacy(), publisher);
-    private final ProfileAggregateJobProducer unified =
-            new ProfileAggregateJobProducer(jobService, new ObjectMapper(), new AiProperties(), publisher);
-
-    private static AiProperties legacy() {
-        AiProperties properties = new AiProperties();
-        properties.getChannel().setMode(AiProperties.Channel.Mode.LEGACY);
-        return properties;
-    }
+            new ProfileAggregateJobProducer(new ObjectMapper(), publisher);
 
     @Test
     void enqueuesWithUserHourBucketedIdempotencyKey() {
         producer.enqueueForUser(7L);
 
-        verify(jobService).enqueue(
-                eq(ProfileAggregateJobHandler.JOB_TYPE_PROFILE_AGGREGATE),
-                org.mockito.ArgumentMatchers.argThat(key -> key != null
-                        && key.startsWith(ProfileAggregateJobHandler.JOB_TYPE_PROFILE_AGGREGATE + ":7:")
-                        && key.endsWith(":00:00Z")),
-                eq("{\"userId\":7}"),
-                eq(5));
+        ArgumentCaptor<HarnessEvent> event = ArgumentCaptor.forClass(HarnessEvent.class);
+        verify(publisher).publish(event.capture());
+        assertThat(event.getValue().type()).isEqualTo(ChannelEventTypes.PROFILE_SIGNAL_OBSERVED);
+        assertThat(event.getValue().idempotencyKey()).startsWith("profile-signals:7:").endsWith(":00:00Z");
+        assertThat(event.getValue().payload().get("userId").asLong()).isEqualTo(7L);
     }
 
     @Test
     void enqueueFailureNeverBreaksTheCaller() {
-        when(jobService.enqueue(anyString(), anyString(), anyString(), anyInt()))
+        when(publisher.publish(any(HarnessEvent.class)))
                 .thenThrow(new RuntimeException("job db down"));
 
         assertThatCode(() -> producer.enqueueForUser(7L)).doesNotThrowAnyException();
@@ -59,7 +46,7 @@ class ProfileAggregateJobProducerTest {
 
     @Test
     void unifiedModePublishesOneSignalEventPerUserHour() {
-        unified.enqueueForUser(7L);
+        producer.enqueueForUser(7L);
 
         ArgumentCaptor<HarnessEvent> event = ArgumentCaptor.forClass(HarnessEvent.class);
         verify(publisher).publish(event.capture());
@@ -67,20 +54,19 @@ class ProfileAggregateJobProducerTest {
         assertThat(event.getValue().idempotencyKey()).startsWith("profile-signals:7:").endsWith(":00:00Z");
         assertThat(event.getValue().subject().userId()).isEqualTo("7");
         assertThat(event.getValue().payload().get("userId").asLong()).isEqualTo(7L);
-        verify(jobService, never()).enqueue(anyString(), anyString(), anyString(), anyInt());
     }
 
     @Test
     void publishFailureNeverBreaksTheCaller() {
         when(publisher.publish(any(HarnessEvent.class))).thenThrow(new RuntimeException("channel down"));
 
-        assertThatCode(() -> unified.enqueueForUser(7L)).doesNotThrowAnyException();
+        assertThatCode(() -> producer.enqueueForUser(7L)).doesNotThrowAnyException();
     }
 
     @Test
     void nullUserIdSkipsEnqueue() {
         producer.enqueueForUser(null);
 
-        verifyNoInteractions(jobService);
+        verifyNoInteractions(publisher);
     }
 }

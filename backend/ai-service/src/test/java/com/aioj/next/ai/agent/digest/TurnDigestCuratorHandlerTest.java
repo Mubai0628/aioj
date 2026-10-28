@@ -48,24 +48,13 @@ class TurnDigestCuratorHandlerTest {
     private final AiTurnDigestMapper digestMapper = mock(AiTurnDigestMapper.class);
     private final AiConversationService conversationService = mock(AiConversationService.class);
     private final ModelClient modelClient = mock(ModelClient.class);
-    private final com.aioj.next.ai.agent.asyncjob.AgentAsyncJobService jobService =
-            mock(com.aioj.next.ai.agent.asyncjob.AgentAsyncJobService.class);
     private final MemoryCandidateIngestionService memoryIngestion = mock(MemoryCandidateIngestionService.class);
     private final ProfileSignalIngestionService profileIngestion = mock(ProfileSignalIngestionService.class);
     private final ProfileAggregateJobProducer aggregateProducer = mock(ProfileAggregateJobProducer.class);
     private final EventPublisher publisher = mock(EventPublisher.class);
     private final TurnDigestCuratorHandler handler = new TurnDigestCuratorHandler(
-            digestMapper, conversationService, modelClient, jobService, objectMapper, legacy(),
+            digestMapper, conversationService, modelClient, objectMapper, new AiProperties(),
             memoryIngestion, profileIngestion, aggregateProducer, publisher);
-    private final TurnDigestCuratorHandler unifiedHandler = new TurnDigestCuratorHandler(
-            digestMapper, conversationService, modelClient, jobService, objectMapper, new AiProperties(),
-            memoryIngestion, profileIngestion, aggregateProducer, publisher);
-
-    private static AiProperties legacy() {
-        AiProperties properties = new AiProperties();
-        properties.getChannel().setMode(AiProperties.Channel.Mode.LEGACY);
-        return properties;
-    }
 
     @BeforeEach
     void setUp() {
@@ -104,7 +93,7 @@ class TurnDigestCuratorHandlerTest {
                 """,
                 List.of(), "stop", 500, 120, 0, "deepseek", "deepseek-v4-pro"));
 
-        unifiedHandler.handle(job("{\"turnId\":\"t-1\",\"conversationId\":\"c-1\",\"userId\":7}"));
+        handler.handle(job("{\"turnId\":\"t-1\",\"conversationId\":\"c-1\",\"userId\":7}"));
 
         ArgumentCaptor<AiTurnDigestEntity> ready = ArgumentCaptor.forClass(AiTurnDigestEntity.class);
         verify(digestMapper).insert(ready.capture());
@@ -115,8 +104,6 @@ class TurnDigestCuratorHandlerTest {
         assertThat(event.getValue().subject().userId()).isEqualTo("7");
         assertThat(event.getValue().subject().turnId()).isEqualTo("t-1");
         assertThat(event.getValue().payload().get("turnId").asString()).isEqualTo("t-1");
-        verify(jobService, never()).enqueue(eq(TurnDigestService.JOB_TYPE_EMBED_DIGEST), any(String.class),
-                any(String.class), anyInt());
     }
 
     @Test
@@ -172,8 +159,10 @@ class TurnDigestCuratorHandlerTest {
         assertThat(root.has("episodeBoundaryProposal")).isFalse();
         assertThat(ready.getSearchText()).contains("异或").contains("区间异或");
         // P1-6: the READY digest hands off to the dense lane.
-        verify(jobService).enqueue(eq(TurnDigestService.JOB_TYPE_EMBED_DIGEST), any(String.class),
-                any(String.class), eq(5));
+        ArgumentCaptor<HarnessEvent> embedded = ArgumentCaptor.forClass(HarnessEvent.class);
+        verify(publisher).publish(embedded.capture());
+        assertThat(embedded.getValue().type()).isEqualTo(ChannelEventTypes.DIGEST_READY);
+        assertThat(embedded.getValue().payload().get("turnId").asString()).isEqualTo("t-1");
 
         // P2-2: candidates/signals are handed to the ingestion sinks before READY persists.
         ArgumentCaptor<List> candidatesCaptor = ArgumentCaptor.forClass(List.class);

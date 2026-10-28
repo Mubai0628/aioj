@@ -202,7 +202,9 @@ class AiLearningProfileServiceTest {
         service.disable(7L, 10L);
 
         ArgumentCaptor<AiLearningProfileEntity> captor = ArgumentCaptor.forClass(AiLearningProfileEntity.class);
-        verify(profileMapper).updateById(captor.capture());
+        ArgumentCaptor<UpdateWrapper<AiLearningProfileEntity>> owner = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(profileMapper).update(captor.capture(), owner.capture());
+        assertThat(owner.getValue().getSqlSegment()).contains("user_id", "id");
         assertThat(captor.getValue().state).isEqualTo("DISABLED");
         assertThat(captor.getValue().disabledAt).isNotNull();
     }
@@ -232,7 +234,7 @@ class AiLearningProfileServiceTest {
 
         // V3 P2-7: user distrust lowers profile confidence ×0.85 (merge WEAKEN semantics).
         ArgumentCaptor<AiLearningProfileEntity> captor = ArgumentCaptor.forClass(AiLearningProfileEntity.class);
-        verify(profileMapper).updateById(captor.capture());
+        verify(profileMapper).update(captor.capture(), any(UpdateWrapper.class));
         assertThat(captor.getValue().state).isEqualTo("DISABLED");
         assertThat(captor.getValue().disabledAt).isNotNull();
         assertThat(captor.getValue().confidence).isEqualByComparingTo("0.6800");
@@ -251,7 +253,7 @@ class AiLearningProfileServiceTest {
         service.update(7L, 10L, new AiLearningProfileUpdateRequest("DISABLED", null, "user distrust"));
 
         ArgumentCaptor<AiLearningProfileEntity> captor = ArgumentCaptor.forClass(AiLearningProfileEntity.class);
-        verify(profileMapper).updateById(captor.capture());
+        verify(profileMapper).update(captor.capture(), any(UpdateWrapper.class));
         assertThat(captor.getValue().state).isEqualTo("DISABLED");
         assertThat(captor.getValue().disabledAt).isNotNull();
         assertThat(captor.getValue().confidence).isEqualByComparingTo("0.6800");
@@ -731,7 +733,8 @@ class AiLearningProfileServiceTest {
                 new ObjectMapper(),
                 signalIngestion,
                 aggregateProducer,
-                org.springframework.transaction.support.TransactionOperations.withoutTransaction()
+                org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
+                new com.aioj.next.ai.agent.profile.HarnessProfilePort(profileMapper, null)
         );
     }
 

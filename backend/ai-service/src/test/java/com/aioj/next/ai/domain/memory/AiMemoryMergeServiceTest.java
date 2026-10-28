@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain.memory;
 
+import com.aioj.next.ai.agent.channel.ChannelEventTypes;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.AiCapacityService;
 import com.aioj.next.ai.domain.ModelCompletions;
@@ -8,6 +9,7 @@ import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.domain.AiQuotaService;
 import com.aioj.next.ai.domain.AiRetrievalService;
+import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
 import com.aioj.next.ai.persistence.entity.AiDomainEventEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryCandidateEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryClaimEntity;
@@ -15,6 +17,7 @@ import com.aioj.next.ai.persistence.entity.AiMemoryEvidenceEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryVersionEntity;
 import com.aioj.next.ai.persistence.entity.AiUserMemoryEntity;
+import com.aioj.next.ai.persistence.mapper.AiAsyncJobMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryCandidateMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryEvidenceMapper;
@@ -69,6 +72,8 @@ class AiMemoryMergeServiceTest {
     @Mock
     private AiMemoryEventService eventService;
     @Mock
+    private AiAsyncJobMapper asyncJobMapper;
+    @Mock
     private AiModelConfigResolver configResolver;
     @Mock
     private ModelCompletions completionClient;
@@ -89,6 +94,7 @@ class AiMemoryMergeServiceTest {
                 memoryMapper,
                 retrievalService,
                 eventService,
+                asyncJobMapper,
                 new AiMemoryEventPayloadSanitizer(),
                 objectMapper,
                 configResolver,
@@ -120,18 +126,18 @@ class AiMemoryMergeServiceTest {
         when(candidateMapper.selectById(100L)).thenReturn(candidate);
         AiDomainEventEntity event = new AiDomainEventEntity();
         event.setId(200L);
-        AiMemoryJobEntity job = new AiMemoryJobEntity();
-        job.setId(300L);
         when(eventService.recordEvent(
-                eq(AiMemoryJobTypes.EVENT_AI_MEMORY_MERGE_REQUESTED),
+                eq(ChannelEventTypes.MEMORY_CANDIDATE_PROPOSED),
                 eq(7L),
                 eq("AI_MEMORY_CANDIDATE"),
                 eq("100"),
                 eq("ai-memory-merge-requested:100"),
                 any(),
-                eq(AiMemoryEventService.SENSITIVITY_USER_PRIVATE_SAFE),
-                any()
-        )).thenReturn(new AiMemoryEventService.RecordedEvent(event, List.of(job)));
+                eq(AiMemoryEventService.SENSITIVITY_USER_PRIVATE_SAFE)
+        )).thenReturn(event);
+        AiAsyncJobEntity job = new AiAsyncJobEntity();
+        job.setId(300L);
+        when(asyncJobMapper.selectOne(any(QueryWrapper.class))).thenReturn(job);
 
         var result = service.enqueueCandidateMerge(
                 7L,
@@ -144,10 +150,33 @@ class AiMemoryMergeServiceTest {
         );
 
         assertThat(result.job().getId()).isEqualTo(300L);
+        ArgumentCaptor<QueryWrapper<AiAsyncJobEntity>> jobQuery = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(asyncJobMapper).selectOne(jobQuery.capture());
+        assertThat(jobQuery.getValue().getSqlSegment()).contains("idempotency_key", "job_type");
+        assertThat(jobQuery.getValue().getParamNameValuePairs().values())
+                .contains("200:AI_MEMORY_MERGE_REVIEW", "AI_MEMORY_MERGE_REVIEW");
         ArgumentCaptor<AiMemoryCandidateEntity> candidateCaptor = ArgumentCaptor.forClass(AiMemoryCandidateEntity.class);
         verify(candidateMapper).updateById(candidateCaptor.capture());
         assertThat(candidateCaptor.getValue().status).isEqualTo(AiMemoryMergeService.STATUS_MERGE_QUEUED);
         assertThat(candidateCaptor.getValue().valueJson).contains("memoryMerge", "user accepted");
+    }
+
+    @Test
+    void enqueueCandidateMergeFailsWhenTheSubscriberJobIsMissing() {
+        AiMemoryCandidateEntity candidate = candidate();
+        when(candidateMapper.selectById(100L)).thenReturn(candidate);
+        AiDomainEventEntity event = new AiDomainEventEntity();
+        event.setId(200L);
+        when(eventService.recordEvent(any(), any(), any(), any(), any(), any(), any())).thenReturn(event);
+        when(asyncJobMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+
+        assertThatThrownBy(() -> service.enqueueCandidateMerge(
+                7L, 100L,
+                new AiMemoryCandidateActionRequest("preference", null, "guidance_preference", "先给提示", "accept"),
+                null, null, "ACCEPT", "accept"))
+                .isInstanceOf(com.aioj.next.common.error.DomainException.class)
+                .hasMessageContaining("Memory merge job was not recorded");
+        verify(asyncJobMapper).selectOne(any(QueryWrapper.class));
     }
 
     @Test
@@ -169,7 +198,7 @@ class AiMemoryMergeServiceTest {
         assertThat(result.candidate()).isSameAs(candidate);
         assertThat(result.job()).isNull();
         verify(candidateMapper, never()).updateById(any(AiMemoryCandidateEntity.class));
-        verify(eventService, never()).recordEvent(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(eventService, never()).recordEvent(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -189,7 +218,7 @@ class AiMemoryMergeServiceTest {
         ))
                 .hasMessageContaining("already been processed");
         verify(candidateMapper, never()).updateById(any(AiMemoryCandidateEntity.class));
-        verify(eventService, never()).recordEvent(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(eventService, never()).recordEvent(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -202,18 +231,18 @@ class AiMemoryMergeServiceTest {
         when(candidateMapper.selectById(100L)).thenReturn(candidate);
         AiDomainEventEntity event = new AiDomainEventEntity();
         event.setId(200L);
-        AiMemoryJobEntity job = new AiMemoryJobEntity();
-        job.setId(300L);
         when(eventService.recordEvent(
-                eq(AiMemoryJobTypes.EVENT_AI_MEMORY_MERGE_REQUESTED),
+                eq(ChannelEventTypes.MEMORY_CANDIDATE_PROPOSED),
                 eq(7L),
                 eq("AI_MEMORY_CANDIDATE"),
                 eq("100"),
                 eq("ai-memory-merge-requested:100"),
                 any(),
-                eq(AiMemoryEventService.SENSITIVITY_USER_PRIVATE_SAFE),
-                any()
-        )).thenReturn(new AiMemoryEventService.RecordedEvent(event, List.of(job)));
+                eq(AiMemoryEventService.SENSITIVITY_USER_PRIVATE_SAFE)
+        )).thenReturn(event);
+        AiAsyncJobEntity job = new AiAsyncJobEntity();
+        job.setId(300L);
+        when(asyncJobMapper.selectOne(any(QueryWrapper.class))).thenReturn(job);
 
         var result = service.enqueueCandidateMerge(
                 7L,
@@ -225,7 +254,7 @@ class AiMemoryMergeServiceTest {
                 "auto_memory_extraction"
         );
 
-        assertThat(result.job()).isNotNull();
+        assertThat(result.job().getId()).isEqualTo(300L);
         ArgumentCaptor<AiMemoryCandidateEntity> candidateCaptor = ArgumentCaptor.forClass(AiMemoryCandidateEntity.class);
         verify(candidateMapper).updateById(candidateCaptor.capture());
         assertThat(candidateCaptor.getValue().status).isEqualTo(AiMemoryMergeService.STATUS_MERGE_QUEUED);
@@ -700,10 +729,11 @@ class AiMemoryMergeServiceTest {
         when(candidateMapper.selectById(700L)).thenAnswer(invocation -> insertedCandidate.get());
         AiDomainEventEntity event = new AiDomainEventEntity();
         event.setId(800L);
-        AiMemoryJobEntity job = new AiMemoryJobEntity();
+        when(eventService.recordEvent(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(event);
+        AiAsyncJobEntity job = new AiAsyncJobEntity();
         job.setId(900L);
-        when(eventService.recordEvent(any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new AiMemoryEventService.RecordedEvent(event, List.of(job)));
+        when(asyncJobMapper.selectOne(any(QueryWrapper.class))).thenReturn(job);
 
         var response = service.enqueueMaintenance(
                 7L,
@@ -713,6 +743,7 @@ class AiMemoryMergeServiceTest {
         assertThat(response.scannedMemories()).isEqualTo(3);
         assertThat(response.relatedGroups()).isEqualTo(1);
         assertThat(response.queuedJobs()).isEqualTo(1);
+        assertThat(response.jobIds()).containsExactly(900L);
         assertThat(response.candidateIds()).containsExactly(700L);
         assertThat(insertedCandidate.get().canonicalText)
                 .contains("#300", "#301")

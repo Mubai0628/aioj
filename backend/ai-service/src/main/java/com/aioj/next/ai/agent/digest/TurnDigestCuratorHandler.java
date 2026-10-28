@@ -5,7 +5,6 @@ import com.aioj.next.agent.harness.channel.api.EventPublisher;
 import com.aioj.next.agent.harness.channel.api.EventSubject;
 import com.aioj.next.agent.harness.channel.api.HarnessEvent;
 import com.aioj.next.ai.agent.channel.ChannelEventTypes;
-import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobService;
 import com.aioj.next.ai.agent.memory.MemoryCandidateIngestionService;
 import com.aioj.next.ai.model.api.CallOptions;
 import com.aioj.next.ai.model.api.CallProfile;
@@ -96,7 +95,6 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
     private final AiTurnDigestMapper digestMapper;
     private final AiConversationService conversationService;
     private final ModelClient modelClient;
-    private final AgentAsyncJobService jobService;
     private final ObjectMapper objectMapper;
     private final AiProperties properties;
     private final MemoryCandidateIngestionService memoryCandidateIngestion;
@@ -108,7 +106,6 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
             AiTurnDigestMapper digestMapper,
             AiConversationService conversationService,
             ModelClient modelClient,
-            AgentAsyncJobService jobService,
             ObjectMapper objectMapper,
             AiProperties properties,
             MemoryCandidateIngestionService memoryCandidateIngestion,
@@ -120,7 +117,6 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
         this.digestMapper = digestMapper;
         this.conversationService = conversationService;
         this.modelClient = modelClient;
-        this.jobService = jobService;
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.memoryCandidateIngestion = memoryCandidateIngestion;
@@ -427,22 +423,12 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
             payload.put("turnId", ready.getTurnId());
             payload.put("userId", ready.getUserId());
             payload.put("digestId", ready.getId());
-            if (properties.getChannel().isUnified()) {
-                // T1.7: the embedder subscribes to DIGEST_READY (its job type stays EMBED_DIGEST).
-                channel.publish(HarnessEvent.builder(ChannelEventTypes.DIGEST_READY,
-                                "digest-ready:" + ready.getId(), "ai-service:digest-curator")
-                        .subject(new EventSubject(String.valueOf(ready.getUserId()), ready.getConversationId(),
-                                ready.getTurnId(), null))
-                        .payload(objectMapper.valueToTree(payload))
-                        .build());
-            } else {
-                jobService.enqueue(
-                        TurnDigestService.JOB_TYPE_EMBED_DIGEST,
-                        TurnDigestService.JOB_TYPE_EMBED_DIGEST + ":" + ready.getId(),
-                        objectMapper.writeValueAsString(payload),
-                        properties.getAgentJobs().getMaxAttempts()
-                );
-            }
+            channel.publish(HarnessEvent.builder(ChannelEventTypes.DIGEST_READY,
+                            "digest-ready:" + ready.getId(), "ai-service:digest-curator")
+                    .subject(new EventSubject(String.valueOf(ready.getUserId()), ready.getConversationId(),
+                            ready.getTurnId(), null))
+                    .payload(objectMapper.valueToTree(payload))
+                    .build());
         } catch (Exception ex) {
             // Enqueue failure never fails the curate job; the KEYWORD lane keeps working.
             log.warn("embed job enqueue failed digest={} error={}", ready.getId(), ex.toString());

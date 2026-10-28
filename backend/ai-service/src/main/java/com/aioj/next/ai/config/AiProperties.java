@@ -212,33 +212,10 @@ public class AiProperties {
         this.channel = channel == null ? new Channel() : channel;
     }
 
-    /**
-     * The unified data channel (plan T1.7, A3.3/A3.4); prefix aioj.ai.channel.*. In UNIFIED mode
-     * every cross-turn job is an event on the channel and runs on the agent job worker; in
-     * LEGACY mode the memory jobs keep their own table and worker. The switch exists for the
-     * migration only and goes with T1.13.
-     */
+    /** Unified data-channel operational settings, prefix aioj.ai.channel.*. */
     public static class Channel {
-        public enum Mode {
-            UNIFIED,
-            LEGACY
-        }
-
-        private Mode mode = Mode.UNIFIED;
         /** How often the backlog gauges are refreshed. */
         private long metricsRefreshMs = 30_000L;
-
-        public Mode getMode() {
-            return mode;
-        }
-
-        public void setMode(Mode mode) {
-            this.mode = mode == null ? Mode.UNIFIED : mode;
-        }
-
-        public boolean isUnified() {
-            return mode == Mode.UNIFIED;
-        }
 
         public long getMetricsRefreshMs() {
             return metricsRefreshMs;

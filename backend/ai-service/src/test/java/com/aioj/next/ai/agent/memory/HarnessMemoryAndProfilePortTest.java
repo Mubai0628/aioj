@@ -12,17 +12,22 @@ import com.aioj.next.ai.persistence.mapper.AiLearningProfileMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryEvidenceMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 class HarnessMemoryAndProfilePortTest {
@@ -76,6 +81,42 @@ class HarnessMemoryAndProfilePortTest {
             assertThat(signal.weight()).isEqualTo(0.6);
             assertThat(signal.evidenceRef()).isEqualTo("LEARNING_PROFILE:31");
         });
+    }
+
+    @Test
+    void profileChangesWriteTheSameStateAndConfidenceSynchronously() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 28, 10, 0);
+        profile.update(new ProfilePort.ProfileChange("7", "31", "二分边界", "DISABLED",
+                new BigDecimal("0.6800"), now, now, false));
+        ArgumentCaptor<AiLearningProfileEntity> saved = ArgumentCaptor.forClass(AiLearningProfileEntity.class);
+        ArgumentCaptor<UpdateWrapper<AiLearningProfileEntity>> owner = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(profileMapper).update(saved.capture(), owner.capture());
+        assertThat(saved.getValue().id).isEqualTo(31L);
+        assertThat(saved.getValue().userId).isNull();
+        assertThat(owner.getValue().getSqlSegment()).contains("user_id", "id");
+        assertThat(owner.getValue().getParamNameValuePairs().values()).contains(7L, 31L);
+        assertThat(saved.getValue().state).isEqualTo("DISABLED");
+        assertThat(saved.getValue().confidence).isEqualByComparingTo("0.6800");
+        assertThat(saved.getValue().disabledAt).isEqualTo(now);
+    }
+
+    @Test
+    void profileReactivationExplicitlyClearsDisabledAt() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 28, 10, 0);
+        profile.update(new ProfilePort.ProfileChange("7", "31", "二分边界", "ACTIVE",
+                new BigDecimal("0.7800"), null, now, true));
+        ArgumentCaptor<UpdateWrapper<AiLearningProfileEntity>> update = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(profileMapper).update(isNull(), update.capture());
+        assertThat(update.getValue().getSqlSet()).contains("disabled_at = NULL", "state", "confidence");
+        assertThat(update.getValue().getSqlSegment()).contains("user_id", "id");
+    }
+
+    @Test
+    void explicitProfileWritesPropagateStoreFailures() {
+        when(profileMapper.update(any(AiLearningProfileEntity.class), any(UpdateWrapper.class))).thenThrow(new IllegalStateException("db down"));
+        assertThatThrownBy(() -> profile.update(new ProfilePort.ProfileChange("7", "31", "x", "DISABLED",
+                BigDecimal.ONE, LocalDateTime.now(), LocalDateTime.now(), false)))
+                .isInstanceOf(IllegalStateException.class).hasMessage("db down");
     }
 
     @Test

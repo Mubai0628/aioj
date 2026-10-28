@@ -3,9 +3,9 @@ package com.aioj.next.ai.domain;
 import com.aioj.next.ai.domain.memory.AiMemoryCandidateService;
 import com.aioj.next.ai.domain.memory.AiMemoryMergeService;
 import com.aioj.next.ai.domain.memory.MemoryQualityGate;
+import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
 import com.aioj.next.ai.persistence.entity.AiLearningWeaknessEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryCandidateEntity;
-import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
 import com.aioj.next.ai.persistence.entity.AiUserMemoryEntity;
 import com.aioj.next.ai.persistence.mapper.AiLearningWeaknessMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
@@ -70,7 +70,7 @@ class AiMemoryServiceTest {
         when(learningWeaknessMapper.selectOne(any())).thenReturn(null);
         AiMemoryCandidateEntity mergeCandidate = new AiMemoryCandidateEntity();
         mergeCandidate.id = 903L;
-        AiMemoryJobEntity mergeJob = new AiMemoryJobEntity();
+        AiAsyncJobEntity mergeJob = new AiAsyncJobEntity();
         mergeJob.setId(904L);
         when(memoryCandidateService.enqueueConfirmedMemory(any(), any()))
                 .thenReturn(new AiMemoryMergeService.MergeEnqueueResult(mergeCandidate, null, mergeJob));

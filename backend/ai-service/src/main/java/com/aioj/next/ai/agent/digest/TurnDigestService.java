@@ -4,8 +4,6 @@ import com.aioj.next.agent.harness.channel.api.EventPublisher;
 import com.aioj.next.agent.harness.channel.api.EventSubject;
 import com.aioj.next.agent.harness.channel.api.HarnessEvent;
 import com.aioj.next.ai.agent.channel.ChannelEventTypes;
-import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobService;
-import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
 import tools.jackson.databind.ObjectMapper;
@@ -34,25 +32,19 @@ public class TurnDigestService {
 
     private final StubDigestFactory stubDigestFactory;
     private final AiTurnDigestMapper digestMapper;
-    private final AgentAsyncJobService jobService;
     private final ObjectMapper objectMapper;
-    private final AiProperties properties;
     private final EventPublisher channel;
 
     public TurnDigestService(
             StubDigestFactory stubDigestFactory,
             AiTurnDigestMapper digestMapper,
-            AgentAsyncJobService jobService,
             ObjectMapper objectMapper,
-            AiProperties properties,
             EventPublisher channel
     ) {
         this.channel = channel;
         this.stubDigestFactory = stubDigestFactory;
         this.digestMapper = digestMapper;
-        this.jobService = jobService;
         this.objectMapper = objectMapper;
-        this.properties = properties;
     }
 
     /** Synchronous stub write + async curate enqueue. Never throws. */
@@ -74,22 +66,12 @@ public class TurnDigestService {
             entity.setCreatedAt(now);
             entity.setUpdatedAt(now);
             digestMapper.insert(entity);
-            if (properties.getChannel().isUnified()) {
-                // T1.7: the curator subscribes to TURN_COMPLETED (its job type stays TURN_CURATE).
-                channel.publish(HarnessEvent.builder(ChannelEventTypes.TURN_COMPLETED,
-                                "turn-completed:" + input.turnId(), "ai-service:tutor")
-                        .subject(new EventSubject(String.valueOf(input.userId()), input.conversationId(),
-                                input.turnId(), null))
-                        .payload(objectMapper.readTree(curatePayload(input)))
-                        .build());
-            } else {
-                jobService.enqueue(
-                        JOB_TYPE_TURN_CURATE,
-                        JOB_TYPE_TURN_CURATE + ":" + input.turnId(),
-                        curatePayload(input),
-                        properties.getAgentJobs().getMaxAttempts()
-                );
-            }
+            channel.publish(HarnessEvent.builder(ChannelEventTypes.TURN_COMPLETED,
+                            "turn-completed:" + input.turnId(), "ai-service:tutor")
+                    .subject(new EventSubject(String.valueOf(input.userId()), input.conversationId(),
+                            input.turnId(), null))
+                    .payload(objectMapper.readTree(curatePayload(input)))
+                    .build());
         } catch (Exception ex) {
             log.warn("turn digest recording failed turn={} error={}", input.turnId(), ex.toString());
         }

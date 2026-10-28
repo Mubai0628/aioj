@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain;
 
+import com.aioj.next.agent.harness.profile.api.ProfilePort;
 import com.aioj.next.ai.agent.profile.ProfileAggregateJobProducer;
 import com.aioj.next.ai.agent.profile.ProfileSignalIngestionService;
 import com.aioj.next.ai.persistence.entity.AiLearningProfileEntity;
@@ -19,7 +20,6 @@ import com.aioj.next.contract.ai.AiRecommendationProfileSignal;
 import com.aioj.next.contract.ai.AiSubmissionContextRequest;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +68,7 @@ public class AiLearningProfileService {
     private final ProfileSignalIngestionService profileSignalIngestion;
     private final ProfileAggregateJobProducer profileAggregateProducer;
     private final TransactionOperations transactions;
+    private final ProfilePort profilePort;
 
     public AiLearningProfileService(
             AiLearningProfileMapper profileMapper,
@@ -79,9 +80,11 @@ public class AiLearningProfileService {
             ObjectMapper objectMapper,
             ProfileSignalIngestionService profileSignalIngestion,
             ProfileAggregateJobProducer profileAggregateProducer,
-            TransactionOperations transactions
+            TransactionOperations transactions,
+            ProfilePort profilePort
     ) {
         this.transactions = transactions;
+        this.profilePort = profilePort;
         this.profileMapper = profileMapper;
         this.evidenceMapper = evidenceMapper;
         this.analysisMapper = analysisMapper;
@@ -246,16 +249,8 @@ public class AiLearningProfileService {
             }
         }
         profile.updatedAt = LocalDateTime.now();
-        if (distrustCleared) {
-            // updateById skips null fields, so the disabled_at clear must go through an
-            // explicit UpdateWrapper set(..., null) — otherwise the column stays set in DB.
-            profileMapper.update(null, new UpdateWrapper<AiLearningProfileEntity>()
-                    .eq("id", profile.id)
-                    .set("label", profile.label)
-                    .set("state", profile.state)
-                    .set("confidence", profile.confidence)
-                    .setSql("disabled_at = NULL")
-                    .set("updated_at", profile.updatedAt));
+        if (distrustCleared || (request.state() != null && STATE_DISABLED.equals(normalizedState))) {
+            persistUserProfileChange(userId, profile, distrustCleared);
         } else {
             profileMapper.updateById(profile);
         }
@@ -278,8 +273,13 @@ public class AiLearningProfileService {
             profile.confidence = profile.confidence.multiply(new BigDecimal("0.85")).setScale(4, RoundingMode.HALF_UP);
         }
         profile.updatedAt = profile.disabledAt;
-        profileMapper.updateById(profile);
+        persistUserProfileChange(userId, profile, false);
         return toResponse(profile, evidence(profile.id, 10));
+    }
+
+    private void persistUserProfileChange(Long userId, AiLearningProfileEntity profile, boolean clearDisabledAt) {
+        profilePort.update(new ProfilePort.ProfileChange(String.valueOf(userId), String.valueOf(profile.id),
+                profile.label, profile.state, profile.confidence, profile.disabledAt, profile.updatedAt, clearDisabledAt));
     }
 
     @Transactional

@@ -1,4 +1,5 @@
 package com.aioj.next.ai.domain.memory;
+import com.aioj.next.ai.agent.channel.ChannelEventTypes;
 
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
@@ -7,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
-import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -36,21 +37,20 @@ class AiJudgedSubmissionEventServiceTest {
 
         service.recordJudgedSubmission(request);
 
-        ArgumentCaptor<List<AiMemoryEventService.EventJobSpec>> jobsCaptor = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<Map<String, Object>> payload = ArgumentCaptor.forClass(Map.class);
         verify(eventService).recordEvent(
-                eq(AiMemoryJobTypes.EVENT_SUBMISSION_JUDGED_SAFE),
+                eq(ChannelEventTypes.SUBMISSION_JUDGED),
                 eq(7L),
                 eq("submission"),
                 eq("123"),
                 eq("submission-judged-safe:123"),
-                any(),
-                eq(AiMemoryEventService.SENSITIVITY_USER_PRIVATE_SAFE),
-                jobsCaptor.capture()
+                payload.capture(),
+                eq(AiMemoryEventService.SENSITIVITY_USER_PRIVATE_SAFE)
         );
-        assertThat(jobsCaptor.getValue()).singleElement().satisfies(job -> {
-            assertThat(job.jobType()).isEqualTo(AiMemoryJobTypes.JOB_AI_JUDGED_SUBMISSION_ANALYSIS);
-            assertThat(job.idempotencyKey()).isEqualTo("judged-submission-analysis:123");
-        });
+        assertThat(payload.getValue()).containsEntry("userId", 7L).containsEntry("submissionId", 123L)
+                .containsEntry("problemId", 99L).containsEntry("status", "TIME_LIMIT_EXCEEDED")
+                .containsEntry("contestId", 1L).containsEntry("contestRunId", 2L)
+                .containsEntry("contestProblemId", 3L).doesNotContainKey("sourceCode");
     }
 
     @Test

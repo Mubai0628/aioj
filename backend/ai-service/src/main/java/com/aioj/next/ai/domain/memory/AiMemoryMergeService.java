@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain.memory;
 
+import com.aioj.next.ai.agent.channel.ChannelEventTypes;
 import com.aioj.next.ai.domain.AiCapacityService;
 import com.aioj.next.ai.domain.AiMemoryService;
 import com.aioj.next.ai.domain.AiModelConfigResolver;
@@ -9,12 +10,15 @@ import com.aioj.next.ai.domain.AiQuotaService;
 import com.aioj.next.ai.domain.AiRetrievalService;
 import com.aioj.next.ai.domain.IndexAfterCommit;
 import com.aioj.next.ai.domain.ModelCompletions;
+import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
+import com.aioj.next.ai.persistence.entity.AiDomainEventEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryCandidateEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryClaimEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryEvidenceEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryVersionEntity;
 import com.aioj.next.ai.persistence.entity.AiUserMemoryEntity;
+import com.aioj.next.ai.persistence.mapper.AiAsyncJobMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryCandidateMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryEvidenceMapper;
@@ -77,6 +81,7 @@ public class AiMemoryMergeService {
     private final AiUserMemoryMapper memoryMapper;
     private final AiRetrievalService retrievalService;
     private final AiMemoryEventService eventService;
+    private final AiAsyncJobMapper asyncJobMapper;
     private final AiMemoryEventPayloadSanitizer sanitizer;
     private final ObjectMapper objectMapper;
     private final AiModelConfigResolver configResolver;
@@ -93,6 +98,7 @@ public class AiMemoryMergeService {
             AiUserMemoryMapper memoryMapper,
             AiRetrievalService retrievalService,
             AiMemoryEventService eventService,
+            AiAsyncJobMapper asyncJobMapper,
             AiMemoryEventPayloadSanitizer sanitizer,
             ObjectMapper objectMapper,
             AiModelConfigResolver configResolver,
@@ -109,6 +115,7 @@ public class AiMemoryMergeService {
         this.memoryMapper = memoryMapper;
         this.retrievalService = retrievalService;
         this.eventService = eventService;
+        this.asyncJobMapper = asyncJobMapper;
         this.sanitizer = sanitizer;
         this.objectMapper = objectMapper;
         this.configResolver = configResolver;
@@ -171,23 +178,25 @@ public class AiMemoryMergeService {
         candidateMapper.updateById(candidate);
 
         Map<String, Object> payload = mergePayload(candidate, request, targetMemory, targetClaimId, normalizedAction, reason);
-        AiMemoryEventService.RecordedEvent event = eventService.recordEvent(
-                AiMemoryJobTypes.EVENT_AI_MEMORY_MERGE_REQUESTED,
+        AiDomainEventEntity event = eventService.recordEvent(
+                ChannelEventTypes.MEMORY_CANDIDATE_PROPOSED,
                 userId,
                 "AI_MEMORY_CANDIDATE",
                 String.valueOf(candidate.id),
                 "ai-memory-merge-requested:" + candidate.id,
                 payload,
-                AiMemoryEventService.SENSITIVITY_USER_PRIVATE_SAFE,
-                List.of(new AiMemoryEventService.EventJobSpec(
-                        AiMemoryJobTypes.JOB_AI_MEMORY_MERGE_REVIEW,
-                        "ai-memory-merge-review:" + candidate.id,
-                        payload,
-                        null,
-                        now
-                ))
+                AiMemoryEventService.SENSITIVITY_USER_PRIVATE_SAFE
         );
-        AiMemoryJobEntity job = event.jobs().isEmpty() ? null : event.jobs().get(0);
+        if (event == null || event.getId() == null) {
+            throw new DomainException(ErrorCode.INTERNAL_ERROR, "Memory merge event was not recorded");
+        }
+        AiAsyncJobEntity job = asyncJobMapper.selectOne(new QueryWrapper<AiAsyncJobEntity>()
+                .eq("idempotency_key", event.getId() + ":" + AiMemoryJobTypes.JOB_AI_MEMORY_MERGE_REVIEW)
+                .eq("job_type", AiMemoryJobTypes.JOB_AI_MEMORY_MERGE_REVIEW)
+                .last("LIMIT 1"));
+        if (job == null || job.getId() == null) {
+            throw new DomainException(ErrorCode.INTERNAL_ERROR, "Memory merge job was not recorded");
+        }
         return new MergeEnqueueResult(candidate, targetMemory, job);
     }
 
@@ -1617,7 +1626,7 @@ public class AiMemoryMergeService {
     public record MergeEnqueueResult(
             AiMemoryCandidateEntity candidate,
             AiUserMemoryEntity targetMemory,
-            AiMemoryJobEntity job
+            AiAsyncJobEntity job
     ) {
     }
 

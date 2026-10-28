@@ -2,197 +2,66 @@ package com.aioj.next.ai.domain.memory;
 
 import com.aioj.next.agent.harness.channel.api.EventSubject;
 import com.aioj.next.agent.harness.channel.api.HarnessEvent;
-import com.aioj.next.ai.agent.channel.ChannelEventTypes;
 import com.aioj.next.ai.agent.channel.HarnessEventChannel;
-import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.entity.AiDomainEventEntity;
-import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
-import com.aioj.next.ai.persistence.mapper.AiDomainEventMapper;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
+/** Sanitizes memory-domain events before publishing them to the unified channel. */
 @Service
 public class AiMemoryEventService {
     public static final String SENSITIVITY_USER_PRIVATE_SAFE = "USER_PRIVATE_SAFE";
 
-    private final AiDomainEventMapper eventMapper;
-    private final AiMemoryJobService jobService;
     private final AiMemoryEventPayloadSanitizer sanitizer;
     private final ObjectMapper objectMapper;
-    private final Clock clock;
     private final HarnessEventChannel channel;
-    private final AiProperties properties;
+    private final Clock clock;
 
     @Autowired
-    public AiMemoryEventService(
-            AiDomainEventMapper eventMapper,
-            AiMemoryJobService jobService,
-            AiMemoryEventPayloadSanitizer sanitizer,
-            ObjectMapper objectMapper,
-            HarnessEventChannel channel,
-            AiProperties properties
-    ) {
-        this(eventMapper, jobService, sanitizer, objectMapper, Clock.systemDefaultZone(), channel, properties);
+    public AiMemoryEventService(AiMemoryEventPayloadSanitizer sanitizer, ObjectMapper objectMapper,
+                                HarnessEventChannel channel) {
+        this(sanitizer, objectMapper, channel, Clock.systemDefaultZone());
     }
 
-    /** Legacy only: events and their memory jobs go to ai_domain_events and ai_memory_jobs. */
-    AiMemoryEventService(
-            AiDomainEventMapper eventMapper,
-            AiMemoryJobService jobService,
-            AiMemoryEventPayloadSanitizer sanitizer,
-            ObjectMapper objectMapper,
-            Clock clock
-    ) {
-        this(eventMapper, jobService, sanitizer, objectMapper, clock, null, null);
-    }
-
-    AiMemoryEventService(
-            AiDomainEventMapper eventMapper,
-            AiMemoryJobService jobService,
-            AiMemoryEventPayloadSanitizer sanitizer,
-            ObjectMapper objectMapper,
-            Clock clock,
-            HarnessEventChannel channel,
-            AiProperties properties
-    ) {
-        this.eventMapper = eventMapper;
-        this.jobService = jobService;
+    AiMemoryEventService(AiMemoryEventPayloadSanitizer sanitizer, ObjectMapper objectMapper,
+                         HarnessEventChannel channel, Clock clock) {
         this.sanitizer = sanitizer;
         this.objectMapper = objectMapper;
-        this.clock = clock == null ? Clock.systemDefaultZone() : clock;
         this.channel = channel;
-        this.properties = properties;
+        this.clock = clock == null ? Clock.systemDefaultZone() : clock;
     }
 
     @Transactional
-    public RecordedEvent recordEvent(
-            String eventType,
-            Long userId,
-            String sourceType,
-            String sourceId,
-            String idempotencyKey,
-            Object payload,
-            String sensitivity,
-            List<EventJobSpec> jobs
-    ) {
-        if (channel != null && properties != null && properties.getChannel().isUnified()) {
-            return recordOnChannel(eventType, userId, sourceType, sourceId, idempotencyKey, payload, sensitivity);
-        }
-        AiDomainEventEntity event = ensureEvent(eventType, userId, sourceType, sourceId, idempotencyKey, payload, sensitivity);
-        List<AiMemoryJobEntity> enqueuedJobs = new ArrayList<>();
-        if (jobs != null) {
-            for (EventJobSpec job : jobs) {
-                if (job == null) {
-                    continue;
-                }
-                enqueuedJobs.add(jobService.enqueue(
-                        event.getId(),
-                        job.jobType(),
-                        job.idempotencyKey(),
-                        job.payload(),
-                        job.maxAttempts(),
-                        job.nextRunAt()
-                ));
-            }
-        }
-        return new RecordedEvent(event, List.copyOf(enqueuedJobs));
-    }
-
-    @Transactional
-    public AiDomainEventEntity recordEvent(
-            String eventType,
-            Long userId,
-            String sourceType,
-            String sourceId,
-            String idempotencyKey,
-            Object payload
-    ) {
-        return recordEvent(eventType, userId, sourceType, sourceId, idempotencyKey,
-                payload, SENSITIVITY_USER_PRIVATE_SAFE, List.of()).event();
-    }
-
-    /**
-     * T1.7 UNIFIED mode: the same event (sanitized payload, same idempotency key, its channel
-     * name) goes on the channel, and the channel's subscribers take the place of the job specs;
-     * nothing is written to ai_memory_jobs, so the recorded event carries no memory jobs.
-     */
-    private RecordedEvent recordOnChannel(String eventType, Long userId, String sourceType, String sourceId,
-                                          String idempotencyKey, Object payload, String sensitivity) {
+    public AiDomainEventEntity recordEvent(String eventType, Long userId, String sourceType, String sourceId,
+                                           String idempotencyKey, Object payload, String sensitivity) {
         requireText(eventType, "eventType");
         requireText(sourceType, "sourceType");
         requireText(idempotencyKey, "idempotencyKey");
         if (userId == null) {
             throw new IllegalArgumentException("userId is required");
         }
-        HarnessEvent event = HarnessEvent.builder(ChannelEventTypes.fromLegacy(eventType.strip()), idempotencyKey.strip(),
-                        "ai-service:" + sourceType.strip().toLowerCase(java.util.Locale.ROOT))
+        HarnessEvent event = HarnessEvent.builder(eventType.strip(), idempotencyKey.strip(),
+                        "ai-service:" + sourceType.strip().toLowerCase(Locale.ROOT))
                 .occurredAt(clock.instant())
                 .subject(EventSubject.user(String.valueOf(userId)))
                 .sensitivity(normalizeSensitivity(sensitivity))
                 .payload(objectMapper.readTree(toJson(payload)))
                 .build();
-        HarnessEventChannel.Delivery delivery = channel.deliver(event, sourceType.strip(), sourceId);
-        return new RecordedEvent(delivery.row(), List.of());
+        return channel.deliver(event, sourceType.strip(), sourceId).row();
     }
 
-    private AiDomainEventEntity ensureEvent(
-            String eventType,
-            Long userId,
-            String sourceType,
-            String sourceId,
-            String idempotencyKey,
-            Object payload,
-            String sensitivity
-    ) {
-        requireText(eventType, "eventType");
-        requireText(sourceType, "sourceType");
-        requireText(idempotencyKey, "idempotencyKey");
-        if (userId == null) {
-            throw new IllegalArgumentException("userId is required");
-        }
-        AiDomainEventEntity existing = findByIdempotencyKey(idempotencyKey);
-        if (existing != null) {
-            return existing;
-        }
-
-        LocalDateTime now = LocalDateTime.now(clock);
-        AiDomainEventEntity event = new AiDomainEventEntity();
-        event.setEventType(eventType.strip());
-        event.setUserId(userId);
-        event.setSourceType(sourceType.strip());
-        event.setSourceId(sourceId == null || sourceId.isBlank() ? null : sourceId.strip());
-        event.setIdempotencyKey(idempotencyKey.strip());
-        event.setPayloadJson(toJson(payload));
-        event.setSensitivity(normalizeSensitivity(sensitivity));
-        event.setCreatedAt(now);
-        event.setUpdatedAt(now);
-        try {
-            eventMapper.insert(event);
-            return event;
-        } catch (DuplicateKeyException ex) {
-            AiDomainEventEntity duplicate = findByIdempotencyKey(idempotencyKey);
-            if (duplicate != null) {
-                return duplicate;
-            }
-            throw ex;
-        }
-    }
-
-    private AiDomainEventEntity findByIdempotencyKey(String idempotencyKey) {
-        return eventMapper.selectOne(new QueryWrapper<AiDomainEventEntity>()
-                .eq("idempotency_key", idempotencyKey)
-                .last("LIMIT 1"));
+    @Transactional
+    public AiDomainEventEntity recordEvent(String eventType, Long userId, String sourceType, String sourceId,
+                                           String idempotencyKey, Object payload) {
+        return recordEvent(eventType, userId, sourceType, sourceId, idempotencyKey, payload,
+                SENSITIVITY_USER_PRIVATE_SAFE);
     }
 
     private String toJson(Object payload) {
@@ -215,17 +84,5 @@ public class AiMemoryEventService {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + " is required");
         }
-    }
-
-    public record EventJobSpec(
-            String jobType,
-            String idempotencyKey,
-            Object payload,
-            Integer maxAttempts,
-            LocalDateTime nextRunAt
-    ) {
-    }
-
-    public record RecordedEvent(AiDomainEventEntity event, List<AiMemoryJobEntity> jobs) {
     }
 }
