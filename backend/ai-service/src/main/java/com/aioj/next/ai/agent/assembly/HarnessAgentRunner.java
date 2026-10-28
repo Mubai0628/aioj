@@ -102,7 +102,7 @@ public class HarnessAgentRunner {
                 .messages(starting)
                 .requireToolCall(spec.requireToolCall())
                 .listener(new RunProgressListener(stateMachine, manifestService, run.getId(), spec.turnId(),
-                        endpoint.model(), spec.policySnapshotId(), spec.sections()));
+                        endpoint.model(), spec.policySnapshotId(), spec.sections(), spec.contextWarnings()));
         interceptors.forEach(interceptor -> runSpec.interceptor(failures.watch(interceptor)));
         stateMachine.advance(run.getId(), AgentRunStateMachine.STATUS_CONTEXT_PLANNED);
         Instant deadline = budget.hasDeadline() ? Instant.now().plus(budget.maxRunDuration()) : null;

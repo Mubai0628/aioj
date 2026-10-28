@@ -11,6 +11,8 @@ import com.aioj.next.ai.model.api.CallProfile;
 import com.aioj.next.ai.agent.runtime.ProviderUsage;
 import com.aioj.next.ai.agent.policy.ContestParticipationService;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
+import com.aioj.next.agent.harness.context.api.ContextPolicyException;
+import com.aioj.next.ai.agent.policy.GuardDecision;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
 import com.aioj.next.ai.agent.policy.GuardLayer;
 import com.aioj.next.ai.agent.policy.ParticipantStatus;
@@ -69,6 +71,7 @@ import java.util.concurrent.TimeoutException;
 public class TurnCoordinator {
 
     private static final Logger log = LoggerFactory.getLogger(TurnCoordinator.class);
+    static final String REASON_CONTEXT_POLICY_FAILED = "CONTEXT_POLICY_FAILED";
 
     /**
      * P3-5: server-authored safe refusal persisted as the assistant content when the
@@ -198,6 +201,36 @@ public class TurnCoordinator {
         return verdict;
     }
 
+    /**
+     * T1.6 (A3.2): a policy section that cannot be built stops the turn, fail-closed like the
+     * L1/L2 checks: audited as a degraded L2 block, refused as temporarily unavailable. Optional
+     * sections that fail are only skipped and listed in the bootstrap warnings.
+     */
+    private BootstrapContextBuilder.BootstrapContext buildBootstrap(Long userId, String turnId, String conversationId,
+                                                                    String message,
+                                                                    PolicySnapshotService.PolicySnapshot snapshot,
+                                                                    GuardVerdict msgVerdict,
+                                                                    BootstrapContextBuilder.EntryContext entryContext) {
+        long startedNanos = System.nanoTime();
+        try {
+            return bootstrapBuilder.build(userId, conversationId, message, snapshot, msgVerdict, entryContext,
+                    properties.getAgentCore().getRecentTurnsLimit(),
+                    properties.getAgentCore().getBootstrapBudgetTokens());
+        } catch (ContextPolicyException ex) {
+            int latencyMs = (int) ((System.nanoTime() - startedNanos) / 1_000_000L);
+            log.warn("bootstrap policy context failed, fail-closed user={} turn={} contributor={} reason={} error={}",
+                    userId, turnId, ex.contributor(), ex.reason(),
+                    ex.getCause() == null ? null : ex.getCause().toString());
+            ObjectNode detail = JsonNodeFactory.instance.objectNode()
+                    .put("contributor", ex.contributor())
+                    .put("reason", ex.reason());
+            guardDecisionRecorder.record(turnId, userId, conversationId,
+                    GuardLayer.L2_POLICY_INJECT, GuardDecision.BLOCK, REASON_CONTEXT_POLICY_FAILED, detail, true,
+                    latencyMs);
+            throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "安全策略暂时不可用，请稍后重试");
+        }
+    }
+
     public TurnHandle start(Long userId, AiChatRequest request) {
         AiTurnEntity turn = null;
         boolean ownsTurn = false;
@@ -243,15 +276,8 @@ public class TurnCoordinator {
                     request.contestContext(),
                     request.submissionContext(),
                     request.selectionContext());
-            BootstrapContextBuilder.BootstrapContext bootstrap = bootstrapBuilder.build(
-                    userId,
-                    conversation.getId(),
-                    request.message(),
-                    snapshot,
-                    msgVerdict,
-                    entryContext,
-                    properties.getAgentCore().getRecentTurnsLimit(),
-                    properties.getAgentCore().getBootstrapBudgetTokens());
+            BootstrapContextBuilder.BootstrapContext bootstrap = buildBootstrap(userId, turn.getId(), conversation.getId(),
+                    request.message(), snapshot, msgVerdict, entryContext);
             AiChatMessageResponse user = aiConversationService.appendMessage(
                     conversation.getId(),
                     userId,
@@ -478,6 +504,7 @@ public class TurnCoordinator {
                     .policySnapshotId(snapshot.id())
                     .grantedScopes(Set.of("AI_CHAT"))
                     .sections(bootstrap.sections())
+                    .contextWarnings(bootstrap.warnings())
                     .requireToolCall(requireToolCall)
                     .output(restrictedTurn ? "BUFFERED" : "STREAM",
                             restrictedTurn ? CallProfile.CHAT_BUFFERED : CallProfile.CHAT_STREAM)

@@ -11,6 +11,7 @@ import com.aioj.next.ai.agent.context.ContextSection;
 import com.aioj.next.ai.agent.runtime.AgentRunStateMachine;
 import com.aioj.next.ai.model.api.ChatMessage;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -28,11 +29,13 @@ final class RunProgressListener implements RunListener {
     private final String model;
     private final String policySnapshotId;
     private final List<ContextSection> sections;
+    private final List<String> contextWarnings;
     private String toolDefinitionsHash;
     private int pendingProgressStep;
 
     RunProgressListener(AgentRunStateMachine stateMachine, ContextManifestService manifestService, long runId,
-                        String turnId, String model, String policySnapshotId, List<ContextSection> sections) {
+                        String turnId, String model, String policySnapshotId, List<ContextSection> sections,
+                        List<String> contextWarnings) {
         this.stateMachine = stateMachine;
         this.manifestService = manifestService;
         this.runId = runId;
@@ -40,6 +43,7 @@ final class RunProgressListener implements RunListener {
         this.model = model;
         this.policySnapshotId = policySnapshotId;
         this.sections = sections;
+        this.contextWarnings = contextWarnings == null ? List.of() : List.copyOf(contextWarnings);
     }
 
     @Override
@@ -55,7 +59,17 @@ final class RunProgressListener implements RunListener {
         }
         manifestService.record(turnId, runId, callSeq, model, BootstrapContextBuilder.PROMPT_VERSION,
                 policySnapshotId, sections, toolDefinitionsHash, ContextManifestService.sha256(contextMaterial(call)),
-                null, null, context.warnings());
+                null, null, warnings(context));
+    }
+
+    /** How the context was assembled (T1.6: degraded contributors, budget trims), then the loop's own warnings. */
+    private List<String> warnings(LoopContext context) {
+        if (contextWarnings.isEmpty()) {
+            return context.warnings();
+        }
+        List<String> warnings = new ArrayList<>(contextWarnings);
+        warnings.addAll(context.warnings());
+        return warnings;
     }
 
     @Override

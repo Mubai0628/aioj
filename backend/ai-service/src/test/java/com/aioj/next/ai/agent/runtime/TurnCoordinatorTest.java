@@ -153,6 +153,35 @@ class TurnCoordinatorTest {
     }
 
     @Test
+    void aPolicyContextFailureRefusesTheTurnBeforeAnyMessageOrModelCall() {
+        AiConversationEntity conversation = conversation();
+        when(conversationService.resolveForWrite(eq(USER_ID), any(AiChatRequest.class))).thenReturn(conversation);
+        when(turnService.beginTurn(eq(CONVERSATION_ID), eq("client-1")))
+                .thenReturn(new AiTurnService.BeginTurnOutcome(turn("t-1", AiTurnService.STATUS_RECEIVED), true));
+        PolicySnapshotService.PolicySnapshot snapshot =
+                new PolicySnapshotService.PolicySnapshot("ps-1", null, List.of(), "{}", "", List.of());
+        when(policySnapshotService.createForTurn(eq(USER_ID), eq("t-1"), eq(CONVERSATION_ID), any())).thenReturn(snapshot);
+        when(bootstrapBuilder.build(eq(USER_ID), eq(CONVERSATION_ID), eq("你好"), eq(snapshot), any(), any(), anyInt(), anyInt()))
+                .thenThrow(new com.aioj.next.agent.harness.context.api.ContextPolicyException("policy_snapshot", "timeout", null));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> coordinator.start(USER_ID, request("client-1", "你好")))
+                .isInstanceOfSatisfying(com.aioj.next.common.error.DomainException.class, ex ->
+                        assertThat(ex.errorCode()).isEqualTo(com.aioj.next.common.error.ErrorCode.SERVICE_UNAVAILABLE));
+
+        org.mockito.ArgumentCaptor<tools.jackson.databind.JsonNode> detail =
+                org.mockito.ArgumentCaptor.forClass(tools.jackson.databind.JsonNode.class);
+        verify(guardDecisionRecorder).record(eq("t-1"), eq(USER_ID), eq(CONVERSATION_ID),
+                eq(com.aioj.next.ai.agent.policy.GuardLayer.L2_POLICY_INJECT),
+                eq(com.aioj.next.ai.agent.policy.GuardDecision.BLOCK), eq("CONTEXT_POLICY_FAILED"), detail.capture(),
+                eq(true), any());
+        assertThat(detail.getValue().path("contributor").asString("")).isEqualTo("policy_snapshot");
+        assertThat(detail.getValue().path("reason").asString("")).isEqualTo("timeout");
+        verify(turnService).failTurn("t-1", AiTurnService.STATUS_FAILED_RETRYABLE, "TURN_SETUP_FAILURE");
+        verify(conversationService, never()).appendMessage(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(agentRuntime, never()).run(any());
+    }
+
+    @Test
     void participantSnapshotProjectsContestPolicyIntoAgentRunRequest() {
         AiConversationEntity conversation = conversation();
         when(conversationService.resolveForWrite(eq(USER_ID), any(AiChatRequest.class))).thenReturn(conversation);

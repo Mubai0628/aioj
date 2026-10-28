@@ -243,6 +243,7 @@ public class AiProperties {
         private ContestSearch contestSearch = new ContestSearch();
         private OutputGuard outputGuard = new OutputGuard();
         private PseudoStream pseudoStream = new PseudoStream();
+        private Context context = new Context();
 
         public int getMaxAgentSteps() {
             return maxAgentSteps;
@@ -357,6 +358,89 @@ public class AiProperties {
 
         public void setPseudoStream(PseudoStream pseudoStream) {
             this.pseudoStream = pseudoStream == null ? new PseudoStream() : pseudoStream;
+        }
+
+        public Context getContext() {
+            return context;
+        }
+
+        public void setContext(Context context) {
+            this.context = context == null ? new Context() : context;
+        }
+
+        /**
+         * Bootstrap context assembly (plan T1.6, A3.2): the contributor pool, each kind's time
+         * budget, and the memory and profile sections, which are off until they have been
+         * evaluated; prefix aioj.ai.agent-core.context.*.
+         */
+        public static class Context {
+            /** Contributor threads; one turn's assembly uses one at a time. */
+            private int threads = 8;
+            private int queueCapacity = 64;
+            /** Budget of a policy contributor; one that overruns fails the turn (fail-closed). */
+            private long policyTimeoutMs = 2_000L;
+            /** Budget of an optional contributor; one that overruns is skipped and recorded. */
+            private long optionalTimeoutMs = 3_000L;
+            /** Budget of one memory or profile port call (context sections and tools). */
+            private long portTimeoutMs = 2_000L;
+            private boolean memoryEnabled = false;
+            private boolean profileEnabled = false;
+
+            public int getThreads() {
+                return threads;
+            }
+
+            public void setThreads(int threads) {
+                this.threads = Math.max(1, threads);
+            }
+
+            public int getQueueCapacity() {
+                return queueCapacity;
+            }
+
+            public void setQueueCapacity(int queueCapacity) {
+                this.queueCapacity = Math.max(0, queueCapacity);
+            }
+
+            public long getPolicyTimeoutMs() {
+                return policyTimeoutMs;
+            }
+
+            public void setPolicyTimeoutMs(long policyTimeoutMs) {
+                this.policyTimeoutMs = Math.max(1L, policyTimeoutMs);
+            }
+
+            public long getOptionalTimeoutMs() {
+                return optionalTimeoutMs;
+            }
+
+            public void setOptionalTimeoutMs(long optionalTimeoutMs) {
+                this.optionalTimeoutMs = Math.max(1L, optionalTimeoutMs);
+            }
+
+            public long getPortTimeoutMs() {
+                return portTimeoutMs;
+            }
+
+            public void setPortTimeoutMs(long portTimeoutMs) {
+                this.portTimeoutMs = Math.max(1L, portTimeoutMs);
+            }
+
+            public boolean isMemoryEnabled() {
+                return memoryEnabled;
+            }
+
+            public void setMemoryEnabled(boolean memoryEnabled) {
+                this.memoryEnabled = memoryEnabled;
+            }
+
+            public boolean isProfileEnabled() {
+                return profileEnabled;
+            }
+
+            public void setProfileEnabled(boolean profileEnabled) {
+                this.profileEnabled = profileEnabled;
+            }
         }
 
         /**

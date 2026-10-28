@@ -68,13 +68,16 @@ public class AgentRuntime {
             /** Optional server-owned terminal gate; model prose cannot satisfy it. */
             AgentCompletionPolicy completionPolicy,
             /** Per-run Harness interceptors of the caller, for example the L4 final-answer check. */
-            List<LoopInterceptor> interceptors
+            List<LoopInterceptor> interceptors,
+            /** T1.6: how the sections were assembled (degraded contributors, budget trims); every manifest lists them. */
+            List<String> contextWarnings
     ) {
         public AgentRunRequest {
             modelScope = modelScope == null ? AiModelScope.TEXT_GENERATION : modelScope;
             serverBindings = serverBindings == null ? Map.of() : Map.copyOf(serverBindings);
             completionPolicy = completionPolicy == null ? AgentCompletionPolicy.none() : completionPolicy;
             interceptors = interceptors == null ? List.of() : List.copyOf(interceptors);
+            contextWarnings = contextWarnings == null ? List.of() : List.copyOf(contextWarnings);
         }
 
         /** One request built in one place (plan A2.2), instead of the positional constructors it replaced. */
@@ -101,6 +104,7 @@ public class AgentRuntime {
             private boolean allowStandardToolFallback;
             private AgentCompletionPolicy completionPolicy;
             private final List<LoopInterceptor> interceptors = new ArrayList<>();
+            private List<String> contextWarnings = List.of();
 
             private Builder(String turnId, long userId, String conversationId) {
                 this.turnId = turnId;
@@ -177,11 +181,17 @@ public class AgentRuntime {
                 return this;
             }
 
+            public Builder contextWarnings(List<String> value) {
+                this.contextWarnings = value;
+                return this;
+            }
+
             public AgentRunRequest build() {
                 return new AgentRunRequest(turnId, userId, conversationId, policySnapshotId, grantedScopes, sections,
                         requireToolCall, outputMode, Objects.requireNonNull(profile, "profile"),
                         Objects.requireNonNull(budget, "budget"), contestPolicy, messageLayerVerdict, usageObserver,
-                        modelScope, serverBindings, allowStandardToolFallback, completionPolicy, interceptors);
+                        modelScope, serverBindings, allowStandardToolFallback, completionPolicy, interceptors,
+                        contextWarnings);
             }
         }
     }
