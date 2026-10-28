@@ -116,7 +116,9 @@ abstract class TutorCodeTool implements AgentTool {
         if (!"submission".equals(origin)) {
             return refuse(ToolStatus.SCHEMA_ERROR, "SOURCE_REQUIRED", "source must be submission or selection");
         }
-        Long submissionId = input.path("submissionId").isIntegralNumber() ? input.path("submissionId").asLong()
+        // Both branches boxed: a primitive one would unbox a missing binding into a NullPointerException.
+        Long submissionId = input.path("submissionId").isIntegralNumber()
+                ? Long.valueOf(input.path("submissionId").asLong())
                 : parseId(context.serverBinding(BINDING_SUBMISSION_ID));
         if (submissionId == null) {
             return refuse(ToolStatus.SCHEMA_ERROR, "SUBMISSION_ID_REQUIRED",

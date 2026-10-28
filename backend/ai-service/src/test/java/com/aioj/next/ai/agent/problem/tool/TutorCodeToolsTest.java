@@ -94,6 +94,19 @@ class TutorCodeToolsTest {
     }
 
     @Test
+    void aSubmissionSourceNeedsASubmissionIdOrABoundSubmission() {
+        // Found in the 2026-10-29 browser check: a turn opened from the problem page binds no submission.
+        ToolResult<Object> none = runSamples.execute(context(Map.of("turn.problemId", "11")), input("submission"));
+        ToolResult<Object> bound = compileCheck.execute(context(Map.of("turn.submissionId", "not-an-id")),
+                input("submission"));
+
+        assertThat(none.status()).isEqualTo(ToolStatus.SCHEMA_ERROR);
+        assertThat(none.errorCode()).isEqualTo("SUBMISSION_ID_REQUIRED");
+        assertThat(bound.errorCode()).isEqualTo("SUBMISSION_ID_REQUIRED");
+        verifyNoInteractions(executor, problems);
+    }
+
+    @Test
     void someoneElsesSubmissionIsRefusedAndAudited() {
         when(problems.aiSubmissionContext(any(AiSubmissionContextRequest.class)))
                 .thenThrow(new DomainException(ErrorCode.FORBIDDEN, "not yours"));
