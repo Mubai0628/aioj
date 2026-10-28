@@ -6,6 +6,9 @@ import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
 import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
+import com.aioj.next.ai.agent.port.PortCalls;
+import com.aioj.next.ai.agent.port.PortToolResults;
+import com.aioj.next.ai.agent.port.PortUnavailableException;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.SourceRef;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
@@ -45,14 +48,17 @@ public class MemorySearchClaimsTool implements AgentTool {
 
     private final AiMemoryClaimMapper claimMapper;
     private final ObjectMapper objectMapper;
+    private final PortCalls portCalls;
     private final ToolDescriptor descriptor;
 
-    public MemorySearchClaimsTool(AiMemoryClaimMapper claimMapper, ObjectMapper objectMapper) {
+    public MemorySearchClaimsTool(AiMemoryClaimMapper claimMapper, ObjectMapper objectMapper, PortCalls portCalls) {
         this.claimMapper = claimMapper;
         this.objectMapper = objectMapper;
+        this.portCalls = portCalls;
         this.descriptor = new ToolDescriptor(
                 "memory.search_claims",
-                "1.0.0",
+                // 1.1.0 (T1.6): reads go through the memory port; a slow or failing store answers SERVICE_UNAVAILABLE.
+                "1.1.0",
                 "Search the user's long-term memory (preferences, rules, goals, weaknesses, profile facts). "
                         + "Call only when the answer depends on the user's preferences, level, or habits — "
                         + "do not call every turn. Returns ACTIVE memory claims only; supporting evidence "
@@ -102,10 +108,9 @@ public class MemorySearchClaimsTool implements AgentTool {
 
         List<AiMemoryClaimEntity> candidates;
         try {
-            candidates = claimMapper.selectList(wrapper);
-        } catch (RuntimeException ex) {
-            return ToolResult.failure(null, ToolStatus.EXECUTION_ERROR, "SEARCH_QUERY_FAILED",
-                    "memory claim search failed");
+            candidates = portCalls.read(PortToolResults.MEMORY, () -> claimMapper.selectList(wrapper));
+        } catch (PortUnavailableException ex) {
+            return PortToolResults.unavailable("MEMORY_UNAVAILABLE", ex);
         }
 
         List<Map<String, Object>> claims = new ArrayList<>();

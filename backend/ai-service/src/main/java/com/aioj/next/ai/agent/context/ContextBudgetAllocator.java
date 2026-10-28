@@ -26,6 +26,14 @@ public class ContextBudgetAllocator {
         }
         List<String> warnings = new ArrayList<>();
         List<ContextSection> result = new ArrayList<>(sections);
+        // T1.6: memory and profile sections (off by default) go first: the tools can fetch them.
+        if (result.removeIf(section -> section.type() == ContextSectionType.RETRIEVED_EVIDENCE)) {
+            warnings.add("retrieved_evidence_dropped");
+            total = result.stream().mapToInt(ContextSection::tokenEstimate).sum();
+            if (total <= budgetTokens) {
+                return new BudgetResult(List.copyOf(result), List.copyOf(warnings));
+            }
+        }
         // Derived focus is the cheapest section to lose: it is redundant with recent
         // turns and re-fetchable via context tools, so it drops before any trimming.
         int focusIndex = -1;

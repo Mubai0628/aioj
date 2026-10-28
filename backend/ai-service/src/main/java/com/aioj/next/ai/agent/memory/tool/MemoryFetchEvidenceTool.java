@@ -6,6 +6,9 @@ import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
 import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
+import com.aioj.next.ai.agent.port.PortCalls;
+import com.aioj.next.ai.agent.port.PortToolResults;
+import com.aioj.next.ai.agent.port.PortUnavailableException;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.SourceRef;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
@@ -45,16 +48,19 @@ public class MemoryFetchEvidenceTool implements AgentTool {
     private final AiMemoryClaimMapper claimMapper;
     private final AiMemoryEvidenceMapper evidenceMapper;
     private final ObjectMapper objectMapper;
+    private final PortCalls portCalls;
     private final ToolDescriptor descriptor;
 
     public MemoryFetchEvidenceTool(AiMemoryClaimMapper claimMapper, AiMemoryEvidenceMapper evidenceMapper,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper, PortCalls portCalls) {
         this.claimMapper = claimMapper;
         this.evidenceMapper = evidenceMapper;
         this.objectMapper = objectMapper;
+        this.portCalls = portCalls;
         this.descriptor = new ToolDescriptor(
                 "memory.fetch_evidence",
-                "1.0.0",
+                // 1.1.0 (T1.6): reads go through the memory port; a slow or failing store answers SERVICE_UNAVAILABLE.
+                "1.1.0",
                 "Fetch the verbatim evidence quotes backing one long-term memory claim of the current user. "
                         + "Call with a claimId returned by memory.search_claims when you need the exact user "
                         + "statements a memory derives from, or to check whether a memory is still active.",
@@ -87,21 +93,22 @@ public class MemoryFetchEvidenceTool implements AgentTool {
         AiMemoryClaimEntity claim;
         List<AiMemoryEvidenceEntity> evidenceRows;
         try {
-            claim = claimMapper.selectOne(new QueryWrapper<AiMemoryClaimEntity>()
-                    .eq("id", claimId)
-                    .eq("user_id", context.userId()));
+            claim = portCalls.read(PortToolResults.MEMORY, () -> claimMapper.selectOne(
+                    new QueryWrapper<AiMemoryClaimEntity>()
+                            .eq("id", claimId)
+                            .eq("user_id", context.userId())));
             if (claim == null) {
                 return ToolResult.failure(null, ToolStatus.NOT_FOUND, "CLAIM_NOT_FOUND",
                         "no memory claim with this id for the current user");
             }
-            evidenceRows = evidenceMapper.selectList(new QueryWrapper<AiMemoryEvidenceEntity>()
-                    .eq("claim_id", claimId)
-                    .eq("user_id", context.userId())
-                    .orderByDesc("created_at")
-                    .last("LIMIT " + maxEvidence));
-        } catch (RuntimeException ex) {
-            return ToolResult.failure(null, ToolStatus.EXECUTION_ERROR, "EVIDENCE_QUERY_FAILED",
-                    "memory evidence fetch failed");
+            evidenceRows = portCalls.read(PortToolResults.MEMORY, () -> evidenceMapper.selectList(
+                    new QueryWrapper<AiMemoryEvidenceEntity>()
+                            .eq("claim_id", claimId)
+                            .eq("user_id", context.userId())
+                            .orderByDesc("created_at")
+                            .last("LIMIT " + maxEvidence)));
+        } catch (PortUnavailableException ex) {
+            return PortToolResults.unavailable("MEMORY_UNAVAILABLE", ex);
         }
 
         List<Map<String, Object>> evidence = new ArrayList<>();

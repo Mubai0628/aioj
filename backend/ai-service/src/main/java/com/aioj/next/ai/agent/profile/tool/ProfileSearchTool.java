@@ -6,6 +6,9 @@ import com.aioj.next.agent.harness.tool.api.ToolAuditLevel;
 import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.agent.context.TrustLevel;
+import com.aioj.next.ai.agent.port.PortCalls;
+import com.aioj.next.ai.agent.port.PortToolResults;
+import com.aioj.next.ai.agent.port.PortUnavailableException;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.SourceRef;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
@@ -54,16 +57,19 @@ public class ProfileSearchTool implements AgentTool {
     private final AiLearningProfileMapper profileMapper;
     private final AiProfileSignalMapper signalMapper;
     private final ObjectMapper objectMapper;
+    private final PortCalls portCalls;
     private final ToolDescriptor descriptor;
 
     public ProfileSearchTool(AiLearningProfileMapper profileMapper, AiProfileSignalMapper signalMapper,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper, PortCalls portCalls) {
         this.profileMapper = profileMapper;
         this.signalMapper = signalMapper;
         this.objectMapper = objectMapper;
+        this.portCalls = portCalls;
         this.descriptor = new ToolDescriptor(
                 "profile.search",
-                "1.0.0",
+                // 1.1.0 (T1.6): reads go through the profile port; a slow or failing store answers SERVICE_UNAVAILABLE.
+                "1.1.0",
                 "Search the user's learning profile (masteries, weaknesses, misconceptions — ACTIVE entries "
                         + "only) together with related profile signal snippets. Call only when the answer "
                         + "depends on the user's level, mastery, or weak areas — do not call every turn.",
@@ -118,10 +124,9 @@ public class ProfileSearchTool implements AgentTool {
 
         List<AiLearningProfileEntity> candidates;
         try {
-            candidates = profileMapper.selectList(wrapper);
-        } catch (RuntimeException ex) {
-            return ToolResult.failure(null, ToolStatus.EXECUTION_ERROR, "PROFILE_SEARCH_FAILED",
-                    "learning profile search failed");
+            candidates = portCalls.read(PortToolResults.PROFILE, () -> profileMapper.selectList(wrapper));
+        } catch (PortUnavailableException ex) {
+            return PortToolResults.unavailable("PROFILE_UNAVAILABLE", ex);
         }
 
         List<Map<String, Object>> profiles = new ArrayList<>();
@@ -145,16 +150,17 @@ public class ProfileSearchTool implements AgentTool {
                     && profile.profileKey != null && !profile.profileKey.isBlank();
             if (fetchSignals) {
                 List<AiProfileSignalEntity> signalRows;
+                String knowledgeNode = profile.profileKey;
                 try {
-                    signalRows = signalMapper.selectList(new QueryWrapper<AiProfileSignalEntity>()
-                            .eq("user_id", context.userId())
-                            .notIn("status", EXCLUDED_SIGNAL_STATUSES)
-                            .eq("knowledge_node", profile.profileKey)
-                            .orderByDesc("created_at")
-                            .last("LIMIT " + maxSignalsPerProfile));
-                } catch (RuntimeException ex) {
-                    return ToolResult.failure(null, ToolStatus.EXECUTION_ERROR, "SIGNAL_SEARCH_FAILED",
-                            "profile signal search failed");
+                    signalRows = portCalls.read(PortToolResults.PROFILE, () -> signalMapper.selectList(
+                            new QueryWrapper<AiProfileSignalEntity>()
+                                    .eq("user_id", context.userId())
+                                    .notIn("status", EXCLUDED_SIGNAL_STATUSES)
+                                    .eq("knowledge_node", knowledgeNode)
+                                    .orderByDesc("created_at")
+                                    .last("LIMIT " + maxSignalsPerProfile)));
+                } catch (PortUnavailableException ex) {
+                    return PortToolResults.unavailable("PROFILE_UNAVAILABLE", ex);
                 }
                 for (AiProfileSignalEntity signal : signalRows) {
                     Map<String, Object> signalItem = new LinkedHashMap<>();

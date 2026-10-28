@@ -1,6 +1,7 @@
 package com.aioj.next.ai.agent.memory.tool;
 
 import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.ai.agent.port.PortCalls;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolStatus;
@@ -28,7 +29,8 @@ class MemorySearchClaimsToolTest {
 
     private final AiMemoryClaimMapper claimMapper = mock(AiMemoryClaimMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final MemorySearchClaimsTool tool = new MemorySearchClaimsTool(claimMapper, objectMapper);
+    private final MemorySearchClaimsTool tool = new MemorySearchClaimsTool(claimMapper, objectMapper,
+            PortCalls.withTimeout(java.time.Duration.ofSeconds(5)));
 
     @Test
     void descriptorPassesRegistryRules() {
@@ -119,14 +121,34 @@ class MemorySearchClaimsToolTest {
     }
 
     @Test
-    void mapperExceptionBecomesExecutionError() throws Exception {
+    void mapperExceptionMakesTheMemoryPortUnavailable() throws Exception {
         when(claimMapper.selectList(any(QueryWrapper.class)))
                 .thenThrow(new RuntimeException("db down"));
 
         ToolResult<Object> result = tool.execute(context(), objectMapper.readTree("{}"));
 
-        assertThat(result.status()).isEqualTo(ToolStatus.EXECUTION_ERROR);
-        assertThat(result.errorCode()).isEqualTo("SEARCH_QUERY_FAILED");
+        assertThat(result.status()).isEqualTo(ToolStatus.SERVICE_UNAVAILABLE);
+        assertThat(result.errorCode()).isEqualTo("MEMORY_UNAVAILABLE");
+        assertThat(result.errorMessage()).contains("memory is unavailable right now (error)");
+    }
+
+    @Test
+    void aSlowStoreTimesOutInsteadOfHoldingTheTurn() throws Exception {
+        PortCalls fast = PortCalls.withTimeout(java.time.Duration.ofMillis(100));
+        when(claimMapper.selectList(any(QueryWrapper.class))).thenAnswer(invocation -> {
+            Thread.sleep(5_000);
+            return List.of();
+        });
+        MemorySearchClaimsTool slowTool = new MemorySearchClaimsTool(claimMapper, objectMapper, fast);
+        try {
+            ToolResult<Object> result = slowTool.execute(context(), objectMapper.readTree("{}"));
+
+            assertThat(result.status()).isEqualTo(ToolStatus.SERVICE_UNAVAILABLE);
+            assertThat(result.errorCode()).isEqualTo("MEMORY_UNAVAILABLE");
+            assertThat(result.errorMessage()).contains("(timeout)");
+        } finally {
+            fast.close();
+        }
     }
 
     private ToolExecutionContext context() {

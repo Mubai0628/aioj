@@ -21,7 +21,7 @@ public class HarnessContextConfiguration {
     }
 
     /** Contributor threads log with the turn's MDC (trace id and friends), as the request thread did. */
-    static UnaryOperator<Runnable> carryLoggingContext() {
+    public static UnaryOperator<Runnable> carryLoggingContext() {
         return task -> {
             Map<String, String> context = MDC.getCopyOfContextMap();
             return () -> {

@@ -1,6 +1,7 @@
 package com.aioj.next.ai.agent.profile.tool;
 
 import com.aioj.next.agent.harness.tool.api.ExecutionClass;
+import com.aioj.next.ai.agent.port.PortCalls;
 import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.agent.tool.ToolResult;
 import com.aioj.next.ai.agent.tool.ToolStatus;
@@ -32,7 +33,8 @@ class ProfileSearchToolTest {
     private final AiLearningProfileMapper profileMapper = mock(AiLearningProfileMapper.class);
     private final AiProfileSignalMapper signalMapper = mock(AiProfileSignalMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ProfileSearchTool tool = new ProfileSearchTool(profileMapper, signalMapper, objectMapper);
+    private final ProfileSearchTool tool = new ProfileSearchTool(profileMapper, signalMapper, objectMapper,
+            PortCalls.withTimeout(java.time.Duration.ofSeconds(5)));
 
     @Test
     void descriptorPassesRegistryRules() {
@@ -198,14 +200,34 @@ class ProfileSearchToolTest {
     }
 
     @Test
-    void mapperExceptionBecomesExecutionError() throws Exception {
+    void mapperExceptionMakesTheProfilePortUnavailable() throws Exception {
         when(profileMapper.selectList(any(QueryWrapper.class)))
                 .thenThrow(new RuntimeException("db down"));
 
         ToolResult<Object> result = tool.execute(context(), objectMapper.readTree("{}"));
 
-        assertThat(result.status()).isEqualTo(ToolStatus.EXECUTION_ERROR);
-        assertThat(result.errorCode()).isEqualTo("PROFILE_SEARCH_FAILED");
+        assertThat(result.status()).isEqualTo(ToolStatus.SERVICE_UNAVAILABLE);
+        assertThat(result.errorCode()).isEqualTo("PROFILE_UNAVAILABLE");
+        assertThat(result.errorMessage()).contains("profile is unavailable right now (error)");
+    }
+
+    @Test
+    void aSlowStoreTimesOutInsteadOfHoldingTheTurn() throws Exception {
+        PortCalls fast = PortCalls.withTimeout(java.time.Duration.ofMillis(100));
+        when(profileMapper.selectList(any(QueryWrapper.class))).thenAnswer(invocation -> {
+            Thread.sleep(5_000);
+            return List.of();
+        });
+        ProfileSearchTool slowTool = new ProfileSearchTool(profileMapper, signalMapper, objectMapper, fast);
+        try {
+            ToolResult<Object> result = slowTool.execute(context(), objectMapper.readTree("{}"));
+
+            assertThat(result.status()).isEqualTo(ToolStatus.SERVICE_UNAVAILABLE);
+            assertThat(result.errorCode()).isEqualTo("PROFILE_UNAVAILABLE");
+            assertThat(result.errorMessage()).contains("(timeout)");
+        } finally {
+            fast.close();
+        }
     }
 
     private ToolExecutionContext context() {

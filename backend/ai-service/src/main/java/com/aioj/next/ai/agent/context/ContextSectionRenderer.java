@@ -38,6 +38,7 @@ public class ContextSectionRenderer {
         List<ChatMessage> messages = new ArrayList<>();
         StringBuilder systemText = new StringBuilder();
         List<ChatMessage> conversational = new ArrayList<>();
+        List<String> retrieved = new ArrayList<>();
         String focusText = null;
         String currentRequest = null;
         for (ContextSection section : ordered) {
@@ -54,6 +55,13 @@ public class ContextSectionRenderer {
                 conversational.addAll(section.messages());
                 continue;
             }
+            if (section.type() == ContextSectionType.RETRIEVED_EVIDENCE) {
+                // T1.6: memory and profile sections (off by default) are data like the focus.
+                if (section.content() != null && !section.content().isBlank()) {
+                    retrieved.add(section.content());
+                }
+                continue;
+            }
             if (section.type() == ContextSectionType.CONVERSATION_FOCUS) {
                 // Derived digest rides as a user message after recent turns: close to the
                 // current request, and data-by-role rather than instruction.
@@ -68,6 +76,7 @@ public class ContextSectionRenderer {
             messages.add(ChatMessage.system(systemText.toString()));
         }
         messages.addAll(conversational);
+        retrieved.forEach(text -> messages.add(ChatMessage.user(text)));
         if (focusText != null && !focusText.isBlank()) {
             messages.add(ChatMessage.user(focusText));
         }

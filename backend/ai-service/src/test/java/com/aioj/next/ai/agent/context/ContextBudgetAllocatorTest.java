@@ -88,4 +88,22 @@ class ContextBudgetAllocatorTest {
         assertThat(recent.messages()).hasSize(3);
         assertThat(result.warnings()).doesNotContain("recent_turns_trimmed", "recent_turns_dropped");
     }
+
+    @Test
+    void memoryAndProfileSectionsGoBeforeTheFocus() {
+        String longText = "x".repeat(4000); // ~1000 tokens
+        List<ContextSection> sections = List.of(
+                ContextSection.text(ContextSectionType.SYSTEM_POLICY, 10, true, TrustLevel.SYSTEM_POLICY, "sys"),
+                ContextSection.text(ContextSectionType.RETRIEVED_EVIDENCE, 50, false, TrustLevel.DERIVED_SUMMARY,
+                        "memory " + longText),
+                ContextSection.text(ContextSectionType.CONVERSATION_FOCUS, 60, false, TrustLevel.DERIVED_SUMMARY, "focus"),
+                ContextSection.text(ContextSectionType.CURRENT_USER_REQUEST, 90, true, TrustLevel.USER_PROVIDED, "current"));
+
+        ContextBudgetAllocator.BudgetResult result = allocator.enforce(sections, 100);
+
+        assertThat(result.warnings()).containsExactly("retrieved_evidence_dropped");
+        assertThat(result.sections()).extracting(ContextSection::type).containsExactly(
+                ContextSectionType.SYSTEM_POLICY, ContextSectionType.CONVERSATION_FOCUS,
+                ContextSectionType.CURRENT_USER_REQUEST);
+    }
 }
