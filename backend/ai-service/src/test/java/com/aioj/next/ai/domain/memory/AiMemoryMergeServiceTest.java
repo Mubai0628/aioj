@@ -94,9 +94,25 @@ class AiMemoryMergeServiceTest {
                 configResolver,
                 completionClient,
                 quotaService,
-                new AiCapacityService(new AiProperties())
+                new AiCapacityService(new AiProperties()),
+                transactions
         );
     }
+
+    /** Records whether the code under test is inside a transaction right now (T1.6). */
+    private final java.util.concurrent.atomic.AtomicBoolean inTransaction = new java.util.concurrent.atomic.AtomicBoolean();
+    private final org.springframework.transaction.support.TransactionOperations transactions =
+            new org.springframework.transaction.support.TransactionOperations() {
+                @Override
+                public <T> T execute(org.springframework.transaction.support.TransactionCallback<T> action) {
+                    inTransaction.set(true);
+                    try {
+                        return action.doInTransaction(null);
+                    } finally {
+                        inTransaction.set(false);
+                    }
+                }
+            };
 
     @Test
     void enqueueCandidateMergeMarksCandidateQueuedAndCreatesIdempotentJob() {
@@ -303,6 +319,71 @@ class AiMemoryMergeServiceTest {
         verify(versionMapper).insert(any(AiMemoryVersionEntity.class));
         verify(retrievalService).deleteOwner(7L, "memory", "300");
         verify(retrievalService).indexChunk(eq(7L), eq("memory"), eq("300"), any());
+    }
+
+    @Test
+    void theMergeReviewCallRunsOutsideTheTransactionThatWritesItsDecision() {
+        AiMemoryCandidateEntity candidate = candidate();
+        candidate.status = AiMemoryMergeService.STATUS_MERGE_QUEUED;
+        AiUserMemoryEntity target = memory();
+        when(candidateMapper.selectById(100L)).thenReturn(candidate);
+        when(memoryMapper.selectById(300L)).thenReturn(target);
+        when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(target));
+        when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
+        java.util.List<String> order = new java.util.ArrayList<>();
+        when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
+                .thenAnswer(invocation -> {
+                    order.add("model inTransaction=" + inTransaction.get());
+                    return new ModelCompletions.Result("""
+                            {"decision":"MERGE","targetMemoryId":300,"mergedContent":"用户偏好先获得提示。",
+                             "confidence":0.9,"supportDelta":1,"contradictionDelta":0,"evidenceItems":["先给提示"],
+                             "candidateStatus":"MERGED","reviewReason":"same"}
+                            """, "deepseek", "deepseek-v4-pro", 12, 8);
+                });
+        doAnswer(invocation -> {
+            order.add("memory write inTransaction=" + inTransaction.get());
+            return 1;
+        }).when(memoryMapper).updateById(any(AiUserMemoryEntity.class));
+        doAnswer(invocation -> {
+            AiMemoryClaimEntity claim = invocation.getArgument(0);
+            claim.id = 400L;
+            return 1;
+        }).when(claimMapper).insert(any(AiMemoryClaimEntity.class));
+
+        AiMemoryJobEntity job = new AiMemoryJobEntity();
+        job.setPayloadJson("""
+                {"userId":7,"candidateId":100,"targetMemoryId":300,"action":"ADMIN_APPROVE"}
+                """);
+        service.handleJob(job);
+
+        assertThat(order).containsExactly("model inTransaction=false", "memory write inTransaction=true");
+    }
+
+    @Test
+    void aCandidateDecidedWhileTheReviewRanIsLeftAlone() {
+        AiMemoryCandidateEntity queued = candidate();
+        queued.status = AiMemoryMergeService.STATUS_MERGE_QUEUED;
+        AiMemoryCandidateEntity decided = candidate();
+        decided.status = AiMemoryMergeService.STATUS_MERGED;
+        AiUserMemoryEntity target = memory();
+        when(candidateMapper.selectById(100L)).thenReturn(queued, decided);
+        when(memoryMapper.selectById(300L)).thenReturn(target);
+        when(memoryMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(target));
+        when(configResolver.effectiveConfig(AiModelScope.MEMORY_EXTRACTION)).thenReturn(config());
+        when(completionClient.complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean()))
+                .thenReturn(new ModelCompletions.Result("""
+                        {"decision":"MERGE","targetMemoryId":300,"mergedContent":"x","confidence":0.9,
+                         "candidateStatus":"MERGED","reviewReason":"same"}
+                        """, "deepseek", "deepseek-v4-pro", 12, 8));
+
+        AiMemoryJobEntity job = new AiMemoryJobEntity();
+        job.setPayloadJson("""
+                {"userId":7,"candidateId":100,"targetMemoryId":300,"action":"ADMIN_APPROVE"}
+                """);
+        service.handleJob(job);
+
+        verify(memoryMapper, org.mockito.Mockito.never()).updateById(any(AiUserMemoryEntity.class));
+        verify(candidateMapper, org.mockito.Mockito.never()).updateById(any(AiMemoryCandidateEntity.class));
     }
 
     @Test

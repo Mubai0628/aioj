@@ -25,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -66,6 +67,7 @@ public class AiLearningProfileService {
     private final ObjectMapper objectMapper;
     private final ProfileSignalIngestionService profileSignalIngestion;
     private final ProfileAggregateJobProducer profileAggregateProducer;
+    private final TransactionOperations transactions;
 
     public AiLearningProfileService(
             AiLearningProfileMapper profileMapper,
@@ -76,8 +78,10 @@ public class AiLearningProfileService {
             AiStructuredSubmissionAnalysisService structuredAnalysisService,
             ObjectMapper objectMapper,
             ProfileSignalIngestionService profileSignalIngestion,
-            ProfileAggregateJobProducer profileAggregateProducer
+            ProfileAggregateJobProducer profileAggregateProducer,
+            TransactionOperations transactions
     ) {
+        this.transactions = transactions;
         this.profileMapper = profileMapper;
         this.evidenceMapper = evidenceMapper;
         this.analysisMapper = analysisMapper;
@@ -314,7 +318,11 @@ public class AiLearningProfileService {
         return recordSubmissionAnalysisFromContext(userId, request, completion, assistantMessageId, context, false);
     }
 
-    @Transactional
+    /**
+     * T1.6: no transaction around the remote calls. The submission context (problem-service) and
+     * the structured analysis (a model call) come first; the rows are written in one short
+     * transaction; the retrieval chunks (embedding calls) are indexed after it has finished.
+     */
     public SubmissionAnalysisSignal recordJudgedSubmissionAnalysis(AiJudgedSubmissionEventRequest event) {
         if (event == null || event.userId() == null || event.submissionId() == null || event.problemId() == null) {
             return null;
@@ -365,7 +373,10 @@ public class AiLearningProfileService {
                 new AiChatRequest.SubmissionContext(context.submissionId(), "AI_JUDGED_SUBMISSION_ANALYSIS", false, null)
         );
         AiCompletion completion = new AiCompletion("后台自动分析判题完成提交。", "judged-submission", "background-analysis", 0, 0);
-        return recordSubmissionAnalysisFromContext(event.userId(), request, completion, null, context, true);
+        AiStructuredSubmissionAnalysisService.AnalysisResult structured =
+                structuredAnalysisService.analyze(event.userId(), request, completion, context);
+        return IndexAfterCommit.run(() -> transactions.execute(status ->
+                persistSubmissionAnalysis(event.userId(), request, completion, null, context, true, structured)));
     }
 
     private SubmissionAnalysisSignal recordSubmissionAnalysisFromContext(
@@ -378,6 +389,20 @@ public class AiLearningProfileService {
     ) {
         AiStructuredSubmissionAnalysisService.AnalysisResult structured =
                 structuredAnalysisService.analyze(userId, request, completion, context);
+        return persistSubmissionAnalysis(userId, request, completion, assistantMessageId, context,
+                automaticJudgedSubmission, structured);
+    }
+
+    /** The database half of an analysis: rows, signals, profile and (queued) retrieval chunks. */
+    private SubmissionAnalysisSignal persistSubmissionAnalysis(
+            Long userId,
+            AiChatRequest request,
+            AiCompletion completion,
+            Long assistantMessageId,
+            AiSubmissionContextResponse context,
+            boolean automaticJudgedSubmission,
+            AiStructuredSubmissionAnalysisService.AnalysisResult structured
+    ) {
         String profileKey = structured.profileKey();
         String label = structured.profileLabel();
         String summary = analysisSummary(context, structured);

@@ -60,13 +60,23 @@ public class AiRetrievalService {
         this.objectMapper = objectMapper;
     }
 
-    @Transactional
     public void indexChunk(Long userId, String ownerType, String ownerId, String text) {
         indexChunk(userId, ownerType, ownerId, text, AiRetrievalChunkMetadata.safe());
     }
 
-    @Transactional
+    /**
+     * One lookup and one insert, no transaction of its own (T1.6): the embedding call in between
+     * must not hold a connection. Inside {@link IndexAfterCommit#run} the call is queued until the
+     * caller's transaction has finished.
+     */
     public void indexChunk(Long userId, String ownerType, String ownerId, String text, AiRetrievalChunkMetadata metadata) {
+        if (IndexAfterCommit.deferIfOpen(() -> indexNow(userId, ownerType, ownerId, text, metadata))) {
+            return;
+        }
+        indexNow(userId, ownerType, ownerId, text, metadata);
+    }
+
+    private void indexNow(Long userId, String ownerType, String ownerId, String text, AiRetrievalChunkMetadata metadata) {
         AiRetrievalChunkMetadata safeMetadata = metadata == null ? AiRetrievalChunkMetadata.safe() : metadata.safeCopy();
         if (userId == null || ownerType == null || ownerId == null || isDisallowedSensitivity(safeMetadata.sensitivity())) {
             return;

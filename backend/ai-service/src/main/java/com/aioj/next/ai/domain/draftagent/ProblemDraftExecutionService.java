@@ -36,7 +36,12 @@ public class ProblemDraftExecutionService {
         this.sandboxClient = sandboxClient;
     }
 
-    @Transactional
+    /**
+     * No transaction around the sandbox call (T1.6): the RUNNING row and its result are two
+     * single-row writes that commit on their own, so a failed run now keeps its FAILED row (inside
+     * one transaction the rethrown failure rolled both back) and a row left RUNNING by a crash
+     * expires with the rest after 24 hours.
+     */
     public ProblemDraftExecutionEntity execute(String workspaceId, long userId, Long agentRunId,
                                                String toolCallId, String purpose, String language,
                                                String sourceCode, String stdin,

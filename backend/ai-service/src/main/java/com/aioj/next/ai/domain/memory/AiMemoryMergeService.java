@@ -7,6 +7,7 @@ import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.domain.AiQuotaService;
 import com.aioj.next.ai.domain.AiRetrievalService;
+import com.aioj.next.ai.domain.IndexAfterCommit;
 import com.aioj.next.ai.domain.ModelCompletions;
 import com.aioj.next.ai.persistence.entity.AiMemoryCandidateEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryClaimEntity;
@@ -33,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -81,6 +83,7 @@ public class AiMemoryMergeService {
     private final ModelCompletions completionClient;
     private final AiQuotaService quotaService;
     private final AiCapacityService capacityService;
+    private final TransactionOperations transactions;
 
     public AiMemoryMergeService(
             AiMemoryCandidateMapper candidateMapper,
@@ -95,8 +98,10 @@ public class AiMemoryMergeService {
             AiModelConfigResolver configResolver,
             ModelCompletions completionClient,
             AiQuotaService quotaService,
-            AiCapacityService capacityService
+            AiCapacityService capacityService,
+            TransactionOperations transactions
     ) {
+        this.transactions = transactions;
         this.candidateMapper = candidateMapper;
         this.evidenceMapper = evidenceMapper;
         this.claimMapper = claimMapper;
@@ -326,7 +331,12 @@ public class AiMemoryMergeService {
         );
     }
 
-    @Transactional
+    /**
+     * T1.6: no transaction around the merge review call. The reads and the model call run first;
+     * the decision is written in one short transaction that re-reads the candidate (another path
+     * may have decided it meanwhile); the retrieval indexing, which calls the embedding API, runs
+     * after that transaction has finished.
+     */
     public void handleJob(AiMemoryJobEntity job) {
         Map<String, Object> payload = readObjectMap(job == null ? null : job.getPayloadJson());
         Long userId = readLong(payload.get("userId"));
@@ -335,7 +345,7 @@ public class AiMemoryMergeService {
             throw new AiMemoryJobPermanentFailure("Memory merge job payload is missing userId or candidateId");
         }
         AiMemoryCandidateEntity candidate = requireOwnedCandidate(userId, candidateId);
-        if (AiMemoryService.STATUS_ACTIVE.equals(candidate.status) || STATUS_MERGED.equals(candidate.status)) {
+        if (alreadyDecided(candidate)) {
             return;
         }
         Long hintedTargetMemoryId = readLong(payload.get("targetMemoryId"));
@@ -345,7 +355,17 @@ public class AiMemoryMergeService {
         // V3 P2-7: the merge source action (ACCEPT / AUTO_MEMORY_EXTRACTION / ...) travels in
         // the job payload (mergePayload) and gates distrusted-claim revival in upsertClaim.
         String mergeSourceAction = payload.get("action") == null ? "" : normalize(String.valueOf(payload.get("action")));
-        applyDecision(userId, candidate, hintedTarget, related, decision, payload, mergeSourceAction);
+        IndexAfterCommit.run(() -> transactions.execute(status -> {
+            AiMemoryCandidateEntity current = requireOwnedCandidate(userId, candidateId);
+            if (!alreadyDecided(current)) {
+                applyDecision(userId, current, hintedTarget, related, decision, payload, mergeSourceAction);
+            }
+            return null;
+        }));
+    }
+
+    private static boolean alreadyDecided(AiMemoryCandidateEntity candidate) {
+        return AiMemoryService.STATUS_ACTIVE.equals(candidate.status) || STATUS_MERGED.equals(candidate.status);
     }
 
     private MergeDecision runModel(

@@ -730,7 +730,8 @@ class AiLearningProfileServiceTest {
                 structuredAnalysisService,
                 new ObjectMapper(),
                 signalIngestion,
-                aggregateProducer
+                aggregateProducer,
+                org.springframework.transaction.support.TransactionOperations.withoutTransaction()
         );
     }
 
