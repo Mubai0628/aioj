@@ -4,6 +4,7 @@ import com.aioj.next.ai.agent.tool.ToolExecutionContext;
 import com.aioj.next.ai.domain.ProblemDraftTestcaseArtifactService;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkingState;
 import com.aioj.next.ai.domain.draftagent.ProblemDraftWorkspaceService;
+import com.aioj.next.ai.domain.problem.CrossCheckReport;
 import com.aioj.next.ai.domain.problem.DraftExecutionReport;
 import com.aioj.next.ai.domain.problem.DraftSandboxClient;
 import com.aioj.next.ai.domain.problem.OfficialTestcasePackageReport;
@@ -67,15 +68,14 @@ class DraftTestcaseGenerateFeedbackTest {
     }
 
     @Test
-    void failedGenerationReturnsCodesButNoHiddenDataOrSandboxPaths() {
+    void failedGenerationAddsCodeFeedbackAndKeepsTheRepairMessages() {
         prepareWorkspace();
-        String secret = "HIDDEN_INPUT_OUTPUT_123";
-        String path = "/sandbox/private/run-123";
+        String detail = "generator.py line 7: IndexError: list index out of range";
         VerificationReport failure = VerificationReport.of(List.of(new VerificationError(
-                "STANDARD_OUTPUT_MATERIALIZATION_FAILED", "stderr: " + secret + " " + path,
-                "testcaseGeneratorPython")), List.of());
+                "STANDARD_OUTPUT_MATERIALIZATION_FAILED", "stderr: " + detail, "testcaseGeneratorPython")),
+                List.of());
         when(sandbox.verifyDraftDetailed(any(), any(), eq(7L))).thenReturn(new DraftExecutionReport(
-                failure, null, null, pack("FAILED", "PACKAGE_FAILED", secret + path)));
+                failure, null, null, pack("FAILED", "PACKAGE_FAILED", "collector saw 0 .in files; " + detail)));
 
         Map<?, ?> data = (Map<?, ?>) tool.execute(context, mapper.createObjectNode()).data();
         Map<?, ?> feedback = (Map<?, ?>) data.get("feedback");
@@ -83,7 +83,40 @@ class DraftTestcaseGenerateFeedbackTest {
         assertThat(feedback.get("status")).isEqualTo("FAILED");
         assertThat(feedback.get("verdict")).isNull();
         assertThat(feedback.get("errorCodes").toString()).contains("STANDARD_OUTPUT_MATERIALIZATION_FAILED", "PACKAGE_FAILED");
-        assertThat(data.toString()).doesNotContain(secret, path, "scanRoot", "manifestJson");
+        // The feedback is codes and counts only; the fields the tool already returned keep their
+        // bounded messages, which carry the generator's repair clues.
+        assertThat(feedback.toString()).doesNotContain(detail);
+        Map<?, ?> error = (Map<?, ?>) ((List<?>) data.get("errors")).get(0);
+        assertThat(error.get("code")).isEqualTo("STANDARD_OUTPUT_MATERIALIZATION_FAILED");
+        assertThat(error.get("field")).isEqualTo("testcaseGeneratorPython");
+        assertThat(error.get("message")).isEqualTo("stderr: " + detail);
+        Map<?, ?> pack = (Map<?, ?>) data.get("package");
+        assertThat(pack.get("errorCode")).isEqualTo("PACKAGE_FAILED");
+        assertThat(pack.get("errorMessage")).isEqualTo("collector saw 0 .in files; " + detail);
+        assertThat(pack.keySet().stream().map(String::valueOf).toList())
+                .doesNotContain("packageFileId", "manifestJson", "scanRoot", "cases");
+        assertThat(data.toString()).doesNotContain("private-file", "private-name", "private-manifest");
+    }
+
+    @Test
+    void failureMessagesStayBoundedAndReferenceMismatchesStayHidden() {
+        prepareWorkspace();
+        String longMessage = "x".repeat(800);
+        VerificationReport failure = VerificationReport.of(List.of(new VerificationError(
+                "SAMPLE_OUTPUT_MISMATCH", longMessage, "samples")), List.of());
+        CrossCheckReport crossCheck = CrossCheckReport.failed(4, List.of(), List.of(new VerificationError(
+                "REFERENCE_MISMATCH", "reference check mismatch on 3.in: standard <1> but reference <2>",
+                "referenceSolutionCode")), List.of());
+        when(sandbox.verifyDraftDetailed(any(), any(), eq(7L))).thenReturn(new DraftExecutionReport(
+                failure, crossCheck, null, pack("PASSED", null, null)));
+
+        Map<?, ?> data = (Map<?, ?>) tool.execute(context, mapper.createObjectNode()).data();
+        Map<?, ?> error = (Map<?, ?>) ((List<?>) data.get("errors")).get(0);
+        assertThat((String) error.get("message")).hasSize(500);
+        Map<?, ?> mismatch = (Map<?, ?>) ((List<?>) ((Map<?, ?>) data.get("crossCheck")).get("errors")).get(0);
+        assertThat(mismatch.get("message")).isEqualTo("Independent reference output differed from the standard solution");
+        assertThat(((Map<?, ?>) data.get("feedback")).get("errorCodes").toString())
+                .contains("SAMPLE_OUTPUT_MISMATCH", "REFERENCE_MISMATCH");
     }
 
     @Test

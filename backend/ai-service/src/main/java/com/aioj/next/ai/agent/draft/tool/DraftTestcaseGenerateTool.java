@@ -129,8 +129,8 @@ public class DraftTestcaseGenerateTool implements AgentTool {
         if (report.officialPackageReport() != null) {
             Map<String, Object> packageResult = new LinkedHashMap<>();
             packageResult.put("status", report.officialPackageReport().status());
-            packageResult.put("errorCode", safeCode(report.officialPackageReport().errorCode()));
-            packageResult.put("errorMessage", report.officialPackageReport().errorCode() == null ? null : "Testcase package generation failed; review the error code and retry");
+            packageResult.put("errorCode", report.officialPackageReport().errorCode());
+            packageResult.put("errorMessage", limited(report.officialPackageReport().errorMessage()));
             packageResult.put("generatedInputCount", report.officialPackageReport().generatedInputCount());
             packageResult.put("generatedOutputCount", report.officialPackageReport().generatedOutputCount());
             packageResult.put("caseCount", report.officialPackageReport().caseCount());
@@ -153,16 +153,23 @@ public class DraftTestcaseGenerateTool implements AgentTool {
         if (report == null) {
             codes.add("NO_EXECUTION_REPORT");
         } else {
-            if (report.sandboxReport() != null) addCodes(codes, report.sandboxReport().errors());
-            if (report.complexityReport() != null) addCodes(codes, report.complexityReport().errors());
-            if (report.crossCheckReport() != null) addCodes(codes, report.crossCheckReport().errors());
+            if (report.sandboxReport() != null) {
+                addCodes(codes, report.sandboxReport().errors());
+            }
+            if (report.complexityReport() != null) {
+                addCodes(codes, report.complexityReport().errors());
+            }
+            if (report.crossCheckReport() != null) {
+                addCodes(codes, report.crossCheckReport().errors());
+            }
             if (report.officialPackageReport() != null) {
-                var pack = report.officialPackageReport();
-                feedback.put("caseCount", pack.caseCount());
-                feedback.put("generatedInputCount", pack.generatedInputCount());
-                feedback.put("generatedOutputCount", pack.generatedOutputCount());
-                String code = safeCode(pack.errorCode());
-                if (code != null) codes.add(code);
+                feedback.put("caseCount", report.officialPackageReport().caseCount());
+                feedback.put("generatedInputCount", report.officialPackageReport().generatedInputCount());
+                feedback.put("generatedOutputCount", report.officialPackageReport().generatedOutputCount());
+                String code = safeCode(report.officialPackageReport().errorCode());
+                if (code != null) {
+                    codes.add(code);
+                }
             }
         }
         feedback.put("errorCodes", codes.stream().limit(12).toList());
@@ -170,10 +177,14 @@ public class DraftTestcaseGenerateTool implements AgentTool {
     }
 
     private void addCodes(LinkedHashSet<String> codes, List<VerificationError> errors) {
-        if (errors == null) return;
+        if (errors == null) {
+            return;
+        }
         for (VerificationError error : errors) {
             String code = safeCode(error.code());
-            if (code != null) codes.add(code);
+            if (code != null) {
+                codes.add(code);
+            }
         }
     }
 
@@ -183,10 +194,12 @@ public class DraftTestcaseGenerateTool implements AgentTool {
         }
         return errors.stream().limit(12).map(error -> {
             Map<String, Object> value = new LinkedHashMap<>();
-            value.put("code", safeCode(error.code()));
-            value.put("field", safeField(error.field()));
-            value.put("message", hideMismatchDetails && "REFERENCE_MISMATCH".equals(error.code())
-                    ? "Independent reference output differed from the standard solution" : "Validation failed; review the error code and field");
+            value.put("code", error.code());
+            value.put("field", error.field());
+            String message = hideMismatchDetails && "REFERENCE_MISMATCH".equals(error.code())
+                    ? "Independent reference output differed from the standard solution"
+                    : error.message();
+            value.put("message", limited(message));
             return value;
         }).toList();
     }
@@ -197,19 +210,16 @@ public class DraftTestcaseGenerateTool implements AgentTool {
         }
         return warnings.stream().limit(12).map(warning -> {
             Map<String, Object> value = new LinkedHashMap<>();
-            value.put("code", safeCode(warning.code()));
-            value.put("field", safeField(warning.field()));
-            value.put("message", "Review the warning code and field");
+            value.put("code", warning.code());
+            value.put("field", warning.field());
+            value.put("message", limited(warning.message()));
             return value;
         }).toList();
     }
 
+    /** Only well-formed error codes go into feedback; the free-text fields above keep their messages. */
     private String safeCode(String value) {
         return value != null && value.matches("[A-Z][A-Z0-9_]{0,79}") ? value : null;
-    }
-
-    private String safeField(String value) {
-        return value != null && value.matches("[A-Za-z][A-Za-z0-9_.]{0,79}") ? value : null;
     }
 
     private String limited(String value) {
