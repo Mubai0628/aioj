@@ -13,6 +13,8 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.net.http.HttpClient;
@@ -50,17 +52,36 @@ public class DraftTestcasePackageAcceptanceClient {
         MultiValueMap<String, Object> parts = new LinkedMultiValueMap<>();
         parts.add("metadata", request);
         parts.add("package", new FileSystemResource(packagePath));
-        ApiResponse<DraftTestcasePackageRunResponse> response = restClient.post()
-                .uri("/api/v1/internal/sandbox/run-package")
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(parts)
-                .retrieve()
-                .body(RESPONSE_TYPE);
+        ApiResponse<DraftTestcasePackageRunResponse> response;
+        try {
+            response = restClient.post()
+                    .uri("/api/v1/internal/sandbox/run-package")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(parts)
+                    .retrieve()
+                    .body(RESPONSE_TYPE);
+        } catch (HttpClientErrorException ex) {
+            // agent-executor refused the package itself, for example for an unsafe compression ratio. The
+            // reason is what the model repairs its generator from, so it must not end as an opaque tool error.
+            throw new DomainException(ErrorCode.VALIDATION_FAILED, refusal(ex));
+        }
         if (response == null || response.code() != 0 || response.data() == null) {
             throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE,
                     response == null ? "Draft testcase package acceptance returned no response" : response.message());
         }
         return response.data();
+    }
+
+    private static String refusal(HttpClientErrorException ex) {
+        String reason = null;
+        try {
+            ApiResponse<?> body = ex.getResponseBodyAs(ApiResponse.class);
+            reason = body == null ? null : body.message();
+        } catch (RuntimeException notAnApiResponse) {
+            // Fall back to the status line below.
+        }
+        return "agent-executor refused the testcase package: "
+                + (StringUtils.hasText(reason) ? reason : "HTTP " + ex.getStatusCode().value());
     }
 
     private static String stripTrailingSlash(String value) {
