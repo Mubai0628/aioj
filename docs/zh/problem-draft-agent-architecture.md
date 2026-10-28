@@ -3,7 +3,7 @@
 [English](../en/problem-draft-agent-architecture.md)
 
 > [!NOTE]
-> 当前状态：本地 Provider + Docker Sandbox 端到端已验证；生产仍为 `IMPLEMENTED_UNVERIFIED`。真实 DeepSeek 已分别完成 CF 800、1400、1800 三个隔离工作区的草稿生成、样例运行、测试包生成、全包执行与 `draft.finalize`。三题均停留在 `PENDING_REVIEW`，未批准、导入或发布。本变更未提交、发布或部署到 `aioj_a`。
+> 当前状态：本地真实 Provider + Docker 端到端已验证；生产仍为 `IMPLEMENTED_UNVERIFIED`，生产节点 `aioj_a` 尚未部署。真实 DeepSeek 两次完成了 CF 800、1400、1800 三个隔离工作区的草稿生成、样例运行、测试包生成、全包执行与 `draft.finalize`：2026-08-15 一次；2026-10-29 执行改走 agent-executor、工具返回统一反馈之后，又验收一次。所有草稿都停留在 `PENDING_REVIEW`，未批准、导入或发布。
 
 ## 目标与边界
 
@@ -69,6 +69,8 @@ DeepSeek 思考模式的 `reasoning_content` 只作为当前工具循环的内�
 | `draft.finalize` | 检查当前指纹下全部门禁并创建待人工审核的不可变草稿 |
 
 工具只接收模型可决定的业务参数。`workspaceId`、用户、run、草稿、工件和权限均由服务器绑定；`executionId` 与 `artifactId` 会验证工作区归属和有效期，内部路径、Sandbox file ID 与凭据不会暴露给模型。
+
+执行类工具（`draft.code.execute`、`draft.samples.run`、`draft.testcase.run_package`、`draft.testcase.generate`）在原有字段之外都返回同一结构的 `feedback`：判定、耗时、内存、进程峰值，以及编译诊断或 stderr 摘要；批量用例只给通过数、失败分类和最大资源用量。生成测试包不运行被评判的程序，所以它的 `feedback` 没有判定和资源数值，只有状态、错误码和用例计数；原有字段里有界的错误消息保留，模型靠它们修复生成器。
 
 ## 执行与审计
 
@@ -144,3 +146,13 @@ V49–V51 中未接线的旧 job/attempt/artifact 表是历史结构，保持不
 | CF 1800 | 前两轮在同一隔离工作区保留状态；修复 copy-out 容量后仅执行 state → generate → run-package → finalize | 3/3 | 16/16，含独立参考解 | 20.4 MiB | `PENDING_REVIEW` / `AGENT_VERIFIED` |
 
 本次排查同时修复了两项真实根因：其一，旧运行时会把任意工具调用后的普通文本误判为完成，现在草稿运行必须成功调用 `draft.finalize`，否则保留状态并继续/降级；其二，旧本地 Sandbox 的 16 MiB copy-out 上限小于 50 MiB 测试包上限，导致 1800 工件虽生成却没有可取回句柄，现在限制已统一为 64 MiB 并增加结构化诊断。真实 Chrome 验证了草稿信息、完整工具轨迹、高难警告以及桌面、400×858、440×956 三种视口无横向溢出；原始思考未进入前端。该证据只证明本地单并发路径，不代表生产容量验证；本次未连接或更新 `aioj_a`。
+
+2026-10-29 用同样的三份请求再验收一次。执行改走 agent-executor → agent-sandbox，判题 Sandbox 在此期间除自身健康检查外没有收到任何请求：
+
+| 请求难度 | 轮次与运行模式 | 公开样例 | 全包验收 | 工件大小 | 最终状态 |
+| --- | --- | ---: | ---: | ---: | --- |
+| CF 800 | 三轮：第一轮的测试包在验收端以压缩比不安全被拒，并用完预算；第二轮 Provider 返回 HTTP 400；第三轮 `THINKING_TOOL_LOOP` 完成 | 3/3 | 8/8 | 0.07 MiB | `PENDING_REVIEW` / `AGENT_VERIFIED` |
+| CF 1400 | 两轮 `THINKING_TOOL_LOOP`：第一轮全包已通过，但没有 finalize 就用完了工具预算 | 3/3 | 12/12 | 2.5 MiB | `PENDING_REVIEW` / `AGENT_VERIFIED` |
+| CF 1800 | 两轮 `THINKING_TOOL_LOOP`：第一轮生成测试包后用完工具预算 | 3/3 | 16/16，含独立参考解 | 10.3 MiB | `PENDING_REVIEW` / `AGENT_VERIFIED` |
+
+这次验收修了两处：agent-executor 拒绝测试包时，拒绝原因现在会交给模型，之前模型只看到不透明的执行错误；工具预算在一轮多个调用的中途用完时，剩下的调用也会得到“预算已用完”的结果，不再因为缺少 tool 消息被 Provider 以 HTTP 400 拒绝。生成端和验收端的压缩比规则仍不一致：生成端只检查 1 MiB 以上的条目，验收端检查全部条目，所以生成能通过的包仍可能在验收时被拒。

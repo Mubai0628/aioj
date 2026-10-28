@@ -36,7 +36,7 @@ AIOJ 使用 GitHub Actions、私有 GHCR、不可变镜像 digest 与受保护�
 
 CI 对后端、React、Compose、Markdown 链接、仓库卫生和秘密泄露执行自动检查。镜像构建产生 SBOM 与 provenance 证明；第三方 Actions 固定到审核过的 commit SHA，降低供应链漂移。
 
-后端测试包含 ai-service 的架构测试（ArchUnit，只在测试范围）：模型调用包只能经它的 `api` 子包使用，且不依赖持久层或 ai-service 的其他代码；现有的三条模型调用旧路径冻结在允许清单里，不接新调用方；ai-service 进程内不启动子进程。允许清单只减不增。
+后端测试包含 ai-service 的架构测试（ArchUnit，只在测试范围）：模型调用包只能经它的 `api` 子包使用，且不依赖持久层、agent-harness 或 ai-service 的其他代码；旧的模型调用路径和 ai-service 自己的 Agent 循环、工具管线都已删除，测试断言它们不再出现；ai-service 不使用 agent-harness 的内部包；事件只经统一通道的接口发布；ai-service 进程内不启动子进程，代码只在 agent-executor 里执行。
 
 `backend/agent-harness` 是与领域无关的 Agent 循环和工具管线，它的架构测试要求：运行时只依赖 JDK 和 Jackson；各子包的 `internal` 包只在本子包内使用；依赖方向是 runtime → tool → context；源码里不出现判题领域的词。每条规则都有违规样例证明它会报错。
 

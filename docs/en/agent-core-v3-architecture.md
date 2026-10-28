@@ -24,6 +24,15 @@ user request
 
 Every turn has a stable ID and terminal state. Retries are idempotent by turn, preventing duplicate billing, audit, or memory candidates. Provider failure, tool failure, or delayed summarization never bypasses server policy.
 
+### Stream events
+
+Besides `meta`, `context`, `message`, `done`, and `error`, `/ai/chat/stream` has two event types:
+
+- `delta`: `{"text","step"}`, a text increment and the model call it belongs to;
+- `tool`: `{"phase","step","name","status","durationMs"}`, a tool starting and finishing, with neither its arguments nor its result.
+
+Practice turns call the provider in streaming mode, and reasoning is never forwarded. Once a step produces a character that may start the internal protocol (`{`, a double quote, or a backtick), the rest of that step's text reaches the client only through the final `message`. The server sends the buffered events only after the pre-delivery contest-state recheck passes, so the client receives no increment before the whole turn has finished; `message` is authoritative. Contest-restricted turns do not stream; they are replayed in slices after the output check passes. Resuming a turn does not resend past increments.
+
 ## Layered context
 
 Raw conversations and business records remain authoritative. Summaries, indexes, vectors, and memory are derived data.
@@ -49,9 +58,13 @@ The model sees only tools allowed for the current scenario. The server rechecks 
 
 Tool results use structured data with trusted provenance. Web content, statements, user text, and model text cannot become system instructions that expand tool authority.
 
+### Tutor code tools
+
+The tutor scenario has three code tools: `code.compile_check`, `code.run_samples`, and `code.run_custom`. The code comes only from the turn's selected code or the student's own submission, never from model-supplied source; execution goes through agent-executor into agent-sandbox, and compile results are cached per caller. Results use the shared execution feedback: verdict, time, memory, process peak, the first difference from the expected output, and compile diagnostics or a stderr summary. Contest-restricted turns never see these tools.
+
 ### AI problem-draft scenario
 
-The AI problem-draft path reuses the same `AgentRuntime` and agent-harness tool runtime; it no longer runs a fixed seven-stage model pipeline or duplicates the Agent loop. Each problem has an isolated durable workspace and dedicated `problem_draft_agent` conversation. The model uses nine draft tools to read and patch state, validate statically, execute code, run samples, generate and accept testcase packages, and request finalization, while the server binds resources and enforces every gate. Legacy synchronous, SSE, and regenerate entrypoints now delegate to durable Agent jobs. The real DeepSeek-plus-Docker path has completed local CF 800, 1400, and 1800 acceptance, each producing a `PENDING_REVIEW`, `AGENT_VERIFIED` draft; production remains `IMPLEMENTED_UNVERIFIED`. See [AI problem-draft Agent architecture](problem-draft-agent-architecture.md) for the complete design.
+The AI problem-draft path reuses the same `AgentRuntime` and agent-harness tool runtime; it no longer runs a fixed seven-stage model pipeline or duplicates the Agent loop. Each problem has an isolated durable workspace and dedicated `problem_draft_agent` conversation. The model uses nine draft tools to read and patch state, validate statically, execute code, run samples, generate and accept testcase packages, and request finalization, while the server binds resources and enforces every gate. Legacy synchronous, SSE, and regenerate entrypoints now delegate to durable Agent jobs. The real DeepSeek-plus-Docker path has completed local CF 800, 1400, and 1800 acceptance (on 2026-08-15, and again on 2026-10-29 on the agent-executor path), each producing a `PENDING_REVIEW`, `AGENT_VERIFIED` draft; production remains `IMPLEMENTED_UNVERIFIED`. See [AI problem-draft Agent architecture](problem-draft-agent-architecture.md) for the complete design.
 
 DeepSeek thinking-mode `reasoning_content` is echoed completely in memory within the current tool loop only. It does not enter the database, logs, audit, or frontend. When thinking is unavailable, the draft scenario may explicitly fall back to the standard tool loop and records `STANDARD_TOOL_FALLBACK`.
 
@@ -64,6 +77,8 @@ evidence -> candidate -> quality/conflict checks -> user confirmation -> active 
 ```
 
 The model may only propose a candidate. The server retains evidence, provenance, and state; users may accept, reject, or revoke. Conflicting claims are not silently overwritten, and profile signals retain time and source.
+
+After a turn, digest curation, embedding, profile aggregation, judged-submission analysis, and memory merge review run asynchronously through the unified data channel. Each subscriber has its own jobs, retries, and dead letters, so one failing subscriber affects neither the others nor the answer already delivered. When a student denies, distrusts, or re-enables a profile entry, the change is a synchronous write through the profile port.
 
 ## Contest safety
 
@@ -92,8 +107,10 @@ Contest AI usage is attributed by trusted server-side run context and aggregates
 
 ## Failure and degradation
 
-- Provider unavailable: return a safe traceable error without inventing tokens or facts.
-- Tool timeout: stop the call and retain audit; never bypass authorization with direct database access.
+- Provider unavailable: return a safe traceable error without inventing tokens or facts. The model call package owns timeouts, retries, and circuit breaking; a streamed call that fails after producing output is not retried.
+- Tool timeout or executor unavailable: stop the call and retain audit, hand the result back to the model as data, and continue the turn; never bypass authorization with direct database access.
+- Memory, profile, or another optional context section fails or overruns: only that section is missing and the turn still answers; a failing contest-policy section refuses the turn.
+- Degradation record: each model call's context manifest lists degraded context sections (`contributor_degraded:<section>:<reason>`) and tools whose infrastructure failed (`tool_degraded:<tool>:<status>`).
 - Digest or index delay: fall back to authorized recent context or exact retrieval.
 - Contest-policy dependency failure: use the safe default and record degraded evidence.
 - Output-check failure: refuse or constrain output rather than returning unchecked content.

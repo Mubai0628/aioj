@@ -36,7 +36,7 @@ Production Compose accepts complete `image@sha256:...` references rather than `l
 
 CI checks the backend, React applications, Compose, Markdown links, repository hygiene, and secret leakage. Image builds produce SBOM and provenance attestations. Third-party Actions are pinned to reviewed commit SHAs to reduce supply-chain drift.
 
-The backend tests include ai-service architecture tests (ArchUnit, test scope only): the model call package is used only through its `api` subpackage and depends on neither persistence nor the rest of ai-service; the three legacy model call paths are frozen in allowlists and take no new callers; the ai-service process starts no child processes. The allowlists only shrink.
+The backend tests include ai-service architecture tests (ArchUnit, test scope only): the model call package is used only through its `api` subpackage and depends on neither persistence, agent-harness, nor the rest of ai-service; the legacy model call paths and ai-service's own Agent loop and tool pipeline have been deleted, and the tests assert they do not come back; ai-service does not use agent-harness internals; events are published only through the unified channel's interface; the ai-service process starts no child processes, and code runs only in agent-executor.
 
 `backend/agent-harness` holds the domain-free agent loop and tool pipeline. Its architecture tests require that it depends at runtime on the JDK and Jackson only, that each subpackage's `internal` package is used only inside that subpackage, that dependencies point from runtime to tools to context, and that its sources contain no words of the judge domain. Fixtures prove that every rule reports a violation.
 

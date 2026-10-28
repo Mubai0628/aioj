@@ -53,7 +53,10 @@ Whether gVisor (`runsc`) can host go-judge and so remove `privileged` has not be
 ## AI security
 
 - The model and its output are untrusted; authorization and tool execution remain server-side.
+- Every model call goes through the model call package, and architecture tests forbid any bypass; each call leaves an observation record.
 - Private statements, hidden tests, and unrelated personal data are not sent to the provider.
+- Chat stream events carry only text increments and each tool's name, status, and duration, never tool arguments, tool results, or model reasoning. Contest-restricted turns do not stream; they are replayed only after the output check passes.
+- The tutor's code tools run only the turn's selected code or the student's own submission, never model-supplied source; contest-restricted turns do not have them.
 - Prompts, tool results, and recalled content distinguish instruction authority from data provenance.
 - AI plagiarism and postmortem output is advisory evidence, not an automatic disciplinary decision or final grade.
 - Memory writes require a candidate, evidence, conflict checks, and user confirmation.

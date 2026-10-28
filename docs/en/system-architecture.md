@@ -8,7 +8,8 @@
 Browser -> web-user / web-admin -> gateway
                                   |-> auth-service -> MySQL
                                   |-> problem-service -> MySQL / Redis / RabbitMQ
-                                  `-> ai-service -> compatible provider
+                                  `-> ai-service -> model call package -> compatible provider
+                                         `-> agent-executor -> agent-sandbox
 
 RabbitMQ -> judge-worker -> go-judge Sandbox
 ```
@@ -23,10 +24,14 @@ Browsers access only `/api/v1/**` through the gateway. Cross-service contracts a
 | auth-service | login, JWT/refresh tokens, users, roles, groups, and Flyway |
 | problem-service | problems, testcases, contests, submissions, notifications, and asynchronous jobs |
 | judge-worker | consumes RabbitMQ judge messages and calls Sandbox; never executes code itself |
-| ai-service | agent runtime, conversations, memory, drafts, plagiarism review, and postmortems |
+| ai-service | agent runtime, model call package, unified data channel, conversations, memory, drafts, plagiarism review, and postmortems |
+| agent-executor | the only entry for Agent tool execution: compiles, runs, generators, and packages; calls only agent-sandbox |
 | web-user / web-admin | student and administration React SPAs |
 | MySQL / Redis / RabbitMQ | authoritative business data, cache/short-lived state, and judge queue |
-| go-judge Sandbox | privileged runtime for isolated execution of untrusted code |
+| go-judge Sandbox | privileged runtime for isolated execution of untrusted code; formal judging only |
+| agent-sandbox | go-judge instance dedicated to Agent tools, called only by agent-executor |
+
+`backend/agent-harness` is the domain-neutral library for the Agent loop, the tool pipeline, and context assembly; ai-service builds the tutor and AI problem-draft scenarios on it. `backend/sandbox-client` holds the go-judge protocol, language configuration, and output comparison shared by judging and the Agent.
 
 ## Main data flows
 
@@ -41,6 +46,10 @@ problem-service persists a submission and publishes a RabbitMQ job. judge-worker
 ### AI
 
 ai-service calculates permission and policy on the server, builds minimal context, invokes the provider and authorized tools, and persists usage and audit evidence. AI accesses problem-service through minimal service contracts rather than reading another service's database tables.
+
+Every model call goes through the model call package inside ai-service, which owns timeouts, retries, circuit breaking, and one observation record per call; architecture tests forbid any other path. Student chat returns an event stream through `/ai/chat/stream`; text deltas and tool progress are described in the [Agent Core V3 architecture](agent-core-v3-architecture.md).
+
+Work after a turn goes through the unified data channel: digest curation, embedding, learning-profile aggregation, judged-submission analysis, and memory merge review are its subscribers. An event and one job per subscriber are written in the same transaction; a failed job retries with backoff and moves to the dead-letter state once its attempts are spent, and an administrator can replay it per subscriber.
 
 AI problem drafting follows `ProblemDraftAgentCoordinator → AgentRuntime → agent-harness loop`. ai-service sends code, sample, generator, and package execution through a protected internal API to agent-executor, which calls agent-sandbox; ai-service never accesses Docker or a sandbox directly, and the judge Sandbox serves formal judging only. After human approval, a recoverable import saga commits the problem content and a `READY` package through problem-service. See [AI problem-draft Agent architecture](problem-draft-agent-architecture.md).
 
@@ -63,6 +72,7 @@ Persistent notification records are the source of truth; SSE is only a real-time
 - RabbitMQ stores asynchronous judge jobs and bounded retry state.
 - Testcase packages, operation artifacts, AI-draft artifacts, and judge cache use file/volume storage; large hidden tests do not enter MySQL.
 - V66 adds AI-draft workspaces, bounded execution metadata, chunk-upload sessions, and recoverable import sagas, and extends existing draft/artifact/Agent-audit/problem records with provenance and fingerprints. Unwired draft job/attempt/artifact tables from V49–V51 remain historical structures and do not enter the active path.
+- Model call records (V70), the unified channel's event envelope (V72), and subscriber jobs live in MySQL. The old memory job table is kept but no longer written; on startup ai-service turns its unfinished judged-submission analysis and memory merge review jobs into channel jobs.
 
 ## Production topology
 
@@ -70,4 +80,4 @@ The selected production topology combines application services, data services, j
 
 Sandbox remains `privileged`, so a successful escape could compromise the host and all colocated data. Network and resource controls cannot fully remove that risk; see the [security architecture](security-architecture.md).
 
-The AI problem-draft Agent refactor currently exists only in the local working tree and is `IMPLEMENTED_UNVERIFIED`; it has not connected to or updated production node `aioj_a`.
+The Agent system, AI problem drafting included, has been accepted only locally against a real provider and remains `IMPLEMENTED_UNVERIFIED`; production node `aioj_a` has not been updated with these changes.

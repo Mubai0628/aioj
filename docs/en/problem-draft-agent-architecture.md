@@ -3,7 +3,7 @@
 [中文](../zh/problem-draft-agent-architecture.md)
 
 > [!NOTE]
-> Current status: the local provider-plus-Docker Sandbox path is end-to-end verified; production remains `IMPLEMENTED_UNVERIFIED`. Real DeepSeek runs completed isolated CF 800, 1400, and 1800 workspaces through draft generation, samples, package generation, full-package execution, and `draft.finalize`. All three remain `PENDING_REVIEW`; none was approved, imported, or published. Nothing has been committed, released, or deployed to `aioj_a`.
+> Current status: the local real-provider-plus-Docker path is end-to-end verified; production remains `IMPLEMENTED_UNVERIFIED`, and production node `aioj_a` has not been updated. Real DeepSeek runs have twice taken isolated CF 800, 1400, and 1800 workspaces through draft generation, samples, package generation, full-package execution, and `draft.finalize`: on 2026-08-15, and again on 2026-10-29 after execution moved to agent-executor and the tools gained the shared feedback. Every draft remains `PENDING_REVIEW`; none was approved, imported, or published.
 
 ## Goal and boundary
 
@@ -69,6 +69,8 @@ Code and package operations run sequentially with the current single-Sandbox top
 | `draft.finalize` | check every gate at the current fingerprint and create an immutable draft for human review |
 
 Tools accept only business arguments the model is allowed to choose. Workspace, user, run, draft, artifact, and authority are server-bound. `executionId` and `artifactId` are checked for workspace ownership and expiry; internal paths, Sandbox file IDs, and credentials are never exposed to the model.
+
+The execution tools (`draft.code.execute`, `draft.samples.run`, `draft.testcase.run_package`, and `draft.testcase.generate`) each return, besides their existing fields, a `feedback` of one shared shape: verdict, time, memory, process peak, and compile diagnostics or a stderr summary; batches of cases report only pass counts, failure kinds, and the largest resource use. Package generation runs no judged program, so its `feedback` has no verdict or resource figures, only the status, error codes, and case counts; the bounded error messages in its existing fields stay, because the model repairs its generator from them.
 
 ## Execution and audit
 
@@ -144,3 +146,13 @@ The current real local acceptance evidence is:
 | CF 1800 | two earlier turns preserved the same isolated workspace; after the copy-out correction the final turn ran only state → generate → run-package → finalize | 3/3 | 16/16, including an independent reference | 20.4 MiB | `PENDING_REVIEW` / `AGENT_VERIFIED` |
 
 The investigation fixed two production-path defects. First, the old runtime accepted ordinary prose after any tool call as completion; draft runs must now successfully call `draft.finalize`, otherwise state is preserved and the loop continues or falls back safely. Second, the former local 16 MiB copy-out limit was below the 50 MiB package ceiling, so the 1800 artifact was generated without a retrievable handle; the limits are now aligned at 64 MiB with structured diagnostics. Real Chrome verified draft content, the complete safe tool trace, the high-difficulty warning, and no horizontal overflow at desktop, 400×858, or 440×956. Raw reasoning was not exposed. This proves only the local single-concurrency path, not production capacity; `aioj_a` was neither connected to nor updated.
+
+On 2026-10-29 the same three requests were accepted again. Execution now goes through agent-executor → agent-sandbox, and the judge Sandbox received no request other than its own healthcheck meanwhile:
+
+| Requested difficulty | Turns and mode | Public samples | Full package | Artifact size | Final state |
+| --- | --- | ---: | ---: | ---: | --- |
+| CF 800 | three turns: the acceptance side refused the first turn's package for an unsafe compression ratio and the budget ran out; the provider answered the second with HTTP 400; the third completed in `THINKING_TOOL_LOOP` | 3/3 | 8/8 | 0.07 MiB | `PENDING_REVIEW` / `AGENT_VERIFIED` |
+| CF 1400 | two `THINKING_TOOL_LOOP` turns: the first passed the full package but used up its tool budget before finalizing | 3/3 | 12/12 | 2.5 MiB | `PENDING_REVIEW` / `AGENT_VERIFIED` |
+| CF 1800 | two `THINKING_TOOL_LOOP` turns: the first used up its tool budget after generating the package | 3/3 | 16/16, including an independent reference | 10.3 MiB | `PENDING_REVIEW` / `AGENT_VERIFIED` |
+
+This acceptance fixed two defects. When agent-executor refuses a package, the model now receives the reason instead of an opaque execution error. When the tool budget runs out in the middle of a turn with several tool calls, the remaining calls now get a budget-exhausted result, so the provider no longer rejects the next request with HTTP 400 for missing tool messages. The two sides still apply the compression-ratio rule differently: generation checks only entries of 1 MiB or more and acceptance checks every entry, so a package that passes generation can still be refused at acceptance.
