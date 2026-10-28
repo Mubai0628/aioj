@@ -1,6 +1,7 @@
 package com.aioj.next.ai.agent.asyncjob;
 
 import com.aioj.next.ai.config.AiProperties;
+import com.aioj.next.ai.config.HarnessDbQuota;
 import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,14 +47,17 @@ public class AgentAsyncJobWorker {
         if (!properties.getAgentJobs().isEnabled()) {
             return;
         }
-        List<AiAsyncJobEntity> jobs = jobService.claimDueJobs(
-                properties.getAgentJobs().getBatchSize(),
-                properties.getAgentJobs().getLeaseSeconds(),
-                workerId
-        );
-        for (AiAsyncJobEntity job : jobs) {
-            process(job);
-        }
+        // T1.6: the jobs are Harness work and share the Harness database quota.
+        HarnessDbQuota.runAsHarness(() -> {
+            List<AiAsyncJobEntity> jobs = jobService.claimDueJobs(
+                    properties.getAgentJobs().getBatchSize(),
+                    properties.getAgentJobs().getLeaseSeconds(),
+                    workerId
+            );
+            for (AiAsyncJobEntity job : jobs) {
+                process(job);
+            }
+        });
     }
 
     private void process(AiAsyncJobEntity job) {

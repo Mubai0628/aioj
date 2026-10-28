@@ -30,7 +30,8 @@ public final class PortCalls implements AutoCloseable {
         AtomicInteger counter = new AtomicInteger();
         this.pool = new ThreadPoolExecutor(Math.max(1, threads), Math.max(1, threads), 60, TimeUnit.SECONDS, queue,
                 runnable -> {
-                    Thread thread = new Thread(runnable, "ai-port-" + counter.incrementAndGet());
+                    // The harness- prefix puts these reads under the Harness database quota.
+                    Thread thread = new Thread(runnable, "harness-port-" + counter.incrementAndGet());
                     thread.setDaemon(true);
                     return thread;
                 }, new ThreadPoolExecutor.AbortPolicy());
