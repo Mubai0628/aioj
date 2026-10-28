@@ -573,6 +573,15 @@ function cleanupEvalData() {
   if (turnIds.length) {
     const tList = turnIds.map(sqlString).join(",");
     query(`DELETE FROM ai_context_manifests WHERE turn_id IN (${tList})`);
+    // T1.7: the unified channel's events about these turns (TURN_COMPLETED, DIGEST_READY) and
+    // their subscriber jobs, keyed <eventId>:<consumer>.
+    const channelEvents = query(
+      `SELECT id FROM ai_domain_events WHERE source_type = 'turn' AND source_id IN (${tList})`
+    ).map(([id]) => sqlString(id));
+    if (channelEvents.length) {
+      query(`DELETE FROM ai_async_jobs WHERE SUBSTRING_INDEX(idempotency_key, ':', 1) IN (${channelEvents.join(",")})`);
+      query(`DELETE FROM ai_domain_events WHERE id IN (${channelEvents.join(",")})`);
+    }
     query(`DELETE FROM ai_tool_calls WHERE turn_id IN (${tList})`);
     query(`DELETE FROM ai_guard_decisions WHERE turn_id IN (${tList})`);
     query(`DELETE FROM ai_policy_snapshots WHERE turn_id IN (${tList})`);

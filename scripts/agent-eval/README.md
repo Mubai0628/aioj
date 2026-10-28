@@ -120,3 +120,33 @@ node scripts/agent-eval/agent-contest-guard-eval.mjs
 清理：默认结束后删除 fixture 比赛（按 `cgeval-%` 标题前缀发现，含历次崩溃残留，
 FK 顺序 participant→registration→snapshot→contest_problem→run→contest）与全部
 cgeval 会话数据；problems 表只读不写。
+
+## agent-tool-feedback-eval.mjs（T1.11 / A5.5：工具反馈基线）
+
+两部分，第一次运行是基线，不设门禁（完成测量就退出 0）：
+
+- **问答调试（T 部分）：** 8 段在练习题 A+B 上有已知错误的程序（编译错误、答案错误、超时、运行错误各 2 段），
+  每段作为本轮选中的代码发进一个新会话，要求先用工具运行再回答。一个用例通过的条件是：这一轮成功调用过
+  `code.*` 工具，回答说出了工具报告的失败类别（用例预置的判定；这些程序的工具结果是确定的），而且没有说出
+  相反的结论。编译错误的用例另外记回答有没有引用出错的行号。
+- **出题（D 部分）：** 只读库里已有的出题 run 的工具调用记录，不调模型：首次通过率（到达 `draft.finalize`、
+  且第一次 `draft.samples.run` 之后没有 `draft.state.patch` 的 run 占比）、修复轮次（这些 patch 的个数）、
+  工具错误率、重复调用率（同一 run 里同一工具、同样参数的再次调用；读状态的两个工具不算）。
+
+### 运行前提
+
+本地栈、agent-executor 和 agent-sandbox 两个容器（`scripts/local/agent-containers.sh start`）都在跑。
+ai-service 的后台作业最好关着，这样各轮不产生 curator 和 embedding 调用。DeepSeek 约 30 次。
+
+### 命令
+
+```bash
+AIOJ_EVAL_ACCOUNT=ctxeval001 \
+AIOJ_EVAL_PASSWORD=*** \
+MYSQL_PASSWORD=*** \
+node scripts/agent-eval/agent-tool-feedback-eval.mjs
+```
+
+可选：`AIOJ_EVAL_CASES=CE1,WA1`（跑子集）、`AIOJ_EVAL_PROBLEM_ID`、`AIOJ_EVAL_KEEP=true`。
+
+清理：默认结束后删除 `tfbeval-` 前缀的会话及其轮次、工具调用、通道事件和作业，与另外三套相同。
