@@ -347,7 +347,8 @@ class InternalSandboxControllerTest {
     private InternalSandboxController controller(SandboxExecutionClient client) {
         AgentExecutorProperties properties = new AgentExecutorProperties();
         properties.setInternalApiToken(TOKEN);
-        return new InternalSandboxController(client, properties, new ObjectMapper());
+        return new InternalSandboxController(client, new com.aioj.next.executor.domain.CompileCache(client,
+                java.time.Duration.ofMinutes(10), 256, java.time.Clock.systemUTC(), null, false), properties, new ObjectMapper());
     }
 
     private InternalSandboxController.PythonScriptResponse runPythonScriptWithOutcome(

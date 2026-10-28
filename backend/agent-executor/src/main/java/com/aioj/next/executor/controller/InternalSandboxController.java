@@ -4,6 +4,7 @@ import com.aioj.next.common.api.ApiResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.executor.config.AgentExecutorProperties;
+import com.aioj.next.executor.domain.CompileCache;
 import com.aioj.next.executor.domain.SandboxExecutionClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -43,13 +44,16 @@ public class InternalSandboxController {
     private static final long DEFAULT_COMPILE_MEMORY_LIMIT_KB = 393_216L;
 
     private final SandboxExecutionClient sandboxExecutionClient;
+    private final CompileCache compileCache;
     private final AgentExecutorProperties properties;
     private final ObjectMapper objectMapper;
 
     public InternalSandboxController(SandboxExecutionClient sandboxExecutionClient,
+                                     CompileCache compileCache,
                                      AgentExecutorProperties properties,
                                      ObjectMapper objectMapper) {
         this.sandboxExecutionClient = sandboxExecutionClient;
+        this.compileCache = compileCache;
         this.properties = properties;
         this.objectMapper = objectMapper;
     }
@@ -66,22 +70,27 @@ public class InternalSandboxController {
         long runTimeLimitMillis = runTimeLimitMillis(request.timeLimitMillis(), 1000L);
         long compileTimeLimitMillis = Math.min(positive(properties.getMaxScriptTimeLimitMillis(), 180_000),
                 safeMultiply(runTimeLimitMillis, 10L));
-        SandboxExecutionClient.CompileOutcome outcome = sandboxExecutionClient.compileSource(
+        // A5.3: with a cache scope the executable stays the cache's, so no fileId goes back.
+        String scope = cacheScope(request.cacheScope());
+        CompileCache.Lookup lookup = compileCache.compile(
+                scope,
                 language,
                 request.sourceCode(),
                 SandboxExecutionClient.millisToNanos(compileTimeLimitMillis),
                 SandboxExecutionClient.kbToBytes(compileMemoryLimitKb())
         );
+        SandboxExecutionClient.CompileOutcome outcome = lookup.outcome();
         return ApiResponse.ok(new CompileResponse(
                 outcome.failed() ? "COMPILE_ERROR" : "ACCEPTED",
                 outcome.message(),
-                outcome.fileId(),
+                scope == null ? outcome.fileId() : null,
                 outcome.stderr(),
                 outcome.timeMillis(),
                 outcome.memoryKb(),
                 outcome.exitStatus(),
                 outcome.runTimeMillis(),
-                outcome.procPeak()
+                outcome.procPeak(),
+                lookup.hit()
         ));
     }
 
@@ -124,7 +133,8 @@ public class InternalSandboxController {
                     stdin,
                     request.timeLimitMillis(),
                     request.memoryLimitKb(),
-                    request.stdoutLimitBytes()
+                    request.stdoutLimitBytes(),
+                    request.cacheScope()
             )));
         }
         return ApiResponse.ok(new RunBatchResponse(results));
@@ -221,16 +231,17 @@ public class InternalSandboxController {
         }
         requireSafeFileId(request.compiledFileId());
         requireBoundedText(request.stdin(), properties.getMaxInputBytes(), "stdin");
-        SandboxExecutionClient.RunOutcome outcome = sandboxExecutionClient.runSource(
-                language,
-                request.sourceCode(),
-                request.compiledFileId(),
-                request.stdin(),
-                SandboxExecutionClient.millisToNanos(runTimeLimitMillis(request.timeLimitMillis(), 1000L)),
-                SandboxExecutionClient.kbToBytes(runMemoryLimitKb(request.memoryLimitKb(), "memoryLimitKb")),
-                Math.min(limitOrDefault(request.stdoutLimitBytes(), 65_536L).intValue(),
-                        positive(properties.getStdoutMaxCollectLimitBytes(), 4 * 1024 * 1024))
-        );
+        long cpuLimitNs = SandboxExecutionClient.millisToNanos(runTimeLimitMillis(request.timeLimitMillis(), 1000L));
+        long memoryLimitBytes = SandboxExecutionClient.kbToBytes(runMemoryLimitKb(request.memoryLimitKb(), "memoryLimitKb"));
+        int stdoutLimitBytes = Math.min(limitOrDefault(request.stdoutLimitBytes(), 65_536L).intValue(),
+                positive(properties.getStdoutMaxCollectLimitBytes(), 4 * 1024 * 1024));
+        String scope = cacheScope(request.cacheScope());
+        boolean fromSource = request.compiledFileId() == null || request.compiledFileId().isBlank();
+        SandboxExecutionClient.RunOutcome outcome = scope != null && fromSource
+                ? compileCache.run(scope, language, request.sourceCode(), request.stdin(), cpuLimitNs,
+                        memoryLimitBytes, stdoutLimitBytes)
+                : sandboxExecutionClient.runSource(language, request.sourceCode(), request.compiledFileId(),
+                        request.stdin(), cpuLimitNs, memoryLimitBytes, stdoutLimitBytes);
         return new RunResponse(
                 outcome.resultCode(),
                 outcome.message(),
@@ -307,6 +318,18 @@ public class InternalSandboxController {
         if (utf8Length(value) > positive(maxBytes, 1L)) {
             throw badRequest(field + " exceeds the configured limit");
         }
+    }
+
+    /** A5.3 cache scope: the caller's own key (for example {@code user:42}); blank means no caching. */
+    private String cacheScope(String scope) {
+        if (scope == null || scope.isBlank()) {
+            return null;
+        }
+        String value = scope.strip();
+        if (value.length() > 128 || !value.matches("[A-Za-z0-9:._-]+")) {
+            throw badRequest("Invalid compile cache scope");
+        }
+        return value;
     }
 
     private void requireSafeFileId(String fileId) {
@@ -526,22 +549,37 @@ public class InternalSandboxController {
         return value == null || value <= 0 ? fallback : value.longValue();
     }
 
-    public record CompileRequest(String language, String sourceCode, Integer timeLimitMillis, Integer memoryLimitKb) {
+    public record CompileRequest(String language, String sourceCode, Integer timeLimitMillis, Integer memoryLimitKb,
+                                 String cacheScope) {
+        public CompileRequest(String language, String sourceCode, Integer timeLimitMillis, Integer memoryLimitKb) {
+            this(language, sourceCode, timeLimitMillis, memoryLimitKb, null);
+        }
     }
 
     public record CompileResponse(String status, String message, String fileId, String stderr, Long timeMillis,
-                                  Long memoryKb, Integer exitStatus, Long runTimeMillis, Integer procPeak) {
+                                  Long memoryKb, Integer exitStatus, Long runTimeMillis, Integer procPeak,
+                                  Boolean cacheHit) {
     }
 
     public record DeleteFileRequest(String fileId) {
     }
 
     public record RunRequest(String language, String sourceCode, String compiledFileId, String stdin,
-                             Integer timeLimitMillis, Integer memoryLimitKb, Integer stdoutLimitBytes) {
+                             Integer timeLimitMillis, Integer memoryLimitKb, Integer stdoutLimitBytes,
+                             String cacheScope) {
+        public RunRequest(String language, String sourceCode, String compiledFileId, String stdin,
+                          Integer timeLimitMillis, Integer memoryLimitKb, Integer stdoutLimitBytes) {
+            this(language, sourceCode, compiledFileId, stdin, timeLimitMillis, memoryLimitKb, stdoutLimitBytes, null);
+        }
     }
 
     public record RunBatchRequest(String language, String sourceCode, String compiledFileId, List<String> inputs,
-                                  Integer timeLimitMillis, Integer memoryLimitKb, Integer stdoutLimitBytes) {
+                                  Integer timeLimitMillis, Integer memoryLimitKb, Integer stdoutLimitBytes,
+                                  String cacheScope) {
+        public RunBatchRequest(String language, String sourceCode, String compiledFileId, List<String> inputs,
+                               Integer timeLimitMillis, Integer memoryLimitKb, Integer stdoutLimitBytes) {
+            this(language, sourceCode, compiledFileId, inputs, timeLimitMillis, memoryLimitKb, stdoutLimitBytes, null);
+        }
     }
 
     public record RunResponse(String status, String message, String stdout, String stderr, Long timeMillis,
