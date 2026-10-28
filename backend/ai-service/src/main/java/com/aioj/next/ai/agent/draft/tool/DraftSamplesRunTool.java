@@ -55,6 +55,8 @@ public class DraftSamplesRunTool implements AgentTool {
         result.put("errors", run.report().errors());
         result.put("warnings", run.report().warnings());
         result.put("verificationFingerprint", workspace.getVerificationFingerprint());
+        result.put("feedback", DraftToolSupport.casesFeedback(run.passedCaseCount(), run.totalCaseCount(), null,
+                run.maxTimeMillis(), run.maxMemoryKb(), run.maxProcessCount()));
         return DraftToolSupport.success(result);
     }
 }

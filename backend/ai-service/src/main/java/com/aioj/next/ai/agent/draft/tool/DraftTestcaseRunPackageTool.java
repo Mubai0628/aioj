@@ -103,6 +103,10 @@ public class DraftTestcaseRunPackageTool implements AgentTool {
         result.put("maxMemoryKb", response.maxMemoryKb());
         result.put("maxRunTimeMillis", response.maxRunTimeMillis());
         result.put("maxProcPeak", response.maxProcPeak());
+        // A5.1: hidden cases give counts, failure kinds and the largest resource use only.
+        result.put("feedback", DraftToolSupport.casesFeedback(response.passedCaseCount(),
+                response.executedCaseCount(), response.failureCounts(), response.maxTimeMillis(),
+                response.maxMemoryKb(), response.maxProcPeak()));
         result.put("referenceExecuted", response.referenceExecuted());
         result.put("referencePassedCaseCount", response.referencePassedCaseCount());
         return result;

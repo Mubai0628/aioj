@@ -99,6 +99,7 @@ public class DraftCodeExecuteTool implements AgentTool {
         result.put("runTimeMillis", execution.getRunTimeMillis());
         result.put("outputTruncated", execution.getOutputTruncated());
         result.put("resultHash", execution.getResultHash());
+        result.put("feedback", DraftToolSupport.feedback(execution));
         return DraftToolSupport.success(result);
     }
 
