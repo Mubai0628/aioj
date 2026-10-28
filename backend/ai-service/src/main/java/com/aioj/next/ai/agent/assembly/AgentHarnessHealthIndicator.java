@@ -5,6 +5,7 @@ import com.aioj.next.agent.harness.tool.api.ToolRejection;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.boot.health.contributor.Status;
@@ -29,6 +30,7 @@ public class AgentHarnessHealthIndicator implements HealthIndicator {
 
     private final Health health;
 
+    @Autowired
     public AgentHarnessHealthIndicator(List<AgentTool> tools) {
         this(HarnessToolConfiguration.catalog(tools), AgentScenarios.REQUIRED_TOOLS);
     }
