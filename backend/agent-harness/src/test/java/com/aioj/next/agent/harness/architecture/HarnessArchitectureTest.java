@@ -41,6 +41,12 @@ class HarnessArchitectureTest {
     }
 
     @Test
+    void submodulesMeetThroughTheirApiPackages() {
+        HarnessArchitectureRules.everyClassBelongsToASubmodule(BASE).check(MAIN);
+        HarnessArchitectureRules.submodulesMeetThroughTheirApi(BASE).check(MAIN);
+    }
+
+    @Test
     void theHarnessRunsNoCodeInProcess() {
         HarnessArchitectureRules.runsNoCodeInProcess(BASE).check(MAIN);
     }
@@ -65,6 +71,14 @@ class HarnessArchitectureTest {
                 .satisfies(error -> assertThat(error.getMessage()).doesNotContain("FixtureToolSide"));
         assertThatThrownBy(() -> HarnessArchitectureRules.layersPointOneWay(FIXTURE).check(fixture))
                 .hasMessageContaining("FixtureToolSide");
+        // The fixture's runtime class lives outside any api/internal package and reaches into
+        // tool.internal; the tool class reaches runtime, which has no api package at all.
+        assertThatThrownBy(() -> HarnessArchitectureRules.everyClassBelongsToASubmodule(FIXTURE).check(fixture))
+                .hasMessageContaining("FixtureRuntimeSide")
+                .satisfies(error -> assertThat(error.getMessage()).doesNotContain("FixtureInternalHelper"));
+        assertThatThrownBy(() -> HarnessArchitectureRules.submodulesMeetThroughTheirApi(FIXTURE).check(fixture))
+                .hasMessageContaining("FixtureRuntimeSide.crossesIntoInternal")
+                .hasMessageContaining("FixtureToolSide.reachesUp");
         assertThatThrownBy(() -> HarnessArchitectureRules.runsNoCodeInProcess(FIXTURE).check(fixture))
                 .hasMessageContaining("FixtureCodeRunner.withBuilder")
                 .hasMessageContaining("FixtureCodeRunner.withRuntime")

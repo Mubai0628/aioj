@@ -63,8 +63,50 @@ final class HarnessArchitectureRules {
     static ArchRule layersPointOneWay(String base) {
         return noClasses().that().resideInAnyPackage(base + ".tool..", base + ".context..")
                 .should().dependOnClassesThat().resideInAPackage(base + ".runtime..")
-                .orShould().dependOnClassesThat().resideInAPackage(base + ".context.internal..")
                 .because("the loop uses tools and context, never the other way round");
+    }
+
+    /** The eight submodules of plan A3.1; each has an {@code api} and, where it needs one, an {@code internal}. */
+    static final List<String> SUBMODULES = List.of(
+            "runtime", "tool", "context", "memory", "profile", "channel", "sandbox", "audit");
+
+    /** A3.1: every class belongs to a submodule's {@code api} or {@code internal} package. */
+    static ArchRule everyClassBelongsToASubmodule(String base) {
+        String[] packages = SUBMODULES.stream()
+                .flatMap(name -> Stream.of(base + "." + name + ".api..", base + "." + name + ".internal.."))
+                .toArray(String[]::new);
+        return classes().that().resideInAPackage(base + "..")
+                .should().resideInAnyPackage(packages)
+                .because("plan A3.1 splits the Harness into eight submodules with an api each");
+    }
+
+    /** A3.1: one submodule reaches another only through that submodule's {@code api} package. */
+    static ArchRule submodulesMeetThroughTheirApi(String base) {
+        return classes().that().resideInAPackage(base + "..")
+                .should(new ArchCondition<>("depend on other submodules through their api package only") {
+                    @Override
+                    public void check(JavaClass origin, ConditionEvents events) {
+                        String own = submoduleOf(base, origin.getPackageName());
+                        for (Dependency dependency : origin.getDirectDependenciesFromSelf()) {
+                            String target = dependency.getTargetClass().getPackageName();
+                            String other = submoduleOf(base, target);
+                            if (other != null && !other.equals(own) && !target.equals(base + "." + other + ".api")
+                                    && !target.startsWith(base + "." + other + ".api.")) {
+                                events.add(SimpleConditionEvent.violated(dependency, dependency.getDescription()));
+                            }
+                        }
+                    }
+                });
+    }
+
+    /** The submodule a package belongs to ({@code runtime} for {@code base.runtime.api}), or null outside base. */
+    private static String submoduleOf(String base, String packageName) {
+        if (!packageName.startsWith(base + ".")) {
+            return null;
+        }
+        String rest = packageName.substring(base.length() + 1);
+        int dot = rest.indexOf('.');
+        return dot < 0 ? rest : rest.substring(0, dot);
     }
 
     /**
