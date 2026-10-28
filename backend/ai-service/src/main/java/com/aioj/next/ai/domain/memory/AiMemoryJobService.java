@@ -54,6 +54,14 @@ public class AiMemoryJobService {
         this.clock = clock == null ? Clock.systemDefaultZone() : clock;
     }
 
+    /** Jobs not finished yet (queued, running or waiting for a retry); see the worker's startup check. */
+    public long countUnfinished() {
+        Long count = jobMapper.selectCount(new QueryWrapper<AiMemoryJobEntity>()
+                .in("status", AiMemoryJobStatus.QUEUED.name(), AiMemoryJobStatus.RUNNING.name(),
+                        AiMemoryJobStatus.FAILED_RETRYABLE.name()));
+        return count == null ? 0 : count;
+    }
+
     @Transactional
     public AiMemoryJobEntity enqueue(
             Long eventId,

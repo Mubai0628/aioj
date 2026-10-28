@@ -1,5 +1,6 @@
 package com.aioj.next.ai.config;
 
+import com.aioj.next.ai.agent.context.HarnessContextConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -18,6 +19,8 @@ public class AiChatAsyncConfig {
         executor.setMaxPoolSize(maxPoolSize);
         executor.setQueueCapacity(Math.max(0, capacity.getChatQueueCapacity()));
         executor.setThreadNamePrefix("ai-chat-turn-");
+        // The turn logs, and publishes its channel event, under the request's trace id (T1.7).
+        executor.setTaskDecorator(HarnessContextConfiguration.carryLoggingContext()::apply);
         executor.initialize();
         return executor;
     }

@@ -4,6 +4,8 @@ import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -37,7 +39,8 @@ public class AiMemoryJobWorker {
 
     @Scheduled(fixedDelayString = "${aioj.ai.memory-jobs.poll-interval-ms:5000}")
     public void pollDueJobs() {
-        if (!properties.getMemoryJobs().isEnabled()) {
+        // T1.7: in UNIFIED mode the channel's subscribers run these job types; the two never both run.
+        if (!properties.getMemoryJobs().isEnabled() || properties.getChannel().isUnified()) {
             return;
         }
         List<AiMemoryJobEntity> jobs = jobService.claimDueJobs(
@@ -47,6 +50,26 @@ public class AiMemoryJobWorker {
         );
         for (AiMemoryJobEntity job : jobs) {
             process(job);
+        }
+    }
+
+    /**
+     * UNIFIED mode leaves this queue alone, so what it still holds is only reported, once, at
+     * startup; switching {@code aioj.ai.channel.mode} to LEGACY drains it.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void reportLegacyBacklog() {
+        if (!properties.getChannel().isUnified()) {
+            return;
+        }
+        try {
+            long unfinished = jobService.countUnfinished();
+            if (unfinished > 0) {
+                log.warn("AI channel mode is UNIFIED: {} unfinished ai_memory_jobs are left unprocessed "
+                        + "(aioj.ai.channel.mode=LEGACY drains them)", unfinished);
+            }
+        } catch (RuntimeException ex) {
+            log.warn("AI memory job backlog check failed: {}", ex.toString());
         }
     }
 

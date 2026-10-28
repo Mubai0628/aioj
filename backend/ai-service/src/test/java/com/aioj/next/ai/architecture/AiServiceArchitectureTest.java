@@ -115,6 +115,16 @@ class AiServiceArchitectureTest {
     }
 
     @Test
+    void producersPublishOnlyThroughTheChannelApi() {
+        // T1.7: producers hold channel.api's EventPublisher. The implementation is the channel package's
+        // own, plus the memory services' event facade, which still records under the legacy event names.
+        assertThat(AiServiceArchitectureRules.dependentsOf(MAIN, "com.aioj.next.ai.agent.channel.HarnessEventChannel", Set.of()))
+                .as("classes using the channel implementation")
+                .allMatch(name -> name.startsWith("com.aioj.next.ai.agent.channel.")
+                        || name.equals("com.aioj.next.ai.domain.memory.AiMemoryEventService"));
+    }
+
+    @Test
     void providerApiKeysAreReadOnlyWhereProviderCallsHappenToday() {
         assertExactly("classes reading a Provider API key",
                 AiServiceArchitectureRules.callersOf(MAIN, call -> call.getTargetOwner().getPackageName().startsWith("com.aioj.next.ai")

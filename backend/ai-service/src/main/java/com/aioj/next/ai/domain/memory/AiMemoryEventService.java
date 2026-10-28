@@ -1,5 +1,10 @@
 package com.aioj.next.ai.domain.memory;
 
+import com.aioj.next.agent.harness.channel.api.EventSubject;
+import com.aioj.next.agent.harness.channel.api.HarnessEvent;
+import com.aioj.next.ai.agent.channel.ChannelEventTypes;
+import com.aioj.next.ai.agent.channel.HarnessEventChannel;
+import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.entity.AiDomainEventEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
 import com.aioj.next.ai.persistence.mapper.AiDomainEventMapper;
@@ -26,17 +31,22 @@ public class AiMemoryEventService {
     private final AiMemoryEventPayloadSanitizer sanitizer;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final HarnessEventChannel channel;
+    private final AiProperties properties;
 
     @Autowired
     public AiMemoryEventService(
             AiDomainEventMapper eventMapper,
             AiMemoryJobService jobService,
             AiMemoryEventPayloadSanitizer sanitizer,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            HarnessEventChannel channel,
+            AiProperties properties
     ) {
-        this(eventMapper, jobService, sanitizer, objectMapper, Clock.systemDefaultZone());
+        this(eventMapper, jobService, sanitizer, objectMapper, Clock.systemDefaultZone(), channel, properties);
     }
 
+    /** Legacy only: events and their memory jobs go to ai_domain_events and ai_memory_jobs. */
     AiMemoryEventService(
             AiDomainEventMapper eventMapper,
             AiMemoryJobService jobService,
@@ -44,11 +54,25 @@ public class AiMemoryEventService {
             ObjectMapper objectMapper,
             Clock clock
     ) {
+        this(eventMapper, jobService, sanitizer, objectMapper, clock, null, null);
+    }
+
+    AiMemoryEventService(
+            AiDomainEventMapper eventMapper,
+            AiMemoryJobService jobService,
+            AiMemoryEventPayloadSanitizer sanitizer,
+            ObjectMapper objectMapper,
+            Clock clock,
+            HarnessEventChannel channel,
+            AiProperties properties
+    ) {
         this.eventMapper = eventMapper;
         this.jobService = jobService;
         this.sanitizer = sanitizer;
         this.objectMapper = objectMapper;
         this.clock = clock == null ? Clock.systemDefaultZone() : clock;
+        this.channel = channel;
+        this.properties = properties;
     }
 
     @Transactional
@@ -62,6 +86,9 @@ public class AiMemoryEventService {
             String sensitivity,
             List<EventJobSpec> jobs
     ) {
+        if (channel != null && properties != null && properties.getChannel().isUnified()) {
+            return recordOnChannel(eventType, userId, sourceType, sourceId, idempotencyKey, payload, sensitivity);
+        }
         AiDomainEventEntity event = ensureEvent(eventType, userId, sourceType, sourceId, idempotencyKey, payload, sensitivity);
         List<AiMemoryJobEntity> enqueuedJobs = new ArrayList<>();
         if (jobs != null) {
@@ -93,6 +120,30 @@ public class AiMemoryEventService {
     ) {
         return recordEvent(eventType, userId, sourceType, sourceId, idempotencyKey,
                 payload, SENSITIVITY_USER_PRIVATE_SAFE, List.of()).event();
+    }
+
+    /**
+     * T1.7 UNIFIED mode: the same event (sanitized payload, same idempotency key, its channel
+     * name) goes on the channel, and the channel's subscribers take the place of the job specs;
+     * nothing is written to ai_memory_jobs, so the recorded event carries no memory jobs.
+     */
+    private RecordedEvent recordOnChannel(String eventType, Long userId, String sourceType, String sourceId,
+                                          String idempotencyKey, Object payload, String sensitivity) {
+        requireText(eventType, "eventType");
+        requireText(sourceType, "sourceType");
+        requireText(idempotencyKey, "idempotencyKey");
+        if (userId == null) {
+            throw new IllegalArgumentException("userId is required");
+        }
+        HarnessEvent event = HarnessEvent.builder(ChannelEventTypes.fromLegacy(eventType.strip()), idempotencyKey.strip(),
+                        "ai-service:" + sourceType.strip().toLowerCase(java.util.Locale.ROOT))
+                .occurredAt(clock.instant())
+                .subject(EventSubject.user(String.valueOf(userId)))
+                .sensitivity(normalizeSensitivity(sensitivity))
+                .payload(objectMapper.readTree(toJson(payload)))
+                .build();
+        HarnessEventChannel.Delivery delivery = channel.deliver(event, sourceType.strip(), sourceId);
+        return new RecordedEvent(delivery.row(), List.of());
     }
 
     private AiDomainEventEntity ensureEvent(

@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain.memory;
 
+import com.aioj.next.ai.agent.channel.HarnessEventChannel;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.mapper.AiDomainEventMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryJobMapper;
@@ -16,7 +17,9 @@ class AiMemorySpringConstructorTest {
                 AiDomainEventMapper.class,
                 AiMemoryJobService.class,
                 AiMemoryEventPayloadSanitizer.class,
-                ObjectMapper.class
+                ObjectMapper.class,
+                HarnessEventChannel.class,
+                AiProperties.class
         ).isAnnotationPresent(Autowired.class)).isTrue();
 
         assertThat(AiMemoryJobService.class.getConstructor(

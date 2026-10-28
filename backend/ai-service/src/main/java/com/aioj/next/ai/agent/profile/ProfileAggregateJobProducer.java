@@ -1,5 +1,9 @@
 package com.aioj.next.ai.agent.profile;
 
+import com.aioj.next.agent.harness.channel.api.EventPublisher;
+import com.aioj.next.agent.harness.channel.api.EventSubject;
+import com.aioj.next.agent.harness.channel.api.HarnessEvent;
+import com.aioj.next.ai.agent.channel.ChannelEventTypes;
 import com.aioj.next.ai.agent.asyncjob.AgentAsyncJobService;
 import com.aioj.next.ai.config.AiProperties;
 import tools.jackson.databind.ObjectMapper;
@@ -26,8 +30,11 @@ public class ProfileAggregateJobProducer {
     private final AgentAsyncJobService jobService;
     private final ObjectMapper objectMapper;
     private final AiProperties properties;
+    private final EventPublisher channel;
 
-    public ProfileAggregateJobProducer(AgentAsyncJobService jobService, ObjectMapper objectMapper, AiProperties properties) {
+    public ProfileAggregateJobProducer(AgentAsyncJobService jobService, ObjectMapper objectMapper, AiProperties properties,
+                                       EventPublisher channel) {
+        this.channel = channel;
         this.jobService = jobService;
         this.objectMapper = objectMapper;
         this.properties = properties;
@@ -41,12 +48,21 @@ public class ProfileAggregateJobProducer {
             String hourBucket = Instant.now().truncatedTo(ChronoUnit.HOURS).toString();
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("userId", userId);
-            jobService.enqueue(
-                    ProfileAggregateJobHandler.JOB_TYPE_PROFILE_AGGREGATE,
-                    ProfileAggregateJobHandler.JOB_TYPE_PROFILE_AGGREGATE + ":" + userId + ":" + hourBucket,
-                    objectMapper.writeValueAsString(payload),
-                    properties.getAgentJobs().getMaxAttempts()
-            );
+            if (properties.getChannel().isUnified()) {
+                // T1.7 (A3.5): new profile signals are an event; the aggregation subscribes to it.
+                channel.publish(HarnessEvent.builder(ChannelEventTypes.PROFILE_SIGNAL_OBSERVED,
+                                "profile-signals:" + userId + ":" + hourBucket, "ai-service:profile-signals")
+                        .subject(EventSubject.user(String.valueOf(userId)))
+                        .payload(objectMapper.valueToTree(payload))
+                        .build());
+            } else {
+                jobService.enqueue(
+                        ProfileAggregateJobHandler.JOB_TYPE_PROFILE_AGGREGATE,
+                        ProfileAggregateJobHandler.JOB_TYPE_PROFILE_AGGREGATE + ":" + userId + ":" + hourBucket,
+                        objectMapper.writeValueAsString(payload),
+                        properties.getAgentJobs().getMaxAttempts()
+                );
+            }
         } catch (Exception ex) {
             log.warn("profile aggregate job enqueue failed userId={} error={}", userId, ex.toString());
         }

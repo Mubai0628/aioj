@@ -69,6 +69,11 @@ public class TurnDigestEmbedHandler implements AgentAsyncJobHandler {
     }
 
     @Override
+    public java.util.Set<String> eventTypes() {
+        return java.util.Set.of(com.aioj.next.ai.agent.channel.ChannelEventTypes.DIGEST_READY);
+    }
+
+    @Override
     public void handle(AiAsyncJobEntity job) throws Exception {
         JsonNode payload = objectMapper.readTree(job.getPayloadJson());
         long digestId = payload.path("digestId").asLong(0);

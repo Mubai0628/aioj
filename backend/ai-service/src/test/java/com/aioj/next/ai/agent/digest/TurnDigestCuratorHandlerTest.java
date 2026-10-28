@@ -1,5 +1,8 @@
 package com.aioj.next.ai.agent.digest;
 
+import com.aioj.next.agent.harness.channel.api.EventPublisher;
+import com.aioj.next.agent.harness.channel.api.HarnessEvent;
+import com.aioj.next.ai.agent.channel.ChannelEventTypes;
 import com.aioj.next.ai.agent.memory.MemoryCandidateIngestionService;
 import com.aioj.next.ai.model.api.ModelRequest;
 import com.aioj.next.ai.agent.TestModelResponses;
@@ -29,6 +32,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -49,15 +53,70 @@ class TurnDigestCuratorHandlerTest {
     private final MemoryCandidateIngestionService memoryIngestion = mock(MemoryCandidateIngestionService.class);
     private final ProfileSignalIngestionService profileIngestion = mock(ProfileSignalIngestionService.class);
     private final ProfileAggregateJobProducer aggregateProducer = mock(ProfileAggregateJobProducer.class);
+    private final EventPublisher publisher = mock(EventPublisher.class);
     private final TurnDigestCuratorHandler handler = new TurnDigestCuratorHandler(
+            digestMapper, conversationService, modelClient, jobService, objectMapper, legacy(),
+            memoryIngestion, profileIngestion, aggregateProducer, publisher);
+    private final TurnDigestCuratorHandler unifiedHandler = new TurnDigestCuratorHandler(
             digestMapper, conversationService, modelClient, jobService, objectMapper, new AiProperties(),
-            memoryIngestion, profileIngestion, aggregateProducer);
+            memoryIngestion, profileIngestion, aggregateProducer, publisher);
+
+    private static AiProperties legacy() {
+        AiProperties properties = new AiProperties();
+        properties.getChannel().setMode(AiProperties.Channel.Mode.LEGACY);
+        return properties;
+    }
 
     @BeforeEach
     void setUp() {
         lenient().when(memoryIngestion.ingest(any(), any(), any(), anyList(), any(), any()))
                 .thenReturn(new MemoryCandidateIngestionService.IngestResult(0, 0, 0, 0));
         lenient().when(profileIngestion.recordChatTurnSignals(any(), any(), anyList(), anyString())).thenReturn(0);
+    }
+
+    @Test
+    void declaresTheEventItSubscribesTo() {
+        assertThat(handler.eventTypes()).containsExactly(ChannelEventTypes.TURN_COMPLETED);
+    }
+
+    @Test
+    void unifiedModePublishesDigestReadyInsteadOfEnqueueingTheEmbedding() throws Exception {
+        when(digestMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(stubRow()));
+        when(conversationService.getMessage(7L, 100L)).thenReturn(message(100L, "讲一下第二道异或题"));
+        when(conversationService.getMessage(7L, 200L)).thenReturn(message(200L, "这题用异或前缀和……"));
+        when(modelClient.complete(any(ModelRequest.class), any())).thenReturn(TestModelResponses.response(
+                """
+                {
+                  "dialogueAct": "NEW_REQUEST",
+                  "userIntents": ["EXPLAIN_PROBLEM"],
+                  "topicPath": ["algorithm", "xor"],
+                  "summary": "用户要求讲解第二道异或题，助手给出异或前缀和解法",
+                  "searchKeywords": ["异或", "前缀和", "第二题"],
+                  "entities": [{"type": "PROBLEM", "canonicalName": "区间异或", "aliases": ["第二题"]}],
+                  "userAssertions": [{"text": "用户不理解异或前缀和", "sourceMessageId": "user"}],
+                  "assistantClaims": [{"text": "该题可用异或前缀和", "verification": "UNVERIFIED_ASSISTANT_CLAIM"}],
+                  "openTasks": [],
+                  "problemRefs": [],
+                  "safetyTags": ["NORMAL_PRACTICE"],
+                  "memoryCandidates": [{"text": "用户喜欢先给思路", "category": "PREFERENCE", "memoryKey": "guidance_preference", "confidence": 0.9, "longTerm": true, "evidenceType": "EXPLICIT_PREFERENCE"}],
+                  "profileSignals": [{"signal": "对位运算不熟", "signalType": "WEAKNESS", "knowledgeNode": "位运算", "polarity": "NEGATIVE", "score": 0.7}]
+                }
+                """,
+                List.of(), "stop", 500, 120, 0, "deepseek", "deepseek-v4-pro"));
+
+        unifiedHandler.handle(job("{\"turnId\":\"t-1\",\"conversationId\":\"c-1\",\"userId\":7}"));
+
+        ArgumentCaptor<AiTurnDigestEntity> ready = ArgumentCaptor.forClass(AiTurnDigestEntity.class);
+        verify(digestMapper).insert(ready.capture());
+        ArgumentCaptor<HarnessEvent> event = ArgumentCaptor.forClass(HarnessEvent.class);
+        verify(publisher).publish(event.capture());
+        assertThat(event.getValue().type()).isEqualTo(ChannelEventTypes.DIGEST_READY);
+        assertThat(event.getValue().idempotencyKey()).isEqualTo("digest-ready:" + ready.getValue().getId());
+        assertThat(event.getValue().subject().userId()).isEqualTo("7");
+        assertThat(event.getValue().subject().turnId()).isEqualTo("t-1");
+        assertThat(event.getValue().payload().get("turnId").asString()).isEqualTo("t-1");
+        verify(jobService, never()).enqueue(eq(TurnDigestService.JOB_TYPE_EMBED_DIGEST), any(String.class),
+                any(String.class), anyInt());
     }
 
     @Test

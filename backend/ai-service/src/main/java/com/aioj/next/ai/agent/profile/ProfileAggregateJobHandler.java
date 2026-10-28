@@ -34,6 +34,11 @@ public class ProfileAggregateJobHandler implements AgentAsyncJobHandler {
     }
 
     @Override
+    public java.util.Set<String> eventTypes() {
+        return java.util.Set.of(com.aioj.next.ai.agent.channel.ChannelEventTypes.PROFILE_SIGNAL_OBSERVED);
+    }
+
+    @Override
     public void handle(AiAsyncJobEntity job) throws Exception {
         JsonNode payload = objectMapper.readTree(job.getPayloadJson());
         Long userId = payload.path("userId").isNumber() ? payload.path("userId").asLong(0L) : null;

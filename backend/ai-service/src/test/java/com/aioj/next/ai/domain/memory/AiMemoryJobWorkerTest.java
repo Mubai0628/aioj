@@ -8,9 +8,11 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +21,7 @@ class AiMemoryJobWorkerTest {
     void unknownJobTypeIsFailedFinalWithoutThrowing() {
         AiMemoryJobService jobService = mock(AiMemoryJobService.class);
         AiProperties properties = new AiProperties();
+        properties.getChannel().setMode(AiProperties.Channel.Mode.LEGACY);
         properties.getMemoryJobs().setBatchSize(1);
         AiMemoryJobEntity job = job(10L, "UNKNOWN_JOB");
         when(jobService.claimDueJobs(eq(1), any(Duration.class), any())).thenReturn(List.of(job));
@@ -33,6 +36,7 @@ class AiMemoryJobWorkerTest {
     void registeredHandlerCompletesJob() {
         AiMemoryJobService jobService = mock(AiMemoryJobService.class);
         AiProperties properties = new AiProperties();
+        properties.getChannel().setMode(AiProperties.Channel.Mode.LEGACY);
         AiMemoryJobEntity job = job(10L, "MEMORY_EXTRACT");
         when(jobService.claimDueJobs(eq(8), any(Duration.class), any())).thenReturn(List.of(job));
         AiMemoryJobHandler handler = new AiMemoryJobHandler() {
@@ -56,6 +60,7 @@ class AiMemoryJobWorkerTest {
     void handlerExceptionIsRecordedAsRetryableOrFinalFailure() {
         AiMemoryJobService jobService = mock(AiMemoryJobService.class);
         AiProperties properties = new AiProperties();
+        properties.getChannel().setMode(AiProperties.Channel.Mode.LEGACY);
         AiMemoryJobEntity job = job(10L, "MEMORY_EXTRACT");
         when(jobService.claimDueJobs(eq(8), any(Duration.class), any())).thenReturn(List.of(job));
         RuntimeException failure = new RuntimeException("stderr:\nraw output");
@@ -81,6 +86,7 @@ class AiMemoryJobWorkerTest {
     void permanentHandlerFailureIsRecordedAsFinalFailure() {
         AiMemoryJobService jobService = mock(AiMemoryJobService.class);
         AiProperties properties = new AiProperties();
+        properties.getChannel().setMode(AiProperties.Channel.Mode.LEGACY);
         AiMemoryJobEntity job = job(10L, "MEMORY_EXTRACT");
         when(jobService.claimDueJobs(eq(8), any(Duration.class), any())).thenReturn(List.of(job));
         AiMemoryJobPermanentFailure failure = new AiMemoryJobPermanentFailure("bad payload");
@@ -100,6 +106,32 @@ class AiMemoryJobWorkerTest {
         worker.pollDueJobs();
 
         verify(jobService).failFinal(job, failure);
+    }
+
+    @Test
+    void unifiedModeLeavesTheLegacyQueueToTheChannel() {
+        AiMemoryJobService jobService = mock(AiMemoryJobService.class);
+        AiProperties unified = new AiProperties();
+        unified.getMemoryJobs().setEnabled(true);
+        AiMemoryJobWorker worker = new AiMemoryJobWorker(jobService, unified, List.of());
+
+        worker.pollDueJobs();
+
+        verify(jobService, never()).claimDueJobs(anyInt(), any(Duration.class), any());
+    }
+
+    @Test
+    void unifiedModeReportsUnfinishedLegacyJobsAtStartup() {
+        AiMemoryJobService jobService = mock(AiMemoryJobService.class);
+        when(jobService.countUnfinished()).thenReturn(3L);
+        new AiMemoryJobWorker(jobService, new AiProperties(), List.of()).reportLegacyBacklog();
+        verify(jobService).countUnfinished();
+
+        AiProperties legacy = new AiProperties();
+        legacy.getChannel().setMode(AiProperties.Channel.Mode.LEGACY);
+        AiMemoryJobService legacyJobs = mock(AiMemoryJobService.class);
+        new AiMemoryJobWorker(legacyJobs, legacy, List.of()).reportLegacyBacklog();
+        verify(legacyJobs, never()).countUnfinished();
     }
 
     private AiMemoryJobEntity job(Long id, String jobType) {

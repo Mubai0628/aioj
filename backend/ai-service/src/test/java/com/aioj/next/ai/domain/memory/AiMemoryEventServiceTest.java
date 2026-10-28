@@ -1,5 +1,8 @@
 package com.aioj.next.ai.domain.memory;
 
+import com.aioj.next.agent.harness.channel.api.HarnessEvent;
+import com.aioj.next.ai.agent.channel.ChannelEventTypes;
+import com.aioj.next.ai.agent.channel.HarnessEventChannel;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.entity.AiDomainEventEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryJobEntity;
@@ -23,6 +26,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,6 +49,39 @@ class AiMemoryEventServiceTest {
         ObjectMapper objectMapper = new ObjectMapper();
         AiMemoryJobService jobService = new AiMemoryJobService(jobMapper, sanitizer, objectMapper, new AiProperties(), clock);
         eventService = new AiMemoryEventService(eventMapper, jobService, sanitizer, objectMapper, clock);
+    }
+
+    @Test
+    void unifiedModeRecordsTheEventOnTheChannelInsteadOfTheMemoryQueue() {
+        HarnessEventChannel channel = mock(HarnessEventChannel.class);
+        AiDomainEventEntity stored = new AiDomainEventEntity();
+        stored.setId(88L);
+        when(channel.deliver(any(HarnessEvent.class), eq("SUBMISSION"), eq("501")))
+                .thenReturn(new HarnessEventChannel.Delivery(stored, false, List.of("AI_JUDGED_SUBMISSION_ANALYSIS")));
+        AiMemoryEventPayloadSanitizer sanitizer = new AiMemoryEventPayloadSanitizer();
+        Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+        AiMemoryEventService unified = new AiMemoryEventService(eventMapper,
+                new AiMemoryJobService(jobMapper, sanitizer, new ObjectMapper(), new AiProperties(), clock),
+                sanitizer, new ObjectMapper(), clock, channel, new AiProperties());
+
+        AiMemoryEventService.RecordedEvent recorded = unified.recordEvent(
+                AiMemoryJobTypes.EVENT_SUBMISSION_JUDGED_SAFE, 7L, "SUBMISSION", "501", "submission-judged:501",
+                Map.of("submissionId", 501, "sourceCode", "int main(){return 0;}"),
+                AiMemoryEventService.SENSITIVITY_USER_PRIVATE_SAFE,
+                List.of(new AiMemoryEventService.EventJobSpec(
+                        AiMemoryJobTypes.JOB_AI_JUDGED_SUBMISSION_ANALYSIS, "job-1", Map.of(), null, null)));
+
+        ArgumentCaptor<HarnessEvent> event = ArgumentCaptor.forClass(HarnessEvent.class);
+        verify(channel).deliver(event.capture(), eq("SUBMISSION"), eq("501"));
+        assertThat(event.getValue().type()).isEqualTo(ChannelEventTypes.SUBMISSION_JUDGED);
+        assertThat(event.getValue().idempotencyKey()).isEqualTo("submission-judged:501");
+        assertThat(event.getValue().producer()).isEqualTo("ai-service:submission");
+        assertThat(event.getValue().subject().userId()).isEqualTo("7");
+        assertThat(event.getValue().payload().toString()).contains("501").doesNotContain("int main");
+        assertThat(recorded.event()).isSameAs(stored);
+        assertThat(recorded.jobs()).isEmpty();
+        verify(eventMapper, never()).insert(any(AiDomainEventEntity.class));
+        verify(jobMapper, never()).insert(any(AiMemoryJobEntity.class));
     }
 
     @Test
