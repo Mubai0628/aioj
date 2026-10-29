@@ -7,7 +7,7 @@ import { EmptyState, ErrorPanel, LoadingPanel, PageHeader, TableShell, selectCla
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
 import { downloadOperationJobArtifact } from "../lib/operationJobDownloads";
-import { readableStoredError } from "../lib/readableError";
+import { readableCaughtError, readableStoredError } from "../lib/readableError";
 
 type TabKey = "jobs" | "audit";
 type TFunction = ReturnType<typeof useI18n>["t"];
@@ -54,7 +54,7 @@ export function OperationAuditView() {
       ]);
     },
     onError: (caught) => {
-      toast.error(caught instanceof Error ? caught.message : t("common.errorFallback"));
+      toast.error(readableCaughtError(caught, locale, t("common.errorFallback")));
     }
   });
 
