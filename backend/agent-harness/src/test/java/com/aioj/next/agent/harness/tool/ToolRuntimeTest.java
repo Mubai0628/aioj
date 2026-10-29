@@ -151,6 +151,43 @@ class ToolRuntimeTest {
     }
 
     @Test
+    void aThrowingToolIsLoggedWhereItWasThrownButWithoutItsMessage() {
+        Tools.Fake broken = Tools.descriptor("kb.broken").behaving((context, input) -> {
+            throw new IllegalStateException("wrapped", new NumberFormatException("student code: int x = 1/0"));
+        });
+        java.util.logging.Logger log = java.util.logging.Logger.getLogger(
+                "com.aioj.next.agent.harness.tool.internal.DefaultToolRuntime");
+        List<java.util.logging.LogRecord> records = new java.util.concurrent.CopyOnWriteArrayList<>();
+        java.util.logging.Handler capture = new java.util.logging.Handler() {
+            @Override
+            public void publish(java.util.logging.LogRecord record) {
+                records.add(record);
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        log.addHandler(capture);
+        try {
+            runtime(List.of(broken)).execute(CONTEXT, 7, new ToolCallRequest("c1", "kb.broken", "{\"query\":\"a\"}"), null);
+        } finally {
+            log.removeHandler(capture);
+        }
+
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).getLevel()).isEqualTo(java.util.logging.Level.WARNING);
+        assertThat(records.get(0).getMessage())
+                .contains("Tool kb.broken threw in run", "call 7", "java.lang.IllegalStateException",
+                        "Caused by: java.lang.NumberFormatException", "\tat ")
+                .doesNotContain("wrapped", "student code");
+    }
+
+    @Test
     void aThrowingToolBecomesAnExecutionErrorWithoutItsMessage() {
         Tools.Fake broken = Tools.descriptor("kb.broken").behaving((context, input) -> {
             throw new IllegalStateException("jdbc:mysql://db/secret-host");

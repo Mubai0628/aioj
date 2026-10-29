@@ -37,6 +37,10 @@ import java.util.concurrent.TimeoutException;
  * class.
  */
 public final class DefaultToolRuntime implements ToolRuntime {
+    private static final System.Logger LOG = System.getLogger(DefaultToolRuntime.class.getName());
+    private static final int TRACE_CAUSES = 5;
+    private static final int TRACE_FRAMES = 12;
+
     private final ToolCatalog catalog;
     private final List<ToolAuthorizer> authorizers;
     private final ToolAuditSink auditSink;
@@ -127,6 +131,11 @@ public final class DefaultToolRuntime implements ToolRuntime {
                     "Tool execution was cancelled by the server");
         } catch (ExecutionException ex) {
             // Tools report their own failures as results; an exception is a bug, and its text stays out of the model.
+            // The server log gets where it was thrown, so the bug can be found; not the message, which may carry
+            // user content.
+            Throwable thrown = ex.getCause() == null ? ex : ex.getCause();
+            LOG.log(System.Logger.Level.WARNING, () -> "Tool " + descriptor.name() + " threw in run " + runKey
+                    + " call " + callSeq + ": " + trace(thrown));
             result = ToolResult.failure(ToolStatus.EXECUTION_ERROR, "TOOL_EXECUTION_ERROR", "Tool execution failed");
         } catch (RejectedExecutionException ex) {
             result = ToolResult.failure(ToolStatus.SERVICE_UNAVAILABLE, "TOOL_CAPACITY_SATURATED",
@@ -209,6 +218,23 @@ public final class DefaultToolRuntime implements ToolRuntime {
                 && rendered.result().status().infrastructureFailure();
         return new ToolOutcome(call.callId(), call.toolName(), rendered.result(), rendered.payload(), decisionId,
                 TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), failedClosed);
+    }
+
+    /** The classes and stack frames of an exception and its causes, without their messages. */
+    static String trace(Throwable thrown) {
+        StringBuilder text = new StringBuilder();
+        Throwable current = thrown;
+        for (int depth = 0; current != null && depth < TRACE_CAUSES; depth++, current = current.getCause()) {
+            if (depth > 0) {
+                text.append(System.lineSeparator()).append("Caused by: ");
+            }
+            text.append(current.getClass().getName());
+            StackTraceElement[] frames = current.getStackTrace();
+            for (int i = 0; i < Math.min(frames.length, TRACE_FRAMES); i++) {
+                text.append(System.lineSeparator()).append("\tat ").append(frames[i]);
+            }
+        }
+        return text.toString();
     }
 
     private static Duration effectiveTimeout(Duration toolTimeout, Duration remaining) {
