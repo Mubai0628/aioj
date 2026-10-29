@@ -40,6 +40,28 @@ class CodeToolBindingsTest {
         assertThat(TurnCoordinator.codeToolBindings(request, conversation)).isEqualTo(Map.of("turn.problemId", "12"));
     }
 
+    /** Plan 15.5: the editor's code is bound whole, with its language; cut code would not compile. */
+    @Test
+    void theEditorsCodeIsBoundWholeWithItsLanguage() {
+        AiChatRequest request = mock(AiChatRequest.class);
+        when(request.problemId()).thenReturn(null);
+        String code = "y".repeat(100_000);
+        when(request.codeContext()).thenReturn(new AiChatRequest.CodeContext(" cpp ", code));
+
+        Map<String, String> bindings = TurnCoordinator.codeToolBindings(request, new AiConversationEntity());
+
+        assertThat(bindings).containsEntry("turn.editorCode", code).containsEntry("turn.editorLanguage", "cpp");
+    }
+
+    @Test
+    void anEmptyEditorBindsNothing() {
+        AiChatRequest request = mock(AiChatRequest.class);
+        when(request.problemId()).thenReturn(null);
+        when(request.codeContext()).thenReturn(new AiChatRequest.CodeContext("cpp", "  "));
+
+        assertThat(TurnCoordinator.codeToolBindings(request, new AiConversationEntity())).isEmpty();
+    }
+
     @Test
     void aHugeSelectionIsCut() {
         AiChatRequest request = mock(AiChatRequest.class);

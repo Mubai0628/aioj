@@ -20,8 +20,9 @@ public class CodeCompileCheckTool extends TutorCodeTool {
                                 TutorCodeExecutor executor, ObjectMapper objectMapper) {
         super(problemServiceClient, guardDecisionRecorder, executor, objectMapper, "code.compile_check",
                 "Compile code and return the compiler's errors with line numbers. The code is one of the user's own "
-                        + "submissions (source=submission) or the code the user selected in this turn "
-                        + "(source=selection). Use it when the user asks why code does not compile. Practice only.");
+                        + "submissions (source=submission), the code the user selected in this turn "
+                        + "(source=selection) or the code in the problem page's editor (source=editor). Use it when "
+                        + "the user asks why code does not compile. Practice only.");
     }
 
     @Override

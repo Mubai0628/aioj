@@ -27,8 +27,9 @@ public class CodeRunCustomTool extends TutorCodeTool {
         super(problemServiceClient, guardDecisionRecorder, executor, objectMapper, "code.run_custom",
                 "Run code on one input (stdin, up to 16 KB) and return its output, verdict and resources; with "
                         + "expectedOutput it also says AC or WA and where the output first differs. The code is one of "
-                        + "the user's own submissions (source=submission) or the code selected in this turn "
-                        + "(source=selection). Use it to check a suspected bug on a small case. Practice only.");
+                        + "the user's own submissions (source=submission), the code selected in this turn "
+                        + "(source=selection) or the code in the problem page's editor (source=editor). Use it to "
+                        + "check a suspected bug on a small case. Practice only.");
     }
 
     @Override

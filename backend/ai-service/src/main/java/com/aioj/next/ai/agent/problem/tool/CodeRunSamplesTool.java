@@ -31,8 +31,9 @@ public class CodeRunSamplesTool extends TutorCodeTool {
         super(problemServiceClient, guardDecisionRecorder, executor, objectMapper, "code.run_samples",
                 "Run code on the current problem's public samples and report each sample's verdict (AC, WA, TLE, "
                         + "MLE, RE, CE, OLE), resources and where the output first differs. The code is one of the "
-                        + "user's own submissions (source=submission, its problem) or the code selected in this turn "
-                        + "(source=selection, the conversation's problem). Practice only.");
+                        + "user's own submissions (source=submission, its problem), the code selected in this turn "
+                        + "(source=selection) or the code in the problem page's editor (source=editor); those two "
+                        + "run on the conversation's problem. Practice only.");
         this.problemView = problemView;
     }
 

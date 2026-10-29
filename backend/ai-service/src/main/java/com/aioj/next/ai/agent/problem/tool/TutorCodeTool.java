@@ -39,7 +39,8 @@ import java.util.UUID;
  * The tutor's code tools (plan T1.11, A5.2): compile or run code for a practice question. The
  * model never passes code. It names where the code comes from, and the server reads it: one of
  * the caller's own submissions (ownership checked by problem-service, and only when its code is
- * allowed to the model) or the code selected in this turn, which the turn binds server-side.
+ * allowed to the model), the code selected in this turn, or (plan 15.5) the code in the problem
+ * page's editor, which the page sends with the turn. The turn binds the last two server-side.
  * Contest-restricted turns never see these tools (the contest tool filter, fail closed). The
  * program's output is untrusted data.
  */
@@ -48,6 +49,10 @@ abstract class TutorCodeTool implements AgentTool {
     static final String BINDING_SELECTION = "turn.selection";
     static final String BINDING_PROBLEM_ID = "turn.problemId";
     static final String BINDING_SUBMISSION_ID = "turn.submissionId";
+    static final String BINDING_EDITOR_CODE = "turn.editorCode";
+    static final String BINDING_EDITOR_LANGUAGE = "turn.editorLanguage";
+    /** agent-executor's limit for source code. */
+    static final int MAX_EDITOR_CODE_BYTES = 256 * 1024;
     static final Set<String> LANGUAGES = Set.of("cpp", "java", "python");
     static final int MAX_OUTPUT_CHARS = 2_000;
 
@@ -80,7 +85,7 @@ abstract class TutorCodeTool implements AgentTool {
     record CodeSource(String origin, String language, String code, Long problemId, Long submissionId) {
         SourceRef sourceRef(ToolExecutionContext context) {
             return submissionId != null ? new SourceRef("SUBMISSION", String.valueOf(submissionId))
-                    : new SourceRef("SELECTION", context.turnId());
+                    : new SourceRef(origin, context.turnId());
         }
 
         Map<String, Object> describe() {
@@ -100,6 +105,26 @@ abstract class TutorCodeTool implements AgentTool {
 
     protected Resolution resolve(ToolExecutionContext context, JsonNode input) {
         String origin = input.path("source").asString("");
+        if ("editor".equals(origin)) {
+            String code = context.serverBinding(BINDING_EDITOR_CODE);
+            if (code == null || code.isBlank()) {
+                return refuse(ToolStatus.NOT_FOUND, "NO_EDITOR_CODE", "the editor sent no code with this turn");
+            }
+            if (code.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_EDITOR_CODE_BYTES) {
+                return refuse(ToolStatus.POLICY_DENIED, "EDITOR_CODE_TOO_LARGE",
+                        "the editor's code is larger than the 256 KB the executor runs");
+            }
+            String language = normalizeLanguage(context.serverBinding(BINDING_EDITOR_LANGUAGE));
+            if (language == null) {
+                language = normalizeLanguage(input.path("language").asString(""));
+            }
+            if (language == null) {
+                return refuse(ToolStatus.SCHEMA_ERROR, "LANGUAGE_REQUIRED",
+                        "the editor's code needs its language: cpp, java or python");
+            }
+            return new Resolution(new CodeSource("EDITOR", language, code,
+                    parseId(context.serverBinding(BINDING_PROBLEM_ID)), null), null);
+        }
         if ("selection".equals(origin)) {
             String selected = context.serverBinding(BINDING_SELECTION);
             if (selected == null || selected.isBlank()) {
@@ -114,7 +139,7 @@ abstract class TutorCodeTool implements AgentTool {
                     parseId(context.serverBinding(BINDING_PROBLEM_ID)), null), null);
         }
         if (!"submission".equals(origin)) {
-            return refuse(ToolStatus.SCHEMA_ERROR, "SOURCE_REQUIRED", "source must be submission or selection");
+            return refuse(ToolStatus.SCHEMA_ERROR, "SOURCE_REQUIRED", "source must be submission, selection or editor");
         }
         // Both branches boxed: a primitive one would unbox a missing binding into a NullPointerException.
         Long submissionId = input.path("submissionId").isIntegralNumber()
@@ -269,8 +294,10 @@ abstract class TutorCodeTool implements AgentTool {
         ArrayNode values = source.putArray("enum");
         values.add("submission");
         values.add("selection");
-        source.put("description", "Where the code comes from: one of your own submissions, or the code the user "
-                + "selected in this turn. You cannot pass code yourself.");
+        values.add("editor");
+        source.put("description", "Where the code comes from: one of the user's own submissions, the code the user "
+                + "selected in this turn, or the code in the problem page's editor (sent with this turn). You cannot "
+                + "pass code yourself.");
         ObjectNode submissionId = properties.putObject("submissionId");
         submissionId.put("type", "integer");
         submissionId.put("description", "With source=submission: the submission id. Defaults to the submission this "
@@ -281,7 +308,8 @@ abstract class TutorCodeTool implements AgentTool {
         languages.add("cpp");
         languages.add("java");
         languages.add("python");
-        language.put("description", "With source=selection: the language of the selected code.");
+        language.put("description", "With source=selection: the language of the selected code. With "
+                + "source=editor it is known already.");
         List<String> required = new ArrayList<>(List.of("source"));
         addInputs(properties, required);
         ArrayNode requiredNode = root.putArray("required");

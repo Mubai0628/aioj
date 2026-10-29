@@ -127,6 +127,22 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
             Map.entry("Only archived problem drafts can be restored", "draft.restoreArchivedOnly"),
             Map.entry("Archived problem drafts cannot be modified", "draft.archivedLocked"),
             Map.entry("Unable to serialize problem draft", "draft.serializeFailed"),
+            // Plan 15.5: the self-test run.
+            Map.entry("Code runs are switched off", "codeRun.disabled"),
+            Map.entry("Code runs are too frequent; please wait a moment", "codeRun.tooFrequent"),
+            Map.entry("Your previous code run has not finished yet", "codeRun.inProgress"),
+            Map.entry("Code runs are busy; please try again shortly", "codeRun.busy"),
+            Map.entry("Code run limit per minute reached", "codeRun.minuteLimit"),
+            Map.entry("Code run limit per day reached", "codeRun.dayLimit"),
+            Map.entry("Custom input is larger than 1 MB", "codeRun.inputTooLarge"),
+            Map.entry("Expected output is larger than 1 MB", "codeRun.expectedTooLarge"),
+            Map.entry("Source code is required", "codeRun.sourceRequired"),
+            Map.entry("Source code is larger than 256 KB", "codeRun.sourceTooLarge"),
+            Map.entry("Code runs support cpp, java and python", "codeRun.languageUnsupported"),
+            Map.entry("Code run mode must be SAMPLES or CUSTOM", "codeRun.modeUnsupported"),
+            Map.entry("This problem has no public samples", "codeRun.noSamples"),
+            Map.entry("The code executor is unavailable; please try again shortly", "codeRun.executorUnavailable"),
+            Map.entry("The code executor refused this run", "codeRun.executorRejected"),
             Map.entry("Operation job not found", "operation.jobNotFound"),
             Map.entry("Only failed or cancelled jobs can be retried", "operation.retryFailedOnly"),
             Map.entry("Operation job has no completed artifact", "operation.noArtifact"),
@@ -366,6 +382,21 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
             case "request.stateUnavailable" -> "当前状态暂不能执行该操作，请稍后或刷新后重试。";
             case "request.precondition" -> "当前条件未满足，请按页面提示补齐前置配置后重试。";
             case "request.invalidOption" -> "选项或参数无效，请重新选择。";
+            case "codeRun.disabled" -> "运行功能已关闭。";
+            case "codeRun.tooFrequent" -> "操作太频繁，请稍等片刻再运行。";
+            case "codeRun.inProgress" -> "上一次运行还没结束，请等它完成。";
+            case "codeRun.busy" -> "运行繁忙，请稍后再试。";
+            case "codeRun.minuteLimit" -> "这一分钟的运行次数已用完，请稍后再试。";
+            case "codeRun.dayLimit" -> "今天的运行次数已用完，请明天再试。";
+            case "codeRun.inputTooLarge" -> "自定义输入不能超过 1 MB。";
+            case "codeRun.expectedTooLarge" -> "期望输出不能超过 1 MB。";
+            case "codeRun.sourceRequired" -> "请先写好代码再运行。";
+            case "codeRun.sourceTooLarge" -> "源代码不能超过 256 KB。";
+            case "codeRun.languageUnsupported" -> "运行只支持 C++、Java 和 Python。";
+            case "codeRun.modeUnsupported" -> "运行方式无效，请刷新页面后重试。";
+            case "codeRun.noSamples" -> "这道题没有公开样例，请用自定义输入运行。";
+            case "codeRun.executorUnavailable" -> "代码执行服务繁忙或暂不可用，请稍后再试。";
+            case "codeRun.executorRejected" -> "执行服务拒绝了这次运行，请检查代码和输入后重试。";
             case "auth.required" -> "请先登录后再继续操作。";
             case "auth.invalidToken" -> "登录状态无效，请重新登录。";
             case "auth.tokenRequired" -> "请先登录后再继续操作。";

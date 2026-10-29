@@ -3,6 +3,8 @@ package com.aioj.next.problem.controller;
 import com.aioj.next.common.api.ApiResponse;
 import com.aioj.next.contract.ai.AiProblemContextRequest;
 import com.aioj.next.contract.ai.AiProblemContextResponse;
+import com.aioj.next.contract.ai.AiProblemRunContextRequest;
+import com.aioj.next.contract.ai.AiProblemRunContextResponse;
 import com.aioj.next.contract.ai.AiSubmissionContextRequest;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
 import com.aioj.next.contract.ai.ContestParticipantProfile;
@@ -49,6 +51,13 @@ public class InternalAiContextController {
     @PreAuthorize("hasRole('INTERNAL')")
     public ApiResponse<AiProblemContextResponse> problemContext(@RequestBody AiProblemContextRequest request) {
         return ApiResponse.ok(problemCatalog.aiProblemContext(request));
+    }
+
+    /** Plan 15.5: samples and limits for a self-test run, with the problem's visibility checked for the user. */
+    @PostMapping("/problems/run-context")
+    @PreAuthorize("hasRole('INTERNAL')")
+    public ApiResponse<AiProblemRunContextResponse> problemRunContext(@RequestBody AiProblemRunContextRequest request) {
+        return ApiResponse.ok(problemCatalog.aiProblemRunContext(request));
     }
 
     @PostMapping("/submissions/context")

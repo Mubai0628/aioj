@@ -56,6 +56,8 @@ class TutorCodeToolsTest {
             assertThat(tool.descriptor().requiredScopes()).containsExactly("AI_CHAT");
             var properties = tool.descriptor().inputSchema().path("properties");
             assertThat(properties.has("source")).isTrue();
+            assertThat(properties.path("source").path("enum").toString())
+                    .isEqualTo("[\"submission\",\"selection\",\"editor\"]");
             assertThat(properties.has("code")).isFalse();
             assertThat(properties.has("sourceCode")).isFalse();
             assertThat(tool.descriptor().inputSchema().path("additionalProperties").asBoolean(true)).isFalse();
@@ -90,6 +92,40 @@ class TutorCodeToolsTest {
         assertThat(none.status()).isEqualTo(ToolStatus.NOT_FOUND);
         assertThat(none.errorCode()).isEqualTo("NO_SELECTED_CODE");
         assertThat(noLanguage.errorCode()).isEqualTo("LANGUAGE_REQUIRED");
+        verifyNoInteractions(executor);
+    }
+
+    /** Plan 15.5: the code in the problem page's editor, bound by the turn, with the editor's language. */
+    @Test
+    void theEditorsCodeRunsInTheEditorsLanguage() {
+        when(executor.compile(eq("python"), eq("print(1)"), eq("user:7"))).thenReturn(new TutorCodeExecutor.Compiled(
+                new ExecutionFeedback(Status.OK, "", "", "", 3, 1024, false), false));
+
+        ToolResult<Object> result = compileCheck.execute(context(Map.of("turn.editorCode", "print(1)",
+                "turn.editorLanguage", "Python3")), input("editor").put("language", "cpp"));
+
+        Map<String, Object> data = data(result);
+        assertThat(data.get("compiled")).isEqualTo(true);
+        assertThat(data.get("source")).isEqualTo(Map.of("origin", "EDITOR", "language", "python"));
+        assertThat(result.sources()).containsExactly(new com.aioj.next.ai.agent.tool.SourceRef("EDITOR", "t-1"));
+    }
+
+    @Test
+    void theEditorSourceNeedsCodeTheExecutorTakesAndItsLanguage() {
+        ToolResult<Object> none = compileCheck.execute(context(Map.of()), input("editor"));
+        ToolResult<Object> huge = compileCheck.execute(context(Map.of("turn.editorCode",
+                "x".repeat(TutorCodeTool.MAX_EDITOR_CODE_BYTES + 1), "turn.editorLanguage", "cpp")), input("editor"));
+        ToolResult<Object> noLanguage = compileCheck.execute(context(Map.of("turn.editorCode", "int main(){}")),
+                input("editor"));
+        ToolResult<Object> named = runSamples.execute(context(Map.of("turn.editorCode", "int main(){}")),
+                input("editor").put("language", "cpp"));
+
+        assertThat(none.status()).isEqualTo(ToolStatus.NOT_FOUND);
+        assertThat(none.errorCode()).isEqualTo("NO_EDITOR_CODE");
+        assertThat(huge.errorCode()).isEqualTo("EDITOR_CODE_TOO_LARGE");
+        assertThat(noLanguage.errorCode()).isEqualTo("LANGUAGE_REQUIRED");
+        assertThat(named.errorCode()).as("the language may come from the model, the code may not")
+                .isEqualTo("NO_CURRENT_PROBLEM");
         verifyNoInteractions(executor);
     }
 

@@ -459,8 +459,8 @@ public class TurnCoordinator {
 
     /**
      * T1.11: what the code tools may run, bound by the server for this turn: the code the user
-     * selected, the conversation's problem and the submission it is about. The model only names
-     * a source; it never passes code.
+     * selected, the conversation's problem and the submission it is about, and (plan 15.5) the
+     * code in the problem page's editor. The model only names a source; it never passes code.
      */
     static Map<String, String> codeToolBindings(AiChatRequest request, AiConversationEntity conversation) {
         Map<String, String> bindings = new java.util.LinkedHashMap<>();
@@ -474,6 +474,14 @@ public class TurnCoordinator {
         String selected = request.selectionContext() == null ? null : request.selectionContext().selectedText();
         if (selected != null && !selected.isBlank()) {
             bindings.put("turn.selection", selected.length() > 65_536 ? selected.substring(0, 65_536) : selected);
+        }
+        // Whole or not at all: cut code would not compile. The tools refuse code past the executor's limit.
+        AiChatRequest.CodeContext editor = request.codeContext();
+        if (editor != null && editor.code() != null && !editor.code().isBlank()) {
+            bindings.put("turn.editorCode", editor.code());
+            if (editor.language() != null && !editor.language().isBlank()) {
+                bindings.put("turn.editorLanguage", editor.language().strip());
+            }
         }
         return bindings;
     }

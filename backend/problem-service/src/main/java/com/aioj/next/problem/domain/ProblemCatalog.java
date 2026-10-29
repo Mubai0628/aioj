@@ -8,6 +8,8 @@ import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.problem.Difficulty;
 import com.aioj.next.contract.ai.AiProblemContextRequest;
 import com.aioj.next.contract.ai.AiProblemContextResponse;
+import com.aioj.next.contract.ai.AiProblemRunContextRequest;
+import com.aioj.next.contract.ai.AiProblemRunContextResponse;
 import com.aioj.next.contract.problem.ProblemCreateRequest;
 import com.aioj.next.contract.problem.ProblemLanguageTimeLimitMultipliers;
 import com.aioj.next.contract.problem.ProblemResponse;
@@ -172,6 +174,29 @@ public class ProblemCatalog {
                 request.contestRunId() == null ? "PROBLEM" : "CONTEST_PROBLEM",
                 problem.getUpdatedAt()
         );
+    }
+
+    /**
+     * Plan 15.5: what a self-test run of one user may use: the public samples and the limits for its
+     * language. As on the public read path, a PRIVATE problem is only for an ACTIVE participant inside
+     * the active run window that uses it, named by run and contest problem; anything else is 404.
+     */
+    public AiProblemRunContextResponse aiProblemRunContext(AiProblemRunContextRequest request) {
+        if (request == null || request.problemId() == null || request.requestUserId() == null) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "Problem id and user id are required");
+        }
+        ProblemEntity problem = requireActiveProblem(request.problemId());
+        boolean contestRun = false;
+        if (visibilityService.isPrivate(problem)) {
+            contestRun = request.contestRunId() != null && request.contestProblemId() != null
+                    && visibilityService.canViewPrivateProblem(request.requestUserId(), request.contestRunId(),
+                    request.contestProblemId(), problem.getId(), Instant.now());
+            if (!contestRun) {
+                throw new DomainException(ErrorCode.NOT_FOUND, "Problem not found");
+            }
+        }
+        return new AiProblemRunContextResponse(problem.getId(), toResponse(problem).samples(),
+                effectiveTimeLimitMillis(problem, request.language()), problem.getMemoryLimitKb(), contestRun);
     }
 
     public boolean existsActive(Long id) {

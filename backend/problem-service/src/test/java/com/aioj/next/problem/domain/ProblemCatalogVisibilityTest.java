@@ -3,6 +3,8 @@ package com.aioj.next.problem.domain;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.contract.ai.AiProblemRunContextRequest;
+import com.aioj.next.contract.ai.AiProblemRunContextResponse;
 import com.aioj.next.contract.problem.ProblemResponse;
 import com.aioj.next.contract.problem.ProblemVisibility;
 import com.aioj.next.problem.persistence.entity.ProblemEntity;
@@ -180,6 +182,54 @@ class ProblemCatalogVisibilityTest {
         catalog.list(1, 20, null, null, null, null, null, null);
 
         assertEquals(true, captor.getValue().getSqlSegment().contains("visibility"));
+    }
+
+    /** Plan 15.5: a self-test run gets the public samples and the judge's limit for its language. */
+    @Test
+    void runContextOfAPublicProblemHasItsSamplesAndTheLimitForTheLanguage() {
+        ProblemEntity problem = privateProblem();
+        problem.setVisibility(ProblemVisibility.PUBLIC);
+        problem.setPythonTimeLimitMultiplier(new java.math.BigDecimal("2.5"));
+        when(problemMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(problem);
+        when(visibilityService.isPrivate(any(ProblemEntity.class))).thenReturn(false);
+        com.aioj.next.problem.persistence.entity.ProblemTestCaseEntity sample =
+                new com.aioj.next.problem.persistence.entity.ProblemTestCaseEntity();
+        sample.setInput("1 2\n");
+        sample.setExpectedOutput("3\n");
+        sample.setSample(true);
+        when(testCaseMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(sample));
+
+        AiProblemRunContextResponse python = catalog.aiProblemRunContext(
+                new AiProblemRunContextRequest(5L, 7L, "python", null, null));
+        AiProblemRunContextResponse cpp = catalog.aiProblemRunContext(
+                new AiProblemRunContextRequest(5L, 7L, "cpp", null, null));
+
+        assertEquals(2500, python.timeLimitMillis());
+        assertEquals(1000, cpp.timeLimitMillis());
+        assertEquals(262144, python.memoryLimitKb());
+        assertEquals(List.of(new com.aioj.next.contract.problem.TestCaseDto("1 2\n", "3\n", true)), python.samples());
+        assertEquals(false, python.contestRun());
+    }
+
+    /** Plan 15.5: a private problem is only run by an active participant of a run that uses it. */
+    @Test
+    void runContextOfAPrivateProblemIsOnlyForAnActiveParticipant() {
+        when(problemMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(privateProblem());
+        when(visibilityService.isPrivate(any(ProblemEntity.class))).thenReturn(true);
+        lenient().when(visibilityService.canViewPrivateProblem(any(), any(), any(), any(), any())).thenReturn(false);
+        lenient().when(visibilityService.canViewPrivateProblem(org.mockito.ArgumentMatchers.eq(5L),
+                org.mockito.ArgumentMatchers.eq(302L), org.mockito.ArgumentMatchers.eq(401L),
+                org.mockito.ArgumentMatchers.eq(7L), any(Instant.class))).thenReturn(true);
+
+        assertEquals(true, catalog.aiProblemRunContext(new AiProblemRunContextRequest(5L, 7L, "cpp", 302L, 401L))
+                .contestRun());
+        for (AiProblemRunContextRequest refused : List.of(
+                new AiProblemRunContextRequest(5L, 7L, "cpp", null, null),
+                new AiProblemRunContextRequest(5L, 7L, "cpp", 302L, null),
+                new AiProblemRunContextRequest(6L, 7L, "cpp", 302L, 401L))) {
+            DomainException error = assertThrows(DomainException.class, () -> catalog.aiProblemRunContext(refused));
+            assertEquals(ErrorCode.NOT_FOUND, error.errorCode());
+        }
     }
 
     private ProblemEntity privateProblem() {

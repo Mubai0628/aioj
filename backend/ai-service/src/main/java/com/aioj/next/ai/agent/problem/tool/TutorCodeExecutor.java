@@ -54,6 +54,15 @@ public class TutorCodeExecutor {
     public record Compiled(ExecutionFeedback feedback, boolean cacheHit) {
     }
 
+    /**
+     * How far a caller may go: the tutor's tools stop at 5 s and a 64 KB output; the self-test run (plan 15.5)
+     * takes the problem's limit up to the executor's 30 s, and up to 4 MiB of output so it can be compared whole.
+     */
+    public record RunLimits(int maxTimeLimitMillis, int stdoutLimitBytes) {
+        public static final RunLimits TUTOR = new RunLimits(MAX_TIME_LIMIT_MILLIS, STDOUT_LIMIT_BYTES);
+        public static final RunLimits SELF_TEST = new RunLimits(30_000, 4 * 1024 * 1024);
+    }
+
     /** One run per input, or {@code failure} when the batch did not run at all. */
     public record Batch(List<ExecutionFeedback> runs, ExecutionFeedback failure) {
         public Batch {
@@ -90,8 +99,13 @@ public class TutorCodeExecutor {
 
     public Batch run(String language, String source, List<String> inputs, Integer timeLimitMillis,
                      Integer memoryLimitKb, String cacheScope) {
+        return run(language, source, inputs, timeLimitMillis, memoryLimitKb, cacheScope, RunLimits.TUTOR);
+    }
+
+    public Batch run(String language, String source, List<String> inputs, Integer timeLimitMillis,
+                     Integer memoryLimitKb, String cacheScope, RunLimits limits) {
         int time = timeLimitMillis == null || timeLimitMillis <= 0
-                ? DEFAULT_TIME_LIMIT_MILLIS : Math.min(MAX_TIME_LIMIT_MILLIS, timeLimitMillis);
+                ? DEFAULT_TIME_LIMIT_MILLIS : Math.min(limits.maxTimeLimitMillis(), timeLimitMillis);
         int memory = memoryLimitKb == null || memoryLimitKb <= 0
                 ? DEFAULT_MEMORY_LIMIT_KB : Math.min(DEFAULT_MEMORY_LIMIT_KB, memoryLimitKb);
         RunBatchResponse response;
@@ -99,7 +113,8 @@ public class TutorCodeExecutor {
             ApiResponse<RunBatchResponse> body = restClient.post()
                     .uri("/api/v1/internal/sandbox/run-batch")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(new RunBatchRequest(language, source, null, inputs, time, memory, STDOUT_LIMIT_BYTES, cacheScope))
+                    .body(new RunBatchRequest(language, source, null, inputs, time, memory, limits.stdoutLimitBytes(),
+                            cacheScope))
                     .retrieve()
                     .body(RUN_BATCH_TYPE);
             response = body == null ? null : body.data();

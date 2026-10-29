@@ -7,6 +7,8 @@ import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.AiProblemContextRequest;
 import com.aioj.next.contract.ai.AiProblemContextResponse;
+import com.aioj.next.contract.ai.AiProblemRunContextRequest;
+import com.aioj.next.contract.ai.AiProblemRunContextResponse;
 import com.aioj.next.contract.ai.AiSubmissionContextRequest;
 import com.aioj.next.contract.ai.AiSubmissionContextResponse;
 import com.aioj.next.contract.ai.ContestParticipantProfile;
@@ -120,6 +122,26 @@ public class ProblemServiceClient {
             throw problemServiceException("AI problem context failed", false, ex);
         } catch (RestClientException ex) {
             throw new DomainException(ErrorCode.INTERNAL_ERROR, "AI problem context failed: " + ex.getMessage());
+        }
+    }
+
+    /** Plan 15.5: samples and limits for a self-test run; problem-service checks the problem's visibility. */
+    public AiProblemRunContextResponse aiProblemRunContext(AiProblemRunContextRequest request) {
+        try {
+            String response = restClient.post()
+                    .uri("/api/v1/internal/ai/problems/run-context")
+                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(request)
+                    .retrieve()
+                    .body(String.class);
+            return parseApiData(response, AiProblemRunContextResponse.class,
+                    "AI problem run context response could not be parsed");
+        } catch (RestClientResponseException ex) {
+            throw problemServiceException("AI problem run context failed", false, ex);
+        } catch (RestClientException ex) {
+            throw new DomainException(ErrorCode.INTERNAL_ERROR, "AI problem run context failed: " + ex.getMessage());
         }
     }
 
