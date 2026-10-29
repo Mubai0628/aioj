@@ -25,7 +25,7 @@ public class StudentPostmortemAiClient {
     private final ObjectMapper objectMapper;
 
     public StudentPostmortemAiClient(PlagiarismProperties properties, ObjectMapper objectMapper, InternalRestClientFactory clients) {
-        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()));
+        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()), "student-postmortem", java.time.Duration.ofSeconds(2), java.time.Duration.ofSeconds(180));
         this.objectMapper = objectMapper;
     }
 

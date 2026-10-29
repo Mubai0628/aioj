@@ -30,10 +30,8 @@ public class DraftTestcasePackageAcceptanceClient {
     private final int maxMemoryLimitKb;
 
     public DraftTestcasePackageAcceptanceClient(AiProperties properties, InternalRestClientFactory clients) {
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
-        requestFactory.setReadTimeout(Duration.ofMinutes(10));
-        this.restClient = clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri()), requestFactory);
+        this.restClient = clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri()), "draft-package",
+                Duration.ofSeconds(5), Duration.ofMinutes(10));
         this.maxMemoryLimitKb = properties.getAgentExecutorMaxMemoryLimitKb();
     }
 

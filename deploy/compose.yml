@@ -184,7 +184,7 @@ services:
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ai_oj_next}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       MYSQL_USER: ${MYSQL_USER:-aioj}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD, see .env.example}
-      PROBLEM_DB_POOL_MAX: ${PROBLEM_DB_POOL_MAX:-8}
+      PROBLEM_DB_POOL_MAX: ${PROBLEM_DB_POOL_MAX:-12}
       PROBLEM_DB_POOL_MIN_IDLE: ${PROBLEM_DB_POOL_MIN_IDLE:-2}
       DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-5000}
       REDIS_HOST: redis
@@ -240,7 +240,7 @@ services:
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ai_oj_next}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       MYSQL_USER: ${MYSQL_USER:-aioj}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD, see .env.example}
-      AI_DB_POOL_MAX: ${AI_DB_POOL_MAX:-4}
+      AI_DB_POOL_MAX: ${AI_DB_POOL_MAX:-6}
       AI_DB_POOL_MIN_IDLE: ${AI_DB_POOL_MIN_IDLE:-1}
       DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-5000}
       REDIS_HOST: redis

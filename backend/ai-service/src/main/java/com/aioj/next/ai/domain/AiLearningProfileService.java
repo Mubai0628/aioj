@@ -299,7 +299,7 @@ public class AiLearningProfileService {
         }
     }
 
-    @Transactional
+    // Like the judged path, remote context and analysis precede the short persistence transaction.
     public SubmissionAnalysisSignal recordSubmissionAnalysis(Long userId, AiChatRequest request, AiCompletion completion, Long assistantMessageId) {
         AiChatRequest.SubmissionContext selected = request.submissionContext();
         if (selected == null || selected.submissionId() == null) {
@@ -389,8 +389,9 @@ public class AiLearningProfileService {
     ) {
         AiStructuredSubmissionAnalysisService.AnalysisResult structured =
                 structuredAnalysisService.analyze(userId, request, completion, context);
-        return persistSubmissionAnalysis(userId, request, completion, assistantMessageId, context,
-                automaticJudgedSubmission, structured);
+        return IndexAfterCommit.run(() -> transactions.execute(status ->
+                persistSubmissionAnalysis(userId, request, completion, assistantMessageId, context,
+                        automaticJudgedSubmission, structured)));
     }
 
     /** The database half of an analysis: rows, signals, profile and (queued) retrieval chunks. */

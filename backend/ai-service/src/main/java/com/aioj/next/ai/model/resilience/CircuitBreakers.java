@@ -1,5 +1,7 @@
 package com.aioj.next.ai.model.resilience;
 
+import com.aioj.next.common.resilience.CircuitBreaker;
+
 import com.aioj.next.ai.model.api.ModelErrorKind;
 
 import java.time.Duration;

@@ -28,7 +28,7 @@ public class ProblemEmbeddingClient {
     private final ObjectMapper objectMapper;
 
     public ProblemEmbeddingClient(PlagiarismProperties properties, ObjectMapper objectMapper, InternalRestClientFactory clients) {
-        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()), CONNECT_TIMEOUT, READ_TIMEOUT);
+        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()), "embedding", CONNECT_TIMEOUT, READ_TIMEOUT);
         this.objectMapper = objectMapper;
     }
 

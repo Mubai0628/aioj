@@ -20,7 +20,7 @@ public class ContestPostmortemAiAnalysisClient {
     private final ObjectMapper objectMapper;
 
     public ContestPostmortemAiAnalysisClient(PlagiarismProperties properties, ObjectMapper objectMapper, InternalRestClientFactory clients) {
-        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()));
+        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()), "contest-postmortem", java.time.Duration.ofSeconds(2), java.time.Duration.ofSeconds(180));
         this.objectMapper = objectMapper;
     }
 

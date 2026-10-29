@@ -19,7 +19,7 @@ public class JudgedSubmissionEventClient {
     private final RestClient restClient;
 
     public JudgedSubmissionEventClient(JudgeWorkerProperties properties, InternalRestClientFactory clients) {
-        this.restClient = clients.create("problem-service", properties.getProblemServiceBaseUrl());
+        this.restClient = clients.create("problem-service", properties.getProblemServiceBaseUrl(), "judged-event", java.time.Duration.ofSeconds(2), java.time.Duration.ofSeconds(5));
     }
 
     public boolean notifyJudgedSubmission(AiJudgedSubmissionEventRequest request) {

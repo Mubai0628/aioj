@@ -45,7 +45,7 @@ public class ProblemDraftTestcaseArtifactService {
         this.mapper = mapper;
         this.objectMapper = objectMapper;
         this.storageRoot = Path.of(properties.getProblemDraft().getTestcaseArtifactStorageRoot()).toAbsolutePath().normalize();
-        this.executorClient = clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri()));
+        this.executorClient = clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri()), "draft-artifacts", java.time.Duration.ofSeconds(5), java.time.Duration.ofSeconds(90));
     }
 
     public ProblemDraftTestcaseArtifactEntity storeFromOfficialPackage(Long draftId, Long creatorUserId,

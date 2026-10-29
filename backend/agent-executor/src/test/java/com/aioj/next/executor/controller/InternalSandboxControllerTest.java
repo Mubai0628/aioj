@@ -29,11 +29,10 @@ class InternalSandboxControllerTest {
     void nextTokenPassesTheControllersDefenceInDepth() {
         SandboxExecutionClient client = mock(SandboxExecutionClient.class);
         AgentExecutorProperties properties = new AgentExecutorProperties();
-        properties.setInternalApiToken("current");
-        properties.setInternalApiNextToken("next");
         var controller = new InternalSandboxController(client,
                 new com.aioj.next.executor.domain.CompileCache(client, java.time.Duration.ofMinutes(10),
-                        256, java.time.Clock.systemUTC(), null, false), properties, new ObjectMapper());
+                        256, java.time.Clock.systemUTC(), null, false), properties,
+                credentials("current", "next"), new ObjectMapper());
         when(client.compileSource(eq("cpp"), eq("int main(){}"), anyLong(), anyLong()))
                 .thenReturn(new SandboxExecutionClient.CompileOutcome(false, "compiled", "Accepted", 1L, 1L, "", 0, 1L));
         assertThat(controller.compile("next", new InternalSandboxController.CompileRequest(
@@ -363,11 +362,20 @@ class InternalSandboxControllerTest {
         assertThat(response.generatedOutputCount()).isZero();
     }
 
+    private com.aioj.next.common.security.InternalServiceProperties credentials(String token, String next) {
+        var result = new com.aioj.next.common.security.InternalServiceProperties();
+        var credential = new com.aioj.next.common.security.InternalServiceProperties.Credential();
+        credential.setToken(token);
+        credential.setNextToken(next);
+        result.getInbound().put("ai-service", credential);
+        return result;
+    }
+
     private InternalSandboxController controller(SandboxExecutionClient client) {
         AgentExecutorProperties properties = new AgentExecutorProperties();
-        properties.setInternalApiToken(TOKEN);
         return new InternalSandboxController(client, new com.aioj.next.executor.domain.CompileCache(client,
-                java.time.Duration.ofMinutes(10), 256, java.time.Clock.systemUTC(), null, false), properties, new ObjectMapper());
+                java.time.Duration.ofMinutes(10), 256, java.time.Clock.systemUTC(), null, false), properties,
+                credentials(TOKEN, ""), new ObjectMapper());
     }
 
     private InternalSandboxController.PythonScriptResponse runPythonScriptWithOutcome(

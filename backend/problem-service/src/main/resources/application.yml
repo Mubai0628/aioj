@@ -12,7 +12,7 @@ spring:
     username: ${MYSQL_USER:aioj}
     password: ${MYSQL_PASSWORD:change-me}
     hikari:
-      maximum-pool-size: ${PROBLEM_DB_POOL_MAX:8}
+      maximum-pool-size: ${PROBLEM_DB_POOL_MAX:12}
       minimum-idle: ${PROBLEM_DB_POOL_MIN_IDLE:2}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:5000}
   data:

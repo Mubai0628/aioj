@@ -86,6 +86,7 @@ class StudentPostmortemServiceTest {
     @Mock
     private ContestProblemVisibilityService visibilityService;
 
+    private final RecordingTransactions transactions = new RecordingTransactions();
     private StudentPostmortemService service;
 
     @BeforeEach
@@ -97,12 +98,47 @@ class StudentPostmortemServiceTest {
                 .thenReturn(java.util.Set.of());
         service = new StudentPostmortemService(contestMapper, contestRunMapper, participantMapper,
                 problemSnapshotMapper, submissionMapper, caseResultMapper, reportMapper, candidateMapper,
-                aiClient, JsonMapper.builderWithJackson2Defaults().build(), visibilityService);
+                aiClient, JsonMapper.builderWithJackson2Defaults().build(), visibilityService,
+                new org.springframework.transaction.support.TransactionTemplate(transactions));
     }
 
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void confirmationHttpRunsOutsideTheShortWriteTransaction() {
+        authenticate(91L, Role.STUDENT);
+        when(reportMapper.selectOne(any())).thenReturn(report(91L));
+        when(candidateMapper.selectOne(any())).thenReturn(candidate(91L));
+        when(aiClient.confirmWeakness(any())).thenAnswer(invocation -> {
+            assertFalse(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());
+            return new StudentPostmortemWeaknessConfirmResponse(701L, 801L);
+        });
+        doAnswer(invocation -> {
+            org.junit.jupiter.api.Assertions.assertTrue(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());
+            return 1;
+        }).when(candidateMapper).updateById(any(ContestStudentPostmortemWeaknessCandidateEntity.class));
+        var proxy = new org.springframework.aop.framework.ProxyFactory(service);
+        proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(transactions,
+                new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
+        var response = ((StudentPostmortemService) proxy.getProxy()).acceptCandidate(301L, 401L, 501L, 601L);
+        assertEquals(ContestStudentPostmortemWeaknessCandidateStatus.ACCEPTED, response.status());
+        assertEquals(1, transactions.commits);
+        assertFalse(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());
+    }
+
+    private static final class RecordingTransactions extends org.springframework.transaction.support.AbstractPlatformTransactionManager {
+        private int commits;
+        @Override
+        protected Object doGetTransaction() { return new Object(); }
+        @Override
+        protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) { }
+        @Override
+        protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) { commits++; }
+        @Override
+        protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) { }
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.aioj.next.executor.controller;
 import com.aioj.next.common.api.ApiResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.security.InternalServiceProperties;
 import com.aioj.next.executor.config.AgentExecutorProperties;
 import com.aioj.next.executor.domain.CompileCache;
 import com.aioj.next.executor.domain.SandboxExecutionClient;
@@ -45,15 +46,18 @@ public class InternalSandboxController {
     private final SandboxExecutionClient sandboxExecutionClient;
     private final CompileCache compileCache;
     private final AgentExecutorProperties properties;
+    private final InternalServiceProperties internalServices;
     private final ObjectMapper objectMapper;
 
     public InternalSandboxController(SandboxExecutionClient sandboxExecutionClient,
                                      CompileCache compileCache,
                                      AgentExecutorProperties properties,
+                                     InternalServiceProperties internalServices,
                                      ObjectMapper objectMapper) {
         this.sandboxExecutionClient = sandboxExecutionClient;
         this.compileCache = compileCache;
         this.properties = properties;
+        this.internalServices = internalServices;
         this.objectMapper = objectMapper;
     }
 
@@ -366,8 +370,9 @@ public class InternalSandboxController {
     }
 
     private void requireInternalToken(String token) {
-        if (!com.aioj.next.common.security.InternalApiTokenFilter.matches(token,
-                properties.getInternalApiToken(), properties.getInternalApiNextToken())) {
+        var credential = internalServices.getInbound().get("ai-service");
+        if (credential == null || !com.aioj.next.common.security.InternalApiTokenFilter.matches(token,
+                credential.getToken(), credential.getNextToken())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "internal token missing or invalid");
         }
     }

@@ -30,7 +30,7 @@ import com.aioj.next.ai.model.provider.EmbeddingAdapter;
 // import com.aioj.next.ai.model.provider.KimiAdapter;
 import com.aioj.next.ai.model.provider.ModelCatalog;
 import com.aioj.next.ai.model.provider.StreamAccumulator;
-import com.aioj.next.ai.model.resilience.CircuitBreaker;
+import com.aioj.next.common.resilience.CircuitBreaker;
 import com.aioj.next.ai.model.resilience.CircuitBreakers;
 import com.aioj.next.ai.model.resilience.RetryPolicy;
 import com.aioj.next.ai.model.resilience.ScopeBulkheads;

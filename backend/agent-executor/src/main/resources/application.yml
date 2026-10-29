@@ -28,8 +28,6 @@ aioj:
         token: ${AGENT_EXECUTOR_INTERNAL_TOKEN:}
         next-token: ${AGENT_EXECUTOR_INTERNAL_TOKEN_NEXT:}
   executor:
-    internal-api-token: ${AGENT_EXECUTOR_INTERNAL_TOKEN:}
-    internal-api-next-token: ${AGENT_EXECUTOR_INTERNAL_TOKEN_NEXT:}
     sandbox-endpoint: ${AGENT_SANDBOX_ENDPOINT:http://localhost:8090/execute}
     sandbox-token: ${AGENT_SANDBOX_TOKEN:}
     sandbox-timeout: ${AGENT_SANDBOX_TIMEOUT:PT10S}

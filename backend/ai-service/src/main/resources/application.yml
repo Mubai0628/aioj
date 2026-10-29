@@ -17,7 +17,7 @@ spring:
     username: ${MYSQL_USER:aioj}
     password: ${MYSQL_PASSWORD:change-me}
     hikari:
-      maximum-pool-size: ${AI_DB_POOL_MAX:4}
+      maximum-pool-size: ${AI_DB_POOL_MAX:6}
       minimum-idle: ${AI_DB_POOL_MIN_IDLE:1}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:5000}
   data:
@@ -45,7 +45,7 @@ aioj:
       problem-service:
         token: ${AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM:}
       agent-executor:
-        token: ${AGENT_EXECUTOR_INTERNAL_TOKEN:}
+        token: ${aioj.ai.agent-executor-token:}
   security:
     jwt:
       issuer: ${JWT_ISSUER:ai-oj-next}

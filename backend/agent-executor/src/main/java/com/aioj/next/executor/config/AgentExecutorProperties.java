@@ -6,16 +6,12 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * agent-executor's settings (plan §3.6 rule 3): its own inbound token, the
- * agent sandbox's endpoint and token, and limits. Nothing else: no database,
- * queue, JWT or model settings, and not the shared internal token. Getter
- * names match judge-worker's properties so the endpoints copied from there
- * stay as they were until T1.10 removes judge-worker's copy.
+ * Executor sandbox endpoint/token and execution limits only. Its own inbound
+ * credential lives in canonical InternalServiceProperties (T2.1), shared by
+ * the filter and controller defense checks. No database, queue, JWT or model settings.
  */
 @ConfigurationProperties(prefix = "aioj.executor")
 public class AgentExecutorProperties {
-    private String internalApiToken = "";
-    private String internalApiNextToken = "";
     private String sandboxEndpoint = "http://localhost:8090/execute";
     private String sandboxToken = "";
     private Duration sandboxTimeout = Duration.ofSeconds(10);
@@ -47,17 +43,6 @@ public class AgentExecutorProperties {
     private int maxDraftPackageEntries = 500;
     private int maxDraftPackageCases = 200;
     private long maxDraftPackageRunMillis = 540_000L;
-
-    public String getInternalApiNextToken() { return internalApiNextToken; }
-    public void setInternalApiNextToken(String token) { internalApiNextToken = token; }
-
-    public String getInternalApiToken() {
-        return internalApiToken;
-    }
-
-    public void setInternalApiToken(String internalApiToken) {
-        this.internalApiToken = internalApiToken;
-    }
 
     public String getSandboxEndpoint() {
         return sandboxEndpoint;

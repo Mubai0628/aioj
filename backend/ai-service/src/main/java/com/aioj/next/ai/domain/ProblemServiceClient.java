@@ -86,7 +86,9 @@ public class ProblemServiceClient {
                 internalApiProperties,
                 auditWriter,
                 properties.getProblemServiceGuardCacheTtlMs(),
-                clients.create("problem-service", stripTrailingSlash(properties.getProblemServiceUri()), guardRequestFactory(properties)));
+                clients.create("problem-service", stripTrailingSlash(properties.getProblemServiceUri()), "problem-context",
+                        java.time.Duration.ofMillis(Math.max(1L, properties.getProblemServiceConnectTimeoutMs())),
+                        java.time.Duration.ofMillis(Math.max(1L, properties.getProblemServiceReadTimeoutMs()))));
     }
 
     ProblemServiceClient(ObjectMapper objectMapper, InternalApiProperties internalApiProperties,

@@ -5,6 +5,9 @@ import java.util.Map;
 
 /** Directional credentials; never include this object or its values in logs. */
 public class InternalServiceProperties {
+    private com.aioj.next.common.http.InternalHttpProperties http = new com.aioj.next.common.http.InternalHttpProperties();
+    public com.aioj.next.common.http.InternalHttpProperties getHttp() { return http; }
+    public void setHttp(com.aioj.next.common.http.InternalHttpProperties value) { http = value; }
     private Map<String, Credential> inbound = new LinkedHashMap<>();
     private Map<String, Credential> outbound = new LinkedHashMap<>();
 

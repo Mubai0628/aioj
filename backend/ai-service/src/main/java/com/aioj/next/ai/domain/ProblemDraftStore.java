@@ -164,7 +164,7 @@ public class ProblemDraftStore {
         return toResponse(requireVisibleDraft(id));
     }
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public ProblemDraftResponse refine(Long id, Long userId, ProblemDraftRefineRequest request, String authorization) {
         if (request == null) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Refinement request is required");
@@ -227,9 +227,12 @@ public class ProblemDraftStore {
             // Regeneration keeps the imported problem's existing visibility.
             problemServiceClient.updateProblem(draft.getImportedProblemId(), finalDraft, authorization, null);
         }
-        applyUpdate(draft, finalDraft, userId);
-        problemDraftMapper.updateById(draft);
-        return toResponse(draft);
+        ProblemDraftResponse verifiedDraft = finalDraft;
+        return transactionTemplate.execute(status -> {
+            applyUpdate(draft, verifiedDraft, userId);
+            problemDraftMapper.updateById(draft);
+            return toResponse(draft);
+        });
     }
 
     ProblemDraftResponse regenerationSource(Long id) {

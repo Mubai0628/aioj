@@ -68,7 +68,7 @@ public class DraftSandboxClient implements SandboxExecutor {
 
     @Autowired
     public DraftSandboxClient(AiProperties properties, InternalRestClientFactory clients) {
-        this(clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri())),
+        this(clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri()), "draft-sandbox", java.time.Duration.ofSeconds(5), java.time.Duration.ofSeconds(600)),
                 properties.getProblemDraft().getMaxOfficialCaseBytes(),
                 properties.getProblemDraft().getMaxOfficialPackageBytes(),
                 properties.getAgentExecutorMaxMemoryLimitKb());

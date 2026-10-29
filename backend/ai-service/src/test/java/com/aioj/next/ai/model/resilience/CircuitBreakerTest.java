@@ -1,7 +1,9 @@
 package com.aioj.next.ai.model.resilience;
 
-import com.aioj.next.ai.model.resilience.CircuitBreaker.Outcome;
-import com.aioj.next.ai.model.resilience.CircuitBreaker.State;
+import com.aioj.next.common.resilience.CircuitBreaker;
+
+import com.aioj.next.common.resilience.CircuitBreaker.Outcome;
+import com.aioj.next.common.resilience.CircuitBreaker.State;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;

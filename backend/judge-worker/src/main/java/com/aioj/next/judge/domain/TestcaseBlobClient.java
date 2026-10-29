@@ -19,7 +19,7 @@ public class TestcaseBlobClient {
     private final RestClient restClient;
 
     public TestcaseBlobClient(JudgeWorkerProperties properties, InternalRestClientFactory clients) {
-        this.restClient = clients.create("problem-service", properties.getProblemServiceBaseUrl());
+        this.restClient = clients.create("problem-service", properties.getProblemServiceBaseUrl(), "testcase-download", java.time.Duration.ofSeconds(2), java.time.Duration.ofSeconds(90));
     }
 
     public BlobHeaders downloadTo(Long packageId, Path destPath) {

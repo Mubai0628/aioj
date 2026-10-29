@@ -30,7 +30,7 @@ public class AiRecommendationSignalClient {
     private final ObjectMapper objectMapper;
 
     public AiRecommendationSignalClient(PlagiarismProperties properties, ObjectMapper objectMapper, InternalRestClientFactory clients) {
-        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()), CONNECT_TIMEOUT, READ_TIMEOUT);
+        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()), "recommendation", CONNECT_TIMEOUT, READ_TIMEOUT);
         this.objectMapper = objectMapper;
     }
 

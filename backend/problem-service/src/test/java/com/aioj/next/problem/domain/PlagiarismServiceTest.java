@@ -93,6 +93,7 @@ class PlagiarismServiceTest {
     private final List<PlagiarismAiAnalysisEntity> analyses = new ArrayList<>();
     private PlagiarismJobEntity job;
     private PlagiarismDetector detector;
+    private final RecordingTransactions transactions = new RecordingTransactions();
     private PlagiarismService service;
 
     @BeforeEach
@@ -113,7 +114,8 @@ class PlagiarismServiceTest {
         };
         service = new PlagiarismService(contestMapper, contestProblemMapper, contestParticipantMapper, contestRunMapper,
                 submissionMapper, jobMapper, jobSubmissionMapper, pairMapper, fragmentMapper, aiAnalysisMapper,
-                detector, aiAnalysisClient, properties, JsonMapper.builderWithJackson2Defaults().build(), directExecutor);
+                detector, aiAnalysisClient, properties, JsonMapper.builderWithJackson2Defaults().build(), directExecutor,
+                new org.springframework.transaction.support.TransactionTemplate(transactions));
 
         lenient().when(jobMapper.selectById(501L)).thenAnswer(invocation -> job);
         lenient().when(jobMapper.update(any(), any())).thenReturn(1);
@@ -283,6 +285,56 @@ class PlagiarismServiceTest {
             assertThat(analysis.getStatus()).isEqualTo(PlagiarismAiStatus.FAILED);
             assertThat(analysis.getErrorMessage()).contains("provider unavailable");
         });
+    }
+
+    @Test
+    void retryAnalysisHttpIsBetweenTwoShortTransactions() {
+        authenticate(7L, Role.TEACHER);
+        when(contestMapper.selectById(301L)).thenReturn(contest(301L, 7L));
+        job = plagiarismJob(true);
+        when(jobMapper.selectOne(any())).thenReturn(job);
+        var pair = new PlagiarismPairEntity();
+        pair.setId(2001L);
+        pair.setContestId(301L);
+        pair.setContestProblemId(9001L);
+        pair.setJobId(501L);
+        pair.setLeftJobSubmissionId(1001L);
+        pair.setRightJobSubmissionId(1002L);
+        pair.setLanguage("cpp");
+        pair.setRiskLevel(PlagiarismRiskLevel.HIGH);
+        pair.setSimilarity(0.8);
+        when(pairMapper.selectOne(any())).thenReturn(pair);
+        var left = new PlagiarismJobSubmissionEntity(); left.setId(1001L);
+        var right = new PlagiarismJobSubmissionEntity(); right.setId(1002L);
+        when(jobSubmissionMapper.selectBatchIds(any())).thenReturn(List.of(left, right));
+        when(fragmentMapper.selectList(any())).thenReturn(List.of());
+        when(aiAnalysisClient.analyze(any())).thenAnswer(invocation -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return new PlagiarismAnalysisResponse(null, "mock", "mock-model", 10, 4, false, "provider unavailable");
+        });
+        doAnswer(invocation -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+            return 1;
+        }).when(pairMapper).updateById(any(PlagiarismPairEntity.class));
+        var proxy = new org.springframework.aop.framework.ProxyFactory(service);
+        proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(transactions,
+                new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
+        ((PlagiarismService) proxy.getProxy()).retryAiAnalysis(301L, 501L, 2001L);
+        org.mockito.Mockito.verify(aiAnalysisClient).analyze(any());
+        assertThat(pair.getAiStatus()).isEqualTo(PlagiarismAiStatus.FAILED);
+        assertThat(transactions.commits).isEqualTo(2);
+    }
+
+    private static final class RecordingTransactions extends org.springframework.transaction.support.AbstractPlatformTransactionManager {
+        private int commits;
+        @Override
+        protected Object doGetTransaction() { return new Object(); }
+        @Override
+        protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) { }
+        @Override
+        protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) { commits++; }
+        @Override
+        protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) { }
     }
 
     private PlagiarismJobEntity plagiarismJob(boolean includeAi) {

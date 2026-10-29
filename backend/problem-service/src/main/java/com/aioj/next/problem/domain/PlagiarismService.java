@@ -118,6 +118,7 @@ public class PlagiarismService {
     private final PlagiarismProperties properties;
     private final ObjectMapper objectMapper;
     private final Executor executor;
+    private final org.springframework.transaction.support.TransactionOperations transactions;
 
     public PlagiarismService(ContestMapper contestMapper,
                              ContestProblemMapper contestProblemMapper,
@@ -133,7 +134,9 @@ public class PlagiarismService {
                              PlagiarismAiAnalysisClient aiAnalysisClient,
                              PlagiarismProperties properties,
                              ObjectMapper objectMapper,
-                             @Qualifier("plagiarismExecutor") Executor executor) {
+                             @Qualifier("plagiarismExecutor") Executor executor,
+                             org.springframework.transaction.support.TransactionOperations transactions) {
+        this.transactions = transactions;
         this.contestMapper = contestMapper;
         this.contestProblemMapper = contestProblemMapper;
         this.contestParticipantMapper = contestParticipantMapper;
@@ -267,7 +270,7 @@ public class PlagiarismService {
         return toPairResponse(pair, lookup(contestId, List.of(pair)), latestAnalysis(pairId));
     }
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public PlagiarismPairDetailResponse retryAiAnalysis(Long contestId, Long jobId, Long pairId) {
         requireManagedContest(contestId);
         PlagiarismPairEntity pair = requirePair(contestId, jobId, pairId);
@@ -580,10 +583,12 @@ public class PlagiarismService {
         analysis.setTraceId(TraceIds.current());
         analysis.setCreatedAt(now);
         analysis.setUpdatedAt(now);
-        aiAnalysisMapper.insert(analysis);
-        pair.setAiStatus(PlagiarismAiStatus.RUNNING);
-        pair.setUpdatedAt(Instant.now());
-        pairMapper.updateById(pair);
+        transactions.executeWithoutResult(transaction -> {
+            aiAnalysisMapper.insert(analysis);
+            pair.setAiStatus(PlagiarismAiStatus.RUNNING);
+            pair.setUpdatedAt(Instant.now());
+            pairMapper.updateById(pair);
+        });
         try {
             PlagiarismAnalysisResponse response = aiAnalysisClient.analyze(aiRequest(job, pair));
             if (!response.success()) {
@@ -594,11 +599,13 @@ public class PlagiarismService {
                 analysis.setCompletionTokens(response.completionTokens());
                 analysis.setErrorMessage(summarize(response.errorMessage(), 480));
                 analysis.setUpdatedAt(Instant.now());
-                aiAnalysisMapper.updateById(analysis);
                 pair.setAiStatus(PlagiarismAiStatus.FAILED);
                 pair.setAiSummary(null);
                 pair.setUpdatedAt(Instant.now());
-                pairMapper.updateById(pair);
+                transactions.executeWithoutResult(transaction -> {
+                    aiAnalysisMapper.updateById(analysis);
+                    pairMapper.updateById(pair);
+                });
                 return;
             }
             analysis.setStatus(PlagiarismAiStatus.COMPLETED);
@@ -609,19 +616,20 @@ public class PlagiarismService {
             analysis.setAnalysis(response.analysis());
             analysis.setErrorMessage(null);
             analysis.setUpdatedAt(Instant.now());
-            aiAnalysisMapper.updateById(analysis);
             pair.setAiStatus(PlagiarismAiStatus.COMPLETED);
             pair.setAiSummary(summarize(response.analysis(), 480));
         } catch (RuntimeException ex) {
             analysis.setStatus(PlagiarismAiStatus.FAILED);
             analysis.setErrorMessage(summarize(ex.getMessage(), 480));
             analysis.setUpdatedAt(Instant.now());
-            aiAnalysisMapper.updateById(analysis);
             pair.setAiStatus(PlagiarismAiStatus.FAILED);
             pair.setAiSummary(null);
         }
         pair.setUpdatedAt(Instant.now());
-        pairMapper.updateById(pair);
+        transactions.executeWithoutResult(transaction -> {
+            aiAnalysisMapper.updateById(analysis);
+            pairMapper.updateById(pair);
+        });
     }
 
     private PlagiarismAnalysisRequest aiRequest(PlagiarismJobEntity job, PlagiarismPairEntity pair) {

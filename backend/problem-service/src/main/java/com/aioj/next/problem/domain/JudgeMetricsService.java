@@ -34,7 +34,7 @@ public class JudgeMetricsService {
     private final AmqpAdmin amqpAdmin;
 
     public JudgeMetricsService(InternalApiProperties properties, ObjectMapper objectMapper, AmqpAdmin amqpAdmin, InternalRestClientFactory clients) {
-        this.restClient = clients.create("judge-worker", stripTrailingSlash(properties.getJudgeWorkerBaseUrl()), TIMEOUT, TIMEOUT);
+        this.restClient = clients.create("judge-worker", stripTrailingSlash(properties.getJudgeWorkerBaseUrl()), "judge-metrics", TIMEOUT, TIMEOUT);
         this.objectMapper = objectMapper;
         this.amqpAdmin = amqpAdmin;
     }

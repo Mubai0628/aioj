@@ -1,4 +1,4 @@
-package com.aioj.next.ai.model.resilience;
+package com.aioj.next.common.resilience;
 
 import java.time.Duration;
 import java.util.function.LongSupplier;

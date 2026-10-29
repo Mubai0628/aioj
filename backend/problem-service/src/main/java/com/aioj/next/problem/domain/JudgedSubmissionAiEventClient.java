@@ -19,7 +19,7 @@ public class JudgedSubmissionAiEventClient {
     private final RestClient restClient;
 
     public JudgedSubmissionAiEventClient(PlagiarismProperties properties, InternalRestClientFactory clients) {
-        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()));
+        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()), "ai-judged-event", java.time.Duration.ofSeconds(2), java.time.Duration.ofSeconds(5));
     }
 
     public boolean notifyJudgedSubmission(AiJudgedSubmissionEventRequest request) {

@@ -18,8 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.util.StringUtils;
 
 import java.lang.management.ManagementFactory;
@@ -42,13 +42,16 @@ public class SubmissionJudgingService {
     private final JudgeAuditLogMapper auditLogMapper;
     private final JudgeWorkerProperties properties;
     private final JudgedSubmissionEventClient judgedSubmissionEventClient;
+    private final TransactionOperations transactions;
     private final String workerId;
 
     public SubmissionJudgingService(SubmissionMapper submissionMapper,
                                     SubmissionCaseResultMapper caseResultMapper,
                                     JudgeAuditLogMapper auditLogMapper,
                                     JudgeWorkerProperties properties,
-                                    JudgedSubmissionEventClient judgedSubmissionEventClient) {
+                                    JudgedSubmissionEventClient judgedSubmissionEventClient,
+                                    TransactionOperations transactions) {
+        this.transactions = transactions;
         this.submissionMapper = submissionMapper;
         this.caseResultMapper = caseResultMapper;
         this.auditLogMapper = auditLogMapper;
@@ -82,10 +85,19 @@ public class SubmissionJudgingService {
         return false;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public boolean finish(JudgeTaskMessage task, JudgeResult result) {
-        SubmissionStatus status = result.status();
         Instant judgedAt = result.judgedAt() == null ? Instant.now() : result.judgedAt();
+        boolean updated = Boolean.TRUE.equals(transactions.execute(transaction -> finishRows(task, result, judgedAt)));
+        if (updated) {
+            // afterCommit still has the transaction's resources bound. Wait for execute to return.
+            notifyJudged(task, result.status(), judgedAt);
+        }
+        return updated;
+    }
+
+    private boolean finishRows(JudgeTaskMessage task, JudgeResult result, Instant judgedAt) {
+        SubmissionStatus status = result.status();
         SubmissionEntity update = new SubmissionEntity();
         update.setStatus(status);
         update.setJudgeMessage(truncate(result.message()));
@@ -111,13 +123,13 @@ public class SubmissionJudgingService {
                     && "Signalled".equals(result.message()) ? result.exitStatus() : null;
             audit(task.submissionId(), SubmissionStatus.RUNNING, status, result.message(), signalValue, null,
                     result.phase(), result.sandboxStatus());
-            notifyJudgedAfterCommit(task, status, judgedAt);
             return true;
         }
         log.info("submission={} terminal update skipped because it is no longer RUNNING", task.submissionId());
         return false;
     }
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void markSystemError(Long submissionId, String message) {
         if (submissionId == null) {
             return;
@@ -135,7 +147,7 @@ public class SubmissionJudgingService {
             audit(submissionId, null, SubmissionStatus.SYSTEM_ERROR, message);
             SubmissionEntity submission = submissionMapper.selectById(submissionId);
             if (submission != null) {
-                notifyJudgedAfterCommit(new AiJudgedSubmissionEventRequest(
+                notifyJudged(new AiJudgedSubmissionEventRequest(
                         submission.getId(),
                         submission.getProblemId(),
                         submission.getUserId(),
@@ -183,8 +195,8 @@ public class SubmissionJudgingService {
         }
     }
 
-    private void notifyJudgedAfterCommit(JudgeTaskMessage task, SubmissionStatus status, Instant judgedAt) {
-        notifyJudgedAfterCommit(new AiJudgedSubmissionEventRequest(
+    private void notifyJudged(JudgeTaskMessage task, SubmissionStatus status, Instant judgedAt) {
+        notifyJudged(new AiJudgedSubmissionEventRequest(
                 task.submissionId(),
                 task.problemId(),
                 task.userId(),
@@ -197,20 +209,16 @@ public class SubmissionJudgingService {
         ));
     }
 
-    private void notifyJudgedAfterCommit(AiJudgedSubmissionEventRequest request) {
+    private void notifyJudged(AiJudgedSubmissionEventRequest request) {
         if (judgedSubmissionEventClient == null || request == null) {
             return;
         }
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+        try {
             judgedSubmissionEventClient.notifyJudgedSubmission(request);
-            return;
+        } catch (RuntimeException ex) {
+            // An optional notification failure must never change an already committed judge result.
+            log.warn("Judged event failed submission={} error={}", request.submissionId(), ex.getClass().getSimpleName());
         }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                judgedSubmissionEventClient.notifyJudgedSubmission(request);
-            }
-        });
     }
 
     private void rewriteCaseResults(JudgeTaskMessage task, JudgeResult result, Instant createdAt) {

@@ -38,14 +38,24 @@ public class TutorCodeExecutor {
             };
 
     private final RestClient restClient;
+    private final InternalRestClientFactory clientFactory;
+    private final String executorUri;
 
     @Autowired
     public TutorCodeExecutor(AiProperties properties, InternalRestClientFactory clients) {
-        this(clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri())));
+        this(clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri()), "tutor-code",
+                java.time.Duration.ofSeconds(5), java.time.Duration.ofSeconds(600)), clients,
+                stripTrailingSlash(properties.getAgentExecutorUri()));
     }
 
     TutorCodeExecutor(RestClient restClient) {
+        this(restClient, null, null);
+    }
+
+    private TutorCodeExecutor(RestClient restClient, InternalRestClientFactory clientFactory, String executorUri) {
         this.restClient = restClient;
+        this.clientFactory = clientFactory;
+        this.executorUri = executorUri;
     }
 
     /** What a compile produced, and whether agent-executor answered it from its compile cache. */
@@ -108,7 +118,10 @@ public class TutorCodeExecutor {
                 ? DEFAULT_MEMORY_LIMIT_KB : Math.min(DEFAULT_MEMORY_LIMIT_KB, memoryLimitKb);
         RunBatchResponse response;
         try {
-            ApiResponse<RunBatchResponse> body = restClient.post()
+            RestClient batchClient = clientFactory == null ? restClient : clientFactory.create("agent-executor",
+                    executorUri, "tutor-code", java.time.Duration.ofSeconds(5),
+                    batchReadTimeout(inputs == null ? 0 : inputs.size(), time, cacheScope != null && !cacheScope.isBlank()));
+            ApiResponse<RunBatchResponse> body = batchClient.post()
                     .uri("/api/v1/internal/sandbox/run-batch")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(new RunBatchRequest(language, source, null, inputs, time, memory, limits.stdoutLimitBytes(),
@@ -129,6 +142,14 @@ public class TutorCodeExecutor {
             runs.add(feedback(result));
         }
         return new Batch(runs, null);
+    }
+
+    /** CPU budgets plus conservative wall/transport headroom; a configured profile may override it. */
+    static java.time.Duration batchReadTimeout(int inputCount, int timeMillis, boolean cachedCompile) {
+        long cases = Math.max(1, inputCount);
+        long compileMillis = (long) Math.max(1, timeMillis) * 10L * (cachedCompile ? 1L : cases);
+        long runMillis = (long) Math.max(1, timeMillis) * cases;
+        return java.time.Duration.ofMillis(Math.max(600_000L, (compileMillis + runMillis) * 3L + 30_000L));
     }
 
     static ExecutionFeedback feedback(RunResponse result) {

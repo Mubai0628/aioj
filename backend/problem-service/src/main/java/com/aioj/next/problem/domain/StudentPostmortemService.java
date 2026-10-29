@@ -89,6 +89,7 @@ public class StudentPostmortemService {
     private final StudentPostmortemAiClient aiClient;
     private final ObjectMapper objectMapper;
     private final ContestProblemVisibilityService visibilityService;
+    private final org.springframework.transaction.support.TransactionOperations transactions;
 
     public StudentPostmortemService(ContestMapper contestMapper,
                                     ContestRunMapper contestRunMapper,
@@ -100,7 +101,9 @@ public class StudentPostmortemService {
                                     ContestStudentPostmortemWeaknessCandidateMapper candidateMapper,
                                     StudentPostmortemAiClient aiClient,
                                     ObjectMapper objectMapper,
-                                    ContestProblemVisibilityService visibilityService) {
+                                    ContestProblemVisibilityService visibilityService,
+                                    org.springframework.transaction.support.TransactionOperations transactions) {
+        this.transactions = transactions;
         this.contestMapper = contestMapper;
         this.contestRunMapper = contestRunMapper;
         this.participantMapper = participantMapper;
@@ -136,7 +139,7 @@ public class StudentPostmortemService {
         return toResponse(report);
     }
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public ContestStudentPostmortemReportResponse createMyReport(Long contestId, Long runId) {
         Long userId = SecuritySupport.currentUserId();
         ContestEntity contest = requireContest(contestId);
@@ -145,7 +148,7 @@ public class StudentPostmortemService {
         return createReportForParticipant(contest, run, participant, SecuritySupport.currentUserId());
     }
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public ContestStudentPostmortemReportResponse createParticipantReport(Long contestId, Long runId, Long participantId) {
         ContestEntity contest = requireManagedContest(contestId);
         ContestRunEntity run = requireReportableContext(contestId, runId);
@@ -160,7 +163,7 @@ public class StudentPostmortemService {
         return createReportForParticipant(contest, run, participant, SecuritySupport.currentUserId());
     }
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public List<ContestStudentPostmortemReportResponse> createParticipantReports(Long contestId, Long runId,
                                                                                  List<Long> participantIds,
                                                                                  int limit,
@@ -206,7 +209,7 @@ public class StudentPostmortemService {
         return new PageResponse<>(records, result.getTotal(), result.getCurrent(), result.getSize());
     }
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public ContestStudentPostmortemReportResponse retryAi(Long contestId, Long runId, Long reportId) {
         ContestEntity contest = requireContest(contestId);
         ContestRunEntity run = requireRun(contestId, runId);
@@ -223,15 +226,17 @@ public class StudentPostmortemService {
         report.setAiStatus(ContestPostmortemAiStatus.RUNNING);
         report.setErrorMessage(null);
         report.setUpdatedAt(now);
-        reportMapper.updateById(report);
-        candidateMapper.delete(new LambdaQueryWrapper<ContestStudentPostmortemWeaknessCandidateEntity>()
-                .eq(ContestStudentPostmortemWeaknessCandidateEntity::getReportId, report.getId())
-                .eq(ContestStudentPostmortemWeaknessCandidateEntity::getStatus,
-                        ContestStudentPostmortemWeaknessCandidateStatus.PENDING));
+        transactions.executeWithoutResult(transaction -> {
+            reportMapper.updateById(report);
+            candidateMapper.delete(new LambdaQueryWrapper<ContestStudentPostmortemWeaknessCandidateEntity>()
+                    .eq(ContestStudentPostmortemWeaknessCandidateEntity::getReportId, report.getId())
+                    .eq(ContestStudentPostmortemWeaknessCandidateEntity::getStatus,
+                            ContestStudentPostmortemWeaknessCandidateStatus.PENDING));
+        });
         return toResponse(runAiAnalysis(report, contest, run, statistics, report.getStatisticsJson()));
     }
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public ContestStudentPostmortemWeaknessCandidateResponse acceptCandidate(Long contestId, Long runId, Long reportId, Long candidateId) {
         ContestStudentPostmortemReportEntity report = requireOwnedReport(contestId, runId, reportId);
         ContestStudentPostmortemWeaknessCandidateEntity candidate = requireCandidate(report, candidateId);
@@ -257,7 +262,7 @@ public class StudentPostmortemService {
         candidate.setWeaknessId(confirmation.weaknessId());
         candidate.setDecidedAt(now);
         candidate.setUpdatedAt(now);
-        candidateMapper.updateById(candidate);
+        transactions.executeWithoutResult(transaction -> candidateMapper.updateById(candidate));
         return toCandidateResponse(candidate);
     }
 
@@ -295,7 +300,7 @@ public class StudentPostmortemService {
         report.setCompletionTokens(0L);
         report.setCreatedAt(now);
         report.setUpdatedAt(now);
-        reportMapper.insert(report);
+        transactions.executeWithoutResult(transaction -> reportMapper.insert(report));
         return toResponse(runAiAnalysis(report, contest, run, statistics, statisticsJson));
     }
 
@@ -334,8 +339,10 @@ public class StudentPostmortemService {
             report.setErrorMessage(analysis.success() ? null : summarize(analysis.errorMessage(), 480));
             report.setCompletedAt(now);
             report.setUpdatedAt(now);
-            reportMapper.updateById(report);
-            replacePendingCandidates(report, analysis.weaknessCandidates() == null ? List.of() : analysis.weaknessCandidates());
+            transactions.executeWithoutResult(transaction -> {
+                reportMapper.updateById(report);
+                replacePendingCandidates(report, analysis.weaknessCandidates() == null ? List.of() : analysis.weaknessCandidates());
+            });
             return report;
         } catch (DomainException ex) {
             Instant now = Instant.now();
@@ -345,7 +352,7 @@ public class StudentPostmortemService {
             report.setErrorMessage(summarize(ex.getMessage(), 480));
             report.setCompletedAt(now);
             report.setUpdatedAt(now);
-            reportMapper.updateById(report);
+            transactions.executeWithoutResult(transaction -> reportMapper.updateById(report));
             return report;
         }
     }

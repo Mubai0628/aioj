@@ -3,6 +3,7 @@ package com.aioj.next.executor.controller;
 import com.aioj.next.common.api.ApiResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.security.InternalServiceProperties;
 import com.aioj.next.contract.judge.DraftTestcasePackageRunRequest;
 import com.aioj.next.contract.judge.DraftTestcasePackageRunResponse;
 import com.aioj.next.executor.config.AgentExecutorProperties;
@@ -26,10 +27,13 @@ public class DraftTestcasePackageController {
 
     private final DraftTestcasePackageRunner runner;
     private final AgentExecutorProperties properties;
+    private final InternalServiceProperties internalServices;
 
-    public DraftTestcasePackageController(DraftTestcasePackageRunner runner, AgentExecutorProperties properties) {
+    public DraftTestcasePackageController(DraftTestcasePackageRunner runner, AgentExecutorProperties properties,
+                                         InternalServiceProperties internalServices) {
         this.runner = runner;
         this.properties = properties;
+        this.internalServices = internalServices;
     }
 
     @PostMapping(value = "/run-package", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -75,8 +79,9 @@ public class DraftTestcasePackageController {
     }
 
     private void requireInternalToken(String token) {
-        if (!com.aioj.next.common.security.InternalApiTokenFilter.matches(token,
-                properties.getInternalApiToken(), properties.getInternalApiNextToken())) {
+        var credential = internalServices.getInbound().get("ai-service");
+        if (credential == null || !com.aioj.next.common.security.InternalApiTokenFilter.matches(token,
+                credential.getToken(), credential.getNextToken())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "internal token missing or invalid");
         }
     }

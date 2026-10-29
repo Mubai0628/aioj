@@ -37,12 +37,14 @@ class SubmissionJudgingServiceTest {
     private final SubmissionCaseResultMapper caseResultMapper = mock(SubmissionCaseResultMapper.class);
     private final JudgeAuditLogMapper auditLogMapper = mock(JudgeAuditLogMapper.class);
     private final JudgedSubmissionEventClient eventClient = mock(JudgedSubmissionEventClient.class);
+    private final RecordingTransactions transactions = new RecordingTransactions();
     private final SubmissionJudgingService service = new SubmissionJudgingService(
             submissionMapper,
             caseResultMapper,
             auditLogMapper,
             new JudgeWorkerProperties(),
-            eventClient
+            eventClient,
+            new org.springframework.transaction.support.TransactionTemplate(transactions)
     );
 
     @BeforeEach
@@ -58,7 +60,7 @@ class SubmissionJudgingServiceTest {
     }
 
     @Test
-    void finishNotifiesJudgedSubmissionAfterCommit() {
+    void finishNotifiesJudgedSubmissionAfterTransactionCleanup() {
         when(submissionMapper.update(any(SubmissionEntity.class), any())).thenReturn(1);
         JudgeTaskMessage task = task();
         JudgeResult result = new JudgeResult(
@@ -75,15 +77,21 @@ class SubmissionJudgingServiceTest {
                 null,
                 List.of()
         );
-        TransactionSynchronizationManager.initSynchronization();
+        transactions.onCommit = () -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+            verify(eventClient, never()).notifyJudgedSubmission(any());
+        };
+        when(eventClient.notifyJudgedSubmission(any())).thenAnswer(invocation -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            assertThat(transactions.cleaned).isTrue();
+            return true;
+        });
 
         boolean updated = service.finish(task, result);
 
         assertThat(updated).isTrue();
-        verify(eventClient, never()).notifyJudgedSubmission(any());
-        for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
-            synchronization.afterCommit();
-        }
+        assertThat(transactions.commits).isEqualTo(1);
+        assertThat(transactions.rollbacks).isZero();
         ArgumentCaptor<AiJudgedSubmissionEventRequest> captor =
                 ArgumentCaptor.forClass(AiJudgedSubmissionEventRequest.class);
         verify(eventClient).notifyJudgedSubmission(captor.capture());
@@ -158,6 +166,42 @@ class SubmissionJudgingServiceTest {
         assertThat(captor.getValue().status()).isEqualTo(SubmissionStatus.SYSTEM_ERROR);
         assertThat(captor.getValue().contestRunId()).isEqualTo(2L);
         verify(auditLogMapper).insert(any(JudgeAuditLogEntity.class));
+    }
+
+    @Test
+    void rollbackDoesNotSendAnEvent() {
+        when(submissionMapper.update(any(SubmissionEntity.class), any())).thenThrow(new IllegalStateException("write failed"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.finish(task(), JudgeResult.systemError("failure")))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(transactions.rollbacks).isEqualTo(1);
+        assertThat(transactions.commits).isZero();
+        verify(eventClient, never()).notifyJudgedSubmission(any());
+    }
+
+    @Test
+    void notificationFailureCannotRollBackTheCommittedResult() {
+        when(submissionMapper.update(any(SubmissionEntity.class), any())).thenReturn(1);
+        when(eventClient.notifyJudgedSubmission(any())).thenThrow(new org.springframework.web.client.ResourceAccessException("down"));
+        assertThat(service.finish(task(), JudgeResult.systemError("sandbox error"))).isTrue();
+        assertThat(transactions.commits).isEqualTo(1);
+        assertThat(transactions.rollbacks).isZero();
+    }
+
+    private static final class RecordingTransactions extends org.springframework.transaction.support.AbstractPlatformTransactionManager {
+        private int commits;
+        private int rollbacks;
+        private boolean cleaned;
+        private Runnable onCommit = () -> { };
+        @Override
+        protected Object doGetTransaction() { return new Object(); }
+        @Override
+        protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) { cleaned = false; }
+        @Override
+        protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) { onCommit.run(); commits++; }
+        @Override
+        protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) { rollbacks++; }
+        @Override
+        protected void doCleanupAfterCompletion(Object transaction) { cleaned = true; }
     }
 
     private JudgeTaskMessage task() {

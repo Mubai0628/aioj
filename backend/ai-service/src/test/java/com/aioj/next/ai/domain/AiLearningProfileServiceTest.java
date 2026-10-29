@@ -45,6 +45,50 @@ class AiLearningProfileServiceTest {
 
     private ProfileSignalIngestionService signalIngestion;
     private ProfileAggregateJobProducer aggregateProducer;
+    private RecordingTransactions transactionManager;
+
+    @Test
+    void manualAnalysisUsesRemoteThenShortWriteThenDeferredIndex() {
+        var profiles = mock(AiLearningProfileMapper.class);
+        var evidence = mock(AiLearningProfileEvidenceMapper.class);
+        var analyses = mock(AiSubmissionAnalysisMapper.class);
+        var problems = mock(ProblemServiceClient.class);
+        var retrieval = mock(AiRetrievalService.class);
+        var service = service(profiles, evidence, analyses, problems, retrieval,
+                analysis("wrong_answer", false, false, List.of("wrong_answer"), List.of(), List.of(), List.of()));
+        when(problems.aiSubmissionContext(any())).thenAnswer(invocation -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return submissionContext();
+        });
+        doAnswer(invocation -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+            return 1;
+        }).when(analyses).insert(any(AiSubmissionAnalysisEntity.class));
+        var indexed = new java.util.concurrent.atomic.AtomicBoolean();
+        doAnswer(invocation -> {
+            assertThat(IndexAfterCommit.deferIfOpen(() -> {
+                assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+                indexed.set(true);
+            })).isTrue();
+            return null;
+        }).when(retrieval).indexChunk(any(), any(), any(), any(), any());
+        var proxy = new org.springframework.aop.framework.ProxyFactory(service);
+        proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(transactionManager,
+                new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
+        ((AiLearningProfileService) proxy.getProxy()).recordSubmissionAnalysis(7L, request(), completionWithoutCode(), 555L);
+        assertThat(indexed.get()).isTrue();
+    }
+
+    private static final class RecordingTransactions extends org.springframework.transaction.support.AbstractPlatformTransactionManager {
+        @Override
+        protected Object doGetTransaction() { return new Object(); }
+        @Override
+        protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) { }
+        @Override
+        protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) { }
+        @Override
+        protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) { }
+    }
 
     @Test
     void recordSubmissionAnalysisOmitsUnsafeTextAndCreatesCandidateProfile() {
@@ -720,9 +764,13 @@ class AiLearningProfileServiceTest {
                                              AiRetrievalService retrievalService,
                                              AiStructuredSubmissionAnalysisService.AnalysisResult analysis) {
         AiStructuredSubmissionAnalysisService structuredAnalysisService = mock(AiStructuredSubmissionAnalysisService.class);
-        when(structuredAnalysisService.analyze(any(), any(), any(), any())).thenReturn(analysis);
+        when(structuredAnalysisService.analyze(any(), any(), any(), any())).thenAnswer(invocation -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return analysis;
+        });
         this.signalIngestion = mock(ProfileSignalIngestionService.class);
         this.aggregateProducer = mock(ProfileAggregateJobProducer.class);
+        this.transactionManager = new RecordingTransactions();
         return new AiLearningProfileService(
                 profileMapper,
                 evidenceMapper,
@@ -733,7 +781,7 @@ class AiLearningProfileServiceTest {
                 new ObjectMapper(),
                 signalIngestion,
                 aggregateProducer,
-                org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
+                new org.springframework.transaction.support.TransactionTemplate(transactionManager),
                 new com.aioj.next.ai.agent.profile.HarnessProfilePort(profileMapper, null)
         );
     }

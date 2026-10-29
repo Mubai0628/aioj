@@ -18,8 +18,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * internal calls without its token.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-        "aioj.executor.internal-api-token=executor-test-token",
-        "aioj.executor.internal-api-next-token=executor-test-next-token",
         "aioj.internal.inbound.ai-service.token=executor-test-token",
         "aioj.internal.inbound.ai-service.next-token=executor-test-next-token",
         "aioj.executor.cache-root=${java.io.tmpdir}/aioj-agent-executor-test"
