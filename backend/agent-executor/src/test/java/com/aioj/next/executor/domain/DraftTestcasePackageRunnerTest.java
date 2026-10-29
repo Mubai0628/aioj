@@ -9,6 +9,8 @@ import tools.jackson.databind.ObjectMapper;
 import org.apache.commons.compress.archivers.zip.UnixStat;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.apache.commons.compress.utils.SeekableInMemoryByteChannel;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
@@ -110,13 +112,31 @@ class DraftTestcasePackageRunnerTest {
         SandboxExecutionClient sandbox = mock(SandboxExecutionClient.class);
         Map<String, String> entries = new LinkedHashMap<>();
         entries.put("manifest.json", manifest("tests/001.in", "tests/001.out"));
-        entries.put("tests/001.in", "0".repeat(1_000_000));
+        entries.put("tests/001.in", "0".repeat(2 * 1024 * 1024));
         entries.put("tests/001.out", "2\n");
         byte[] zip = packageZip(entries);
 
         assertThatThrownBy(() -> runner(sandbox).run(file(zip), request(zip)))
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("compression ratio");
+        verifyNoInteractions(sandbox);
+    }
+
+    /** Plan 15.3: as in ai-service's format check, the ratio is only checked from 1 MiB up. */
+    @Test
+    void checksTheCompressionRatioOnlyFromOneMebibyteUp() throws Exception {
+        SandboxExecutionClient sandbox = acceptingSandbox();
+        SandboxExecutionClient unused = mock(SandboxExecutionClient.class);
+        byte[] small = sparsePackage(600 * 1000);
+        byte[] large = sparsePackage(2 * 1024 * 1024);
+        assertThat(ratio(small)).as("about 400:1").isBetween(300L, 500L);
+        assertThat(ratio(large)).as("about 400:1").isBetween(300L, 500L);
+
+        assertThat(runner(sandbox).run(file(small), request(small)).status()).isEqualTo("PASSED");
+        assertThatThrownBy(() -> runner(unused).run(file(large), request(large)))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("compression ratio");
+        verifyNoInteractions(unused);
     }
 
     @Test
@@ -189,6 +209,41 @@ class DraftTestcasePackageRunnerTest {
         assertThat(response.errorCode()).isEqualTo("PACKAGE_WALL_TIME_BUDGET_EXCEEDED");
         assertThat(response.executedCaseCount()).isEqualTo(1);
         assertThat(response.failureCounts()).containsEntry("WALL_TIME_BUDGET_EXCEEDED", 1);
+    }
+
+    private SandboxExecutionClient acceptingSandbox() {
+        SandboxExecutionClient sandbox = mock(SandboxExecutionClient.class);
+        when(sandbox.compileSource(eq("python"), any(), anyLong(), anyLong()))
+                .thenReturn(new SandboxExecutionClient.CompileOutcome(
+                        false, null, "Accepted", 0L, 0L, "", 0, 0L, 0));
+        when(sandbox.runSource(eq("python"), any(), any(), any(), anyLong(), anyLong(), anyInt()))
+                .thenReturn(new SandboxExecutionClient.RunOutcome(
+                        "Accepted", "Accepted", 2L, 512L, "2\n", "", 0, 3L,
+                        null, null, Map.of(), "ACCEPTED", 1));
+        return sandbox;
+    }
+
+    /** One case whose input is a number every 4,000 bytes with zeros between: it deflates about 400:1. */
+    private byte[] sparsePackage(int inputBytes) throws Exception {
+        StringBuilder input = new StringBuilder(inputBytes + 4000);
+        for (long index = 0; input.length() < inputBytes; index++) {
+            String number = Long.toString(index * 7919L % 1_000_003L);
+            input.append(number).append(' ').append("0".repeat(4000 - number.length() - 1));
+        }
+        input.setLength(inputBytes);
+        Map<String, String> entries = new LinkedHashMap<>();
+        entries.put("manifest.json", manifest("tests/001.in", "tests/001.out"));
+        entries.put("tests/001.in", input.toString());
+        entries.put("tests/001.out", "2\n");
+        return packageZip(entries);
+    }
+
+    /** The input entry's ratio as the runner reads it, from the central directory. */
+    private long ratio(byte[] zip) throws Exception {
+        try (ZipFile file = ZipFile.builder().setSeekableByteChannel(new SeekableInMemoryByteChannel(zip)).get()) {
+            ZipArchiveEntry entry = file.getEntry("tests/001.in");
+            return entry.getSize() / entry.getCompressedSize();
+        }
     }
 
     private DraftTestcasePackageRunner runner(SandboxExecutionClient sandbox) {

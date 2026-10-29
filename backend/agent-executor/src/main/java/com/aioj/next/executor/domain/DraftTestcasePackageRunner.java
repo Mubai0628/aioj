@@ -54,6 +54,11 @@ public class DraftTestcasePackageRunner {
     private static final int BUFFER_SIZE = 64 * 1024;
     private static final long MANIFEST_MAX_BYTES = 1024L * 1024L;
     private static final long MAX_COMPRESSION_RATIO = 200L;
+    /**
+     * As in ai-service's format check (plan 15.3): the ratio is checked from 1 MiB up; smaller entries are
+     * bounded by the entry and total limits, which count the bytes actually written.
+     */
+    private static final long COMPRESSION_RATIO_MIN_BYTES = 1024L * 1024L;
 
     private final AgentExecutorProperties properties;
     private final SandboxExecutionClient sandboxExecutionClient;
@@ -405,11 +410,11 @@ public class DraftTestcasePackageRunner {
     }
 
     private void rejectCompressionBomb(ZipArchiveEntry entry, long uncompressedBytes) {
-        long compressed = entry.getCompressedSize();
-        if (compressed == 0L && uncompressedBytes > 0L) {
-            throw badRequest("Draft testcase package contains an unsafe compression ratio");
+        if (uncompressedBytes < COMPRESSION_RATIO_MIN_BYTES) {
+            return;
         }
-        if (compressed > 0L && uncompressedBytes / compressed > MAX_COMPRESSION_RATIO) {
+        long compressed = entry.getCompressedSize();
+        if (compressed <= 0L || uncompressedBytes / compressed > MAX_COMPRESSION_RATIO) {
             throw badRequest("Draft testcase package contains an unsafe compression ratio");
         }
     }

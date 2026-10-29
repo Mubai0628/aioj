@@ -4,6 +4,7 @@ import tools.jackson.databind.ObjectMapper;
 import org.apache.commons.compress.archivers.zip.UnixStat;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
+import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -122,6 +123,22 @@ class DraftTestcasePackageFormatValidatorTest {
                 .hasMessageContaining("compression ratio");
     }
 
+    /** Plan 15.3: the ratio is only checked from 1 MiB up, as on the acceptance side. */
+    @Test
+    void checksTheCompressionRatioOnlyFromOneMebibyteUp() throws Exception {
+        Path small = zip(Map.of("manifest.json", manifest("tests/001.in", "tests/001.out"),
+                "tests/001.in", sparseInput(600 * 1000), "tests/001.out", "4\n"));
+        Path large = zip(Map.of("manifest.json", manifest("tests/001.in", "tests/001.out"),
+                "tests/001.in", sparseInput(2 * 1024 * 1024), "tests/001.out", "4\n"));
+        assertThat(ratio(small)).as("about 400:1").isBetween(300L, 500L);
+        assertThat(ratio(large)).as("about 400:1").isBetween(300L, 500L);
+
+        assertThat(validator.validate(small).totalInputBytes()).isEqualTo(600_000L);
+        assertThatThrownBy(() -> validator.validate(large))
+                .isInstanceOf(DraftTestcasePackageFormatValidator.ValidationException.class)
+                .hasMessageContaining("compression ratio");
+    }
+
     @Test
     void enforcesEntryCaseAndPerEntrySizeLimits() throws Exception {
         Map<String, String> tooManyEntries = new LinkedHashMap<>();
@@ -174,6 +191,25 @@ class DraftTestcasePackageFormatValidatorTest {
             }
         }
         return archive;
+    }
+
+    /** A number every 4,000 bytes with zeros between: it deflates about 400:1. */
+    private static String sparseInput(int bytes) {
+        StringBuilder input = new StringBuilder(bytes + 4000);
+        for (long index = 0; input.length() < bytes; index++) {
+            String number = Long.toString(index * 7919L % 1_000_003L);
+            input.append(number).append(' ').append("0".repeat(4000 - number.length() - 1));
+        }
+        input.setLength(bytes);
+        return input.toString();
+    }
+
+    /** The input entry's ratio as the check reads it, from the central directory. */
+    private static long ratio(Path archive) throws IOException {
+        try (ZipFile zip = ZipFile.builder().setPath(archive).get()) {
+            ZipArchiveEntry entry = zip.getEntry("tests/001.in");
+            return entry.getSize() / entry.getCompressedSize();
+        }
     }
 
     private void add(ZipArchiveOutputStream output, String path, String value) throws IOException {
