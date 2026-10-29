@@ -38,11 +38,21 @@ spring:
 
 aioj:
   internal:
-    api-token: ${AIOJ_INTERNAL_API_TOKEN}
+    inbound:
+      ai-service:
+        token: ${AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM:}
+        next-token: ${AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM_NEXT:}
+      judge-worker:
+        token: ${AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM:}
+        next-token: ${AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM_NEXT:}
+    outbound:
+      ai-service:
+        token: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI:}
+      judge-worker:
+        token: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE:}
     judge-worker-base-url: ${JUDGE_WORKER_BASE_URL:http://127.0.0.1:8203}
   plagiarism:
     ai-service-uri: ${AI_SERVICE_URI:http://localhost:8204}
-    internal-api-token: ${AIOJ_INTERNAL_API_TOKEN}
     max-fragment-excerpt-chars: ${AIOJ_PLAGIARISM_MAX_FRAGMENT_EXCERPT_CHARS:1200}
     executor-pool-size: ${AIOJ_PLAGIARISM_EXECUTOR_POOL_SIZE:2}
   operations:

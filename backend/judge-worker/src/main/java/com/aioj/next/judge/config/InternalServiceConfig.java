@@ -1,0 +1,25 @@
+package com.aioj.next.judge.config;
+
+import com.aioj.next.common.http.InternalRestClientFactory;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@EnableConfigurationProperties(InternalApiProperties.class)
+public class InternalServiceConfig {
+    @Bean
+    InternalRestClientFactory internalRestClientFactory(InternalApiProperties properties) {
+        return new InternalRestClientFactory(properties);
+    }
+
+    @Bean
+    org.springframework.boot.web.servlet.FilterRegistrationBean<com.aioj.next.common.security.InternalApiTokenFilter> internalApiTokenFilter(InternalApiProperties properties) {
+        var registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(
+                new com.aioj.next.common.security.InternalApiTokenFilter(properties.getInbound(),
+                        com.aioj.next.common.security.InternalApiAccess.judgeWorker()));
+        registration.addUrlPatterns("/api/v1/internal/*");
+        registration.setOrder(org.springframework.core.Ordered.HIGHEST_PRECEDENCE + 10);
+        return registration;
+    }
+}

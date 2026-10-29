@@ -1,5 +1,6 @@
 package com.aioj.next.problem.domain.plagiarism;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.PlagiarismAnalysisRequest;
@@ -7,7 +8,6 @@ import com.aioj.next.contract.ai.PlagiarismAnalysisResponse;
 import com.aioj.next.problem.config.PlagiarismProperties;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -19,11 +19,8 @@ public class PlagiarismAiAnalysisClient {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
-    public PlagiarismAiAnalysisClient(PlagiarismProperties properties, ObjectMapper objectMapper) {
-        this.restClient = RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getAiServiceUri()))
-                .defaultHeader("X-Internal-Token", properties.getInternalApiToken())
-                .build();
+    public PlagiarismAiAnalysisClient(PlagiarismProperties properties, ObjectMapper objectMapper, InternalRestClientFactory clients) {
+        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()));
         this.objectMapper = objectMapper;
     }
 

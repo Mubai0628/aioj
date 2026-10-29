@@ -1,5 +1,6 @@
 package com.aioj.next.judge.domain;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
 import org.slf4j.Logger;
@@ -17,11 +18,8 @@ public class JudgedSubmissionEventClient {
 
     private final RestClient restClient;
 
-    public JudgedSubmissionEventClient(JudgeWorkerProperties properties) {
-        this.restClient = RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getProblemServiceBaseUrl()))
-                .defaultHeader(INTERNAL_TOKEN_HEADER, properties.getInternalApiToken())
-                .build();
+    public JudgedSubmissionEventClient(JudgeWorkerProperties properties, InternalRestClientFactory clients) {
+        this.restClient = clients.create("problem-service", properties.getProblemServiceBaseUrl());
     }
 
     public boolean notifyJudgedSubmission(AiJudgedSubmissionEventRequest request) {

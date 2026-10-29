@@ -76,7 +76,7 @@ class DraftTestcasePackageAcceptanceClientTest {
         server.start();
         AiProperties properties = new AiProperties();
         properties.setAgentExecutorUri("http://127.0.0.1:" + server.getAddress().getPort());
-        return new DraftTestcasePackageAcceptanceClient(properties);
+        return new DraftTestcasePackageAcceptanceClient(properties, new com.aioj.next.common.http.InternalRestClientFactory(new com.aioj.next.common.security.InternalServiceProperties()));
     }
 
     private static Path packageIn(Path dir) throws IOException {

@@ -1,5 +1,7 @@
 package com.aioj.next.problem.config;
 
+import com.aioj.next.common.security.InternalApiAccess;
+
 import com.aioj.next.common.security.ApiSecurityExceptionHandlers;
 import com.aioj.next.common.security.BearerTokenAuthenticationFilter;
 import com.aioj.next.common.security.InternalApiTokenFilter;
@@ -46,7 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/internal/**").hasRole("INTERNAL")
                         .requestMatchers("/problems/**", "/actuator/health", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .anyRequest().authenticated())
-                .addFilterBefore(new InternalApiTokenFilter(internalApiProperties.getApiToken()),
+                .addFilterBefore(new InternalApiTokenFilter(internalApiProperties.getInbound(), InternalApiAccess.problemService()),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new BearerTokenAuthenticationFilter(jwtTokenService), UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(new PasswordResetRequiredFilter(), BearerTokenAuthenticationFilter.class)

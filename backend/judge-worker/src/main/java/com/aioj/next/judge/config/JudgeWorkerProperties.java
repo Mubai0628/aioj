@@ -13,7 +13,6 @@ public class JudgeWorkerProperties {
     private List<String> languageWhitelist = List.of("java", "cpp", "python");
     private String cacheRoot = System.getProperty("user.home") + "/.ai-oj-next/judge-cache";
     private String problemServiceBaseUrl = "http://problem-service:8202";
-    private String internalApiToken = "";
     private int stdoutBaseCollectLimitBytes = 64 * 1024;
     private int stdoutExtraCollectBytes = 64 * 1024;
     private int stdoutMaxCollectLimitBytes = 4 * 1024 * 1024;
@@ -80,13 +79,6 @@ public class JudgeWorkerProperties {
         this.problemServiceBaseUrl = problemServiceBaseUrl;
     }
 
-    public String getInternalApiToken() {
-        return internalApiToken;
-    }
-
-    public void setInternalApiToken(String internalApiToken) {
-        this.internalApiToken = internalApiToken;
-    }
 
     public int getStdoutBaseCollectLimitBytes() {
         return stdoutBaseCollectLimitBytes;

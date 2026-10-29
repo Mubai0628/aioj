@@ -189,7 +189,7 @@ class HarnessFaultMatrixTest {
     void anUnreachableAgentExecutorEndsTheCodeToolCallButNotTheTurn() throws IOException {
         AiProperties properties = new AiProperties();
         properties.setAgentExecutorUri("http://127.0.0.1:" + closedPort());
-        ToolRuntime tools = tools(new BridgedTool(runCustom(new TutorCodeExecutor(properties))));
+        ToolRuntime tools = tools(new BridgedTool(runCustom(new TutorCodeExecutor(properties, new com.aioj.next.common.http.InternalRestClientFactory(new com.aioj.next.common.security.InternalServiceProperties())))));
 
         Turn turn = turn(healthyMemory(), healthyProfile(), tools, toolCalls(call("c1", "code.run_custom", RUN_CUSTOM)),
                 answer("执行器暂时不可用，先按样例手算。"));

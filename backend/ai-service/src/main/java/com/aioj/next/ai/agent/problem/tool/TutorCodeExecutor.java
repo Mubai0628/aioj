@@ -1,5 +1,6 @@
 package com.aioj.next.ai.agent.problem.tool;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.agent.harness.sandbox.api.ExecutionFeedback;
 import com.aioj.next.agent.harness.sandbox.api.ExecutionFeedback.Status;
 import com.aioj.next.agent.harness.sandbox.api.ExecutionFeedbacks;
@@ -39,11 +40,8 @@ public class TutorCodeExecutor {
     private final RestClient restClient;
 
     @Autowired
-    public TutorCodeExecutor(AiProperties properties) {
-        this(RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getAgentExecutorUri()))
-                .defaultHeader("X-Internal-Token", properties.getAgentExecutorToken())
-                .build());
+    public TutorCodeExecutor(AiProperties properties, InternalRestClientFactory clients) {
+        this(clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri())));
     }
 
     TutorCodeExecutor(RestClient restClient) {

@@ -16,6 +16,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AiRecommendationSignalClientTest {
+    private static com.aioj.next.common.http.InternalRestClientFactory clientFactory() {
+        var credentials = new com.aioj.next.common.security.InternalServiceProperties();
+        credentials.getOutbound().computeIfAbsent("ai-service", ignored ->
+                new com.aioj.next.common.security.InternalServiceProperties.Credential()).setToken("internal-token");
+        return new com.aioj.next.common.http.InternalRestClientFactory(credentials);
+    }
     private HttpServer server;
 
     @AfterEach
@@ -72,9 +78,8 @@ class AiRecommendationSignalClientTest {
         }
         PlagiarismProperties properties = new PlagiarismProperties();
         properties.setAiServiceUri("http://127.0.0.1:" + closedPort);
-        properties.setInternalApiToken("internal-token");
 
-        assertThat(new AiRecommendationSignalClient(properties, JsonMapper.builder().build()).weaknesses(7L, 20)).isEmpty();
+        assertThat(new AiRecommendationSignalClient(properties, JsonMapper.builder().build(), clientFactory()).weaknesses(7L, 20)).isEmpty();
     }
 
     private void serve(int status, String body, long delayMillis, AtomicReference<String> token,
@@ -106,7 +111,6 @@ class AiRecommendationSignalClientTest {
     private AiRecommendationSignalClient client() {
         PlagiarismProperties properties = new PlagiarismProperties();
         properties.setAiServiceUri("http://127.0.0.1:" + server.getAddress().getPort() + "/");
-        properties.setInternalApiToken("internal-token");
-        return new AiRecommendationSignalClient(properties, JsonMapper.builder().build());
+        return new AiRecommendationSignalClient(properties, JsonMapper.builder().build(), clientFactory());
     }
 }

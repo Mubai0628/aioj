@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.config.InternalApiProperties;
 import com.aioj.next.ai.persistence.entity.ProblemDraftTestcaseArtifactEntity;
@@ -75,20 +76,17 @@ public class ProblemServiceClient {
 
     public ProblemServiceClient(AiProperties properties, ObjectMapper objectMapper,
                                 InternalApiProperties internalApiProperties) {
-        this(properties, objectMapper, internalApiProperties, null);
+        this(properties, objectMapper, internalApiProperties, null, new InternalRestClientFactory(internalApiProperties));
     }
 
     @Autowired
     public ProblemServiceClient(AiProperties properties, ObjectMapper objectMapper,
-                                InternalApiProperties internalApiProperties, OperationAuditWriter auditWriter) {
+                                InternalApiProperties internalApiProperties, OperationAuditWriter auditWriter, InternalRestClientFactory clients) {
         this(objectMapper,
                 internalApiProperties,
                 auditWriter,
                 properties.getProblemServiceGuardCacheTtlMs(),
-                RestClient.builder()
-                        .baseUrl(stripTrailingSlash(properties.getProblemServiceUri()))
-                        .requestFactory(guardRequestFactory(properties))
-                        .build());
+                clients.create("problem-service", stripTrailingSlash(properties.getProblemServiceUri()), guardRequestFactory(properties)));
     }
 
     ProblemServiceClient(ObjectMapper objectMapper, InternalApiProperties internalApiProperties,
@@ -111,7 +109,7 @@ public class ProblemServiceClient {
         try {
             String response = restClient.post()
                     .uri("/api/v1/internal/ai/problems/context")
-                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.outboundToken("problem-service"))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(request)
@@ -130,7 +128,7 @@ public class ProblemServiceClient {
         try {
             String response = restClient.post()
                     .uri("/api/v1/internal/ai/problems/run-context")
-                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.outboundToken("problem-service"))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(request)
@@ -149,7 +147,7 @@ public class ProblemServiceClient {
         try {
             String response = restClient.post()
                     .uri("/api/v1/internal/ai/submissions/context")
-                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.outboundToken("problem-service"))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(request)
@@ -201,7 +199,7 @@ public class ProblemServiceClient {
         try {
             String response = restClient.get()
                     .uri("/api/v1/internal/ai/contests/{contestId}/run-windows", contestId)
-                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.outboundToken("problem-service"))
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(String.class);
@@ -292,7 +290,7 @@ public class ProblemServiceClient {
         try {
             String response = restClient.get()
                     .uri("/api/v1/internal/ai/contests/{contestId}/participants", contestId)
-                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.outboundToken("problem-service"))
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(String.class);
@@ -329,7 +327,7 @@ public class ProblemServiceClient {
             query.append(problemIds.stream().distinct().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
             String response = restClient.get()
                     .uri(query.toString())
-                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.outboundToken("problem-service"))
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(String.class);
@@ -609,7 +607,7 @@ public class ProblemServiceClient {
     private <T> List<T> fetchList(String uriTemplate, Class<T> elementType, Object... uriVariables) throws Exception {
         String response = restClient.get()
                 .uri(uriTemplate, uriVariables)
-                .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                .header(INTERNAL_TOKEN_HEADER, internalApiProperties.outboundToken("problem-service"))
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
                 .body(String.class);
@@ -748,7 +746,7 @@ public class ProblemServiceClient {
         try {
             String response = restClient.post()
                     .uri(uriTemplate, uriVariables)
-                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.getApiToken())
+                    .header(INTERNAL_TOKEN_HEADER, internalApiProperties.outboundToken("problem-service"))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(body)

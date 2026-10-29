@@ -21,6 +21,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class JudgeMetricsServiceTest {
+    private static com.aioj.next.common.http.InternalRestClientFactory clientFactory() {
+        var credentials = new com.aioj.next.common.security.InternalServiceProperties();
+        credentials.getOutbound().computeIfAbsent("judge-worker", ignored ->
+                new com.aioj.next.common.security.InternalServiceProperties.Credential()).setToken("internal-token");
+        return new com.aioj.next.common.http.InternalRestClientFactory(credentials);
+    }
     private final AmqpAdmin amqpAdmin = mock(AmqpAdmin.class);
     private HttpServer server;
 
@@ -85,8 +91,7 @@ class JudgeMetricsServiceTest {
 
     private JudgeMetricsService service(String baseUrl) {
         InternalApiProperties properties = new InternalApiProperties();
-        properties.setApiToken("internal-token");
         properties.setJudgeWorkerBaseUrl(baseUrl);
-        return new JudgeMetricsService(properties, JsonMapper.builderWithJackson2Defaults().build(), amqpAdmin);
+        return new JudgeMetricsService(properties, JsonMapper.builderWithJackson2Defaults().build(), amqpAdmin, clientFactory());
     }
 }

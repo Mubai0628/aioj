@@ -18,7 +18,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 
 @RestController
 @RequestMapping("/api/v1/internal/sandbox")
@@ -76,10 +75,8 @@ public class DraftTestcasePackageController {
     }
 
     private void requireInternalToken(String token) {
-        String expected = properties.getInternalApiToken();
-        if (expected == null || expected.isBlank() || token == null
-                || !MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8),
-                token.getBytes(StandardCharsets.UTF_8))) {
+        if (!com.aioj.next.common.security.InternalApiTokenFilter.matches(token,
+                properties.getInternalApiToken(), properties.getInternalApiNextToken())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "internal token missing or invalid");
         }
     }

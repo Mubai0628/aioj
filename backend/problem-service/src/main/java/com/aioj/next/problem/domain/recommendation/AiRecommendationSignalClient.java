@@ -1,17 +1,16 @@
 package com.aioj.next.problem.domain.recommendation;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.contract.ai.AiRecommendationProfileSignal;
 import com.aioj.next.problem.config.PlagiarismProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,16 +29,8 @@ public class AiRecommendationSignalClient {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
-    public AiRecommendationSignalClient(PlagiarismProperties properties, ObjectMapper objectMapper) {
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
-                .connectTimeout(CONNECT_TIMEOUT)
-                .build());
-        requestFactory.setReadTimeout(READ_TIMEOUT);
-        this.restClient = RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getAiServiceUri()))
-                .defaultHeader("X-Internal-Token", properties.getInternalApiToken())
-                .requestFactory(requestFactory)
-                .build();
+    public AiRecommendationSignalClient(PlagiarismProperties properties, ObjectMapper objectMapper, InternalRestClientFactory clients) {
+        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()), CONNECT_TIMEOUT, READ_TIMEOUT);
         this.objectMapper = objectMapper;
     }
 

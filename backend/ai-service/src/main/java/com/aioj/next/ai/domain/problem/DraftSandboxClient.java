@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain.problem;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.agent.harness.sandbox.api.ExecutionFeedback;
 import com.aioj.next.agent.harness.sandbox.api.ExecutionLimits;
 import com.aioj.next.agent.harness.sandbox.api.ExecutionRequest;
@@ -66,11 +67,8 @@ public class DraftSandboxClient implements SandboxExecutor {
     private ProblemDraftTestcaseArtifactService testcaseArtifactService;
 
     @Autowired
-    public DraftSandboxClient(AiProperties properties) {
-        this(RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getAgentExecutorUri()))
-                .defaultHeader("X-Internal-Token", properties.getAgentExecutorToken())
-                .build(),
+    public DraftSandboxClient(AiProperties properties, InternalRestClientFactory clients) {
+        this(clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri())),
                 properties.getProblemDraft().getMaxOfficialCaseBytes(),
                 properties.getProblemDraft().getMaxOfficialPackageBytes(),
                 properties.getAgentExecutorMaxMemoryLimitKb());

@@ -5,7 +5,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "aioj.plagiarism")
 public class PlagiarismProperties {
     private String aiServiceUri = "http://localhost:8204";
-    private String internalApiToken = "";
     private int maxFragmentExcerptChars = 1200;
     private int executorPoolSize = 2;
 
@@ -17,13 +16,6 @@ public class PlagiarismProperties {
         this.aiServiceUri = aiServiceUri;
     }
 
-    public String getInternalApiToken() {
-        return internalApiToken;
-    }
-
-    public void setInternalApiToken(String internalApiToken) {
-        this.internalApiToken = internalApiToken;
-    }
 
     public int getMaxFragmentExcerptChars() {
         return maxFragmentExcerptChars;

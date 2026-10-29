@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain.draftagent;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.common.api.ApiResponse;
 import com.aioj.next.common.error.DomainException;
@@ -28,15 +29,11 @@ public class DraftTestcasePackageAcceptanceClient {
     private final RestClient restClient;
     private final int maxMemoryLimitKb;
 
-    public DraftTestcasePackageAcceptanceClient(AiProperties properties) {
+    public DraftTestcasePackageAcceptanceClient(AiProperties properties, InternalRestClientFactory clients) {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
         requestFactory.setReadTimeout(Duration.ofMinutes(10));
-        this.restClient = RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getAgentExecutorUri()))
-                .defaultHeader("X-Internal-Token", properties.getAgentExecutorToken())
-                .requestFactory(requestFactory)
-                .build();
+        this.restClient = clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri()), requestFactory);
         this.maxMemoryLimitKb = properties.getAgentExecutorMaxMemoryLimitKb();
     }
 

@@ -21,6 +21,10 @@ AIOJ handles untrusted user code, credentials, hidden tests, contest problems, p
 
 The gateway is the browser entry, but target services enforce final business authorization. JWT, role, and resource ownership jointly determine access; an internal service token never replaces user-level resource checks. Hiding a frontend button is not a security control.
 
+Internal APIs use directional `X-Internal-Token` credentials: ai → problem, judge → problem, problem → ai, and problem → judge each have an independent random token; ai → agent-executor retains the executor-only token. The gateway and auth-service hold none of them. Targets identify callers with fixed-length digest comparisons, then enforce a path-segment prefix allowlist: missing or unknown credentials return 401; recognized callers without prefix permission return 403. Unregistered prefixes are denied by default, and ordinary JWTs cannot replace internal credentials. The unused, retired contests ai-policy HTTP entry has been removed.
+
+Only services that need a credential receive it; the old shared `AIOJ_INTERNAL_API_TOKEN` is no longer used for application traffic. Inbound authentication accepts current and optional `*_NEXT` values, while outbound calls use only current. Rotate by installing NEXT on the target, updating the caller, then promoting the target's current value and clearing NEXT, restarting one service at each step. Production uses independent high-entropy random values, never derivatives of a shared secret. Production Compose rejects missing required variables; empty local values fail closed. Logs contain only caller, path, and denial reason, never credentials.
+
 ## Judge isolation
 
 problem-service publishes jobs, while judge-worker only orchestrates and calls Sandbox. Sandbox has no Docker socket, host network, business directory, database, JWT, AI, or deployment secret. Testcases are read-only; temporary workspace is isolated; CPU, memory, PID, time, output, and logs are bounded.
@@ -67,6 +71,8 @@ Whether gVisor (`runsc`) can host go-judge and so remove `privileged` has not be
 - Manual ZIPs require SHA, manifest, path, symlink, duplicate-entry, expanded-size, and compression-ratio checks; imports without full-package execution acceptance are explicitly `MANUAL_UNVERIFIED`.
 
 ## Secrets and delivery
+
+The four direction variables are `AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM`, `AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM`, `AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI`, and `AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE`, with optional target-only `_NEXT` values. The executor uses `AGENT_EXECUTOR_INTERNAL_TOKEN` and inbound-only `_NEXT`. Generate each production value independently with an operating-system CSPRNG (at least 32 bytes) and deliver it directly to restricted secret storage. Restart one service at a time in this order: target NEXT → caller current → target promotes current and clears NEXT; never switch both ends simultaneously.
 
 GitHub stores only restricted deployment identity and fixed host-key material required by the release path. Application and GHCR-read credentials remain in root-only server configuration. Production uses immutable image digests rather than `latest`, and the server stores no Git worktree.
 

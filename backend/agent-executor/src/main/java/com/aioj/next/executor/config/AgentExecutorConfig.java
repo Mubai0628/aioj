@@ -19,9 +19,9 @@ public class AgentExecutorConfig {
 
     /** Checks agent-executor's own inbound token, which only ai-service holds, before anything else. */
     @Bean
-    FilterRegistrationBean<InternalApiTokenFilter> internalApiTokenFilter(AgentExecutorProperties properties) {
+    FilterRegistrationBean<InternalApiTokenFilter> internalApiTokenFilter(InternalApiProperties properties) {
         FilterRegistrationBean<InternalApiTokenFilter> registration =
-                new FilterRegistrationBean<>(new InternalApiTokenFilter(properties.getInternalApiToken()));
+                new FilterRegistrationBean<>(new InternalApiTokenFilter(properties.getInbound(), com.aioj.next.common.security.InternalApiAccess.agentExecutor()));
         registration.addUrlPatterns(INTERNAL_PATHS);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
         return registration;

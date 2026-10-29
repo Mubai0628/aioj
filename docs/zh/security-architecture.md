@@ -21,6 +21,10 @@ AIOJ 同时处理不可信用户代码、身份凭据、隐藏测试、比赛题
 
 网关是浏览器入口，但最终业务授权由目标服务执行。JWT、角色和资源归属共同决定权限；内部服务令牌不能替代用户级资源检查。前端隐藏按钮不是安全控制。
 
+内部接口使用按调用方向隔离的 `X-Internal-Token`：ai → problem、judge → problem、problem → ai、problem → judge 各有独立随机令牌；ai → agent-executor 沿用执行器专用令牌。网关和 auth-service 不持有这些令牌。被调服务使用定长摘要比较来识别调用方，再按路径段前缀白名单授权；缺少或未知令牌返回 401，已识别但无权访问的前缀返回 403，未登记前缀默认拒绝。普通 JWT 不能替代内部凭据。已废弃且无调用方的 contests ai-policy HTTP 入口已移除。
+
+令牌只配置在需要它的服务中，旧共享 `AIOJ_INTERNAL_API_TOKEN` 不再用于应用通信。入站支持当前值和可选 `*_NEXT`，出站只用当前值；先更新被调方的 NEXT，再更新调用方，最后提升被调方当前值并清空 NEXT，每步只重启一个服务。生产使用独立的高熵随机值，不从同一共享秘密派生；缺少必需变量时生产 Compose 拒绝启动，本地空值则 fail-closed。日志只记录调用方、路径和拒绝原因，不记录凭据。
+
 ## 判题隔离
 
 problem-service 只发布任务，judge-worker 只编排并调用 Sandbox。Sandbox 不能访问 Docker socket、host network、业务目录、数据库、JWT、AI 或部署秘密；测试包只读，临时工作区独立，CPU、内存、PID、时间、输出和日志有界。
@@ -67,6 +71,8 @@ gVisor（`runsc`）能否承载 go-judge、从而去掉 `privileged`，目前还
 - 人工 ZIP 需要 SHA、manifest、路径、软链接、重复项、解压体积与压缩比检查；未经全包执行验收的导入必须显式标为 `MANUAL_UNVERIFIED`。
 
 ## 秘密与交付
+
+四个方向变量为 `AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM`、`AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM`、`AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI`、`AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE`，每个目标另有可选 `_NEXT`；执行器使用 `AGENT_EXECUTOR_INTERNAL_TOKEN` 及入站专用 `_NEXT`。每个生产值由操作系统密码学安全随机数源独立生成（至少 32 字节），直接交付受限秘密存储；按“目标 NEXT → 调用方当前 → 目标提升当前并清空 NEXT”的顺序逐服务重启，不同时切换两端。
 
 GitHub 只保存发布所需的受限部署身份与固定主机密钥材料；应用与 GHCR 读取凭据留在服务器 root-only 配置。生产使用不可变镜像 digest，不使用 `latest`，服务器不保存 Git 工作树。
 

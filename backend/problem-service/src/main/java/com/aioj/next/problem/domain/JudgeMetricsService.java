@@ -1,5 +1,6 @@
 package com.aioj.next.problem.domain;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.contract.submission.JudgeMetricsResponse;
 import com.aioj.next.problem.config.InternalApiProperties;
 import com.aioj.next.problem.config.JudgeQueueConfig;
@@ -9,13 +10,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.QueueInformation;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -34,16 +33,8 @@ public class JudgeMetricsService {
     private final ObjectMapper objectMapper;
     private final AmqpAdmin amqpAdmin;
 
-    public JudgeMetricsService(InternalApiProperties properties, ObjectMapper objectMapper, AmqpAdmin amqpAdmin) {
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
-                .connectTimeout(TIMEOUT)
-                .build());
-        requestFactory.setReadTimeout(TIMEOUT);
-        this.restClient = RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getJudgeWorkerBaseUrl()))
-                .defaultHeader("X-Internal-Token", properties.getApiToken())
-                .requestFactory(requestFactory)
-                .build();
+    public JudgeMetricsService(InternalApiProperties properties, ObjectMapper objectMapper, AmqpAdmin amqpAdmin, InternalRestClientFactory clients) {
+        this.restClient = clients.create("judge-worker", stripTrailingSlash(properties.getJudgeWorkerBaseUrl()), TIMEOUT, TIMEOUT);
         this.objectMapper = objectMapper;
         this.amqpAdmin = amqpAdmin;
     }

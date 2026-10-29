@@ -14,6 +14,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ProblemEmbeddingClientTest {
+    private static com.aioj.next.common.http.InternalRestClientFactory clientFactory() {
+        var credentials = new com.aioj.next.common.security.InternalServiceProperties();
+        credentials.getOutbound().computeIfAbsent("ai-service", ignored ->
+                new com.aioj.next.common.security.InternalServiceProperties.Credential()).setToken("internal-token");
+        return new com.aioj.next.common.http.InternalRestClientFactory(credentials);
+    }
     private HttpServer server;
 
     @AfterEach
@@ -73,7 +79,6 @@ class ProblemEmbeddingClientTest {
     private ProblemEmbeddingClient client() {
         PlagiarismProperties properties = new PlagiarismProperties();
         properties.setAiServiceUri("http://127.0.0.1:" + server.getAddress().getPort());
-        properties.setInternalApiToken("internal-token");
-        return new ProblemEmbeddingClient(properties, JsonMapper.builder().build());
+        return new ProblemEmbeddingClient(properties, JsonMapper.builder().build(), clientFactory());
     }
 }

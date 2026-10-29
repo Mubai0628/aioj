@@ -37,7 +37,15 @@ spring:
 
 aioj:
   internal:
-    api-token: ${AIOJ_INTERNAL_API_TOKEN}
+    inbound:
+      problem-service:
+        token: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI:}
+        next-token: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI_NEXT:}
+    outbound:
+      problem-service:
+        token: ${AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM:}
+      agent-executor:
+        token: ${AGENT_EXECUTOR_INTERNAL_TOKEN:}
   security:
     jwt:
       issuer: ${JWT_ISSUER:ai-oj-next}

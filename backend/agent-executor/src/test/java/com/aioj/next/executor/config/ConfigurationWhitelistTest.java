@@ -35,8 +35,12 @@ class ConfigurationWhitelistTest {
         }
 
         assertThat(names).isNotEmpty().allSatisfy(name -> assertThat(name).matches(ALLOWED));
-        assertThat(names).contains("AGENT_EXECUTOR_INTERNAL_TOKEN", "AGENT_SANDBOX_ENDPOINT", "AGENT_SANDBOX_TOKEN")
-                .doesNotContain("AIOJ_INTERNAL_API_TOKEN", "SANDBOX_TOKEN", "SANDBOX_ENDPOINT");
+        assertThat(names).contains("AGENT_EXECUTOR_INTERNAL_TOKEN", "AGENT_EXECUTOR_INTERNAL_TOKEN_NEXT", "AGENT_SANDBOX_ENDPOINT", "AGENT_SANDBOX_TOKEN")
+                .doesNotContain("AIOJ_INTERNAL_API_TOKEN", "SANDBOX_TOKEN", "SANDBOX_ENDPOINT",
+                        "AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM", "AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM",
+                        "AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI", "AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE",
+                        "AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM_NEXT", "AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM_NEXT",
+                        "AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI_NEXT", "AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE_NEXT");
         assertThat(yaml).doesNotContainIgnoringCase("datasource").doesNotContainIgnoringCase("rabbitmq")
                 .doesNotContainIgnoringCase("jwt");
     }

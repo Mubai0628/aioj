@@ -26,6 +26,25 @@ class InternalSandboxControllerTest {
     private static final String TOKEN = "dev-token";
 
     @Test
+    void nextTokenPassesTheControllersDefenceInDepth() {
+        SandboxExecutionClient client = mock(SandboxExecutionClient.class);
+        AgentExecutorProperties properties = new AgentExecutorProperties();
+        properties.setInternalApiToken("current");
+        properties.setInternalApiNextToken("next");
+        var controller = new InternalSandboxController(client,
+                new com.aioj.next.executor.domain.CompileCache(client, java.time.Duration.ofMinutes(10),
+                        256, java.time.Clock.systemUTC(), null, false), properties, new ObjectMapper());
+        when(client.compileSource(eq("cpp"), eq("int main(){}"), anyLong(), anyLong()))
+                .thenReturn(new SandboxExecutionClient.CompileOutcome(false, "compiled", "Accepted", 1L, 1L, "", 0, 1L));
+        assertThat(controller.compile("next", new InternalSandboxController.CompileRequest(
+                "cpp", "int main(){}", 1000, 262144)).data().status()).isEqualTo("ACCEPTED");
+        assertThatThrownBy(() -> controller.compile("retired", new InternalSandboxController.CompileRequest(
+                "cpp", "int main(){}", 1000, 262144)))
+                .isInstanceOfSatisfying(org.springframework.web.server.ResponseStatusException.class,
+                        ex -> assertThat(ex.getStatusCode().value()).isEqualTo(401));
+    }
+
+    @Test
     void compileNormalizesCppAliasesBeforeSandboxExecution() {
         SandboxExecutionClient client = mock(SandboxExecutionClient.class);
         when(client.compileSource(eq("cpp"), eq("int main(){return 0;}"), anyLong(), anyLong()))

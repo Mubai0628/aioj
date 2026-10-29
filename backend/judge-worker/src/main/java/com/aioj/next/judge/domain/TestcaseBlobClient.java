@@ -1,5 +1,6 @@
 package com.aioj.next.judge.domain;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
@@ -17,11 +18,8 @@ import java.util.Optional;
 public class TestcaseBlobClient {
     private final RestClient restClient;
 
-    public TestcaseBlobClient(JudgeWorkerProperties properties) {
-        this.restClient = RestClient.builder()
-                .baseUrl(properties.getProblemServiceBaseUrl())
-                .defaultHeader("X-Internal-Token", properties.getInternalApiToken())
-                .build();
+    public TestcaseBlobClient(JudgeWorkerProperties properties, InternalRestClientFactory clients) {
+        this.restClient = clients.create("problem-service", properties.getProblemServiceBaseUrl());
     }
 
     public BlobHeaders downloadTo(Long packageId, Path destPath) {

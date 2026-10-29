@@ -32,6 +32,14 @@ spring:
         max-concurrency: ${JUDGE_MAX_CONCURRENCY:4}
 
 aioj:
+  internal:
+    inbound:
+      problem-service:
+        token: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE:}
+        next-token: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE_NEXT:}
+    outbound:
+      problem-service:
+        token: ${AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM:}
   testcase:
     storage-root: ${AIOJ_TESTCASE_STORAGE_ROOT:${user.home}/.ai-oj-next/testcases}
   judge:
@@ -42,7 +50,6 @@ aioj:
     language-whitelist: ${JUDGE_LANGUAGE_WHITELIST:java,cpp,python}
     cache-root: ${AIOJ_JUDGE_CACHE_ROOT:${user.home}/.ai-oj-next/judge-cache}
     problem-service-base-url: ${PROBLEM_SERVICE_BASE_URL:http://127.0.0.1:8202}
-    internal-api-token: ${AIOJ_INTERNAL_API_TOKEN}
     stdout-base-collect-limit-bytes: ${JUDGE_STDOUT_BASE_COLLECT_LIMIT_BYTES:65536}
     stdout-extra-collect-bytes: ${JUDGE_STDOUT_EXTRA_COLLECT_BYTES:65536}
     stdout-max-collect-limit-bytes: ${JUDGE_STDOUT_MAX_COLLECT_LIMIT_BYTES:4194304}

@@ -3,14 +3,6 @@ package com.aioj.next.ai.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "aioj.internal")
-public class InternalApiProperties {
-    private String apiToken = "";
+public class InternalApiProperties extends com.aioj.next.common.security.InternalServiceProperties {
 
-    public String getApiToken() {
-        return apiToken;
-    }
-
-    public void setApiToken(String apiToken) {
-        this.apiToken = apiToken;
-    }
 }

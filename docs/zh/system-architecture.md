@@ -16,6 +16,8 @@ RabbitMQ -> judge-worker -> go-judge Sandbox
 
 浏览器只访问网关公开的 `/api/v1/**`。服务间契约和 Flyway 迁移集中在 `backend/api-contract`，共享响应、错误、追踪和安全过滤集中在 `backend/common-lib`。
 
+内部 HTTP 客户端统一由 common-lib 的工厂创建，按被调方使用本方向的 `X-Internal-Token`。四个业务方向的独立令牌与执行器专用令牌互不替代；被调方只开放登记给该调用方的路径前缀，并支持当前/NEXT 双值入站轮换。网关和 auth-service 不持有内部凭据。详见[安全架构](security-architecture.md)。
+
 ## 组件
 
 | 组件 | 职责 |

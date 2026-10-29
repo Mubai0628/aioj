@@ -173,6 +173,12 @@ services:
       args:
         SERVICE_MODULE: problem-service
     environment:
+      AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM: ${AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM:-}
+      AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM: ${AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM:-}
+      AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI:-}
+      AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE:-}
+      AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM_NEXT: ${AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM_NEXT:-}
+      AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM_NEXT: ${AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM_NEXT:-}
       SERVER_PORT: 8202
       JAVA_OPTS: ${PROBLEM_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError}
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ai_oj_next}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
@@ -188,7 +194,6 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-rabbit-me}
       FLYWAY_ENABLED: ${PROBLEM_FLYWAY_ENABLED:-false}
       JWT_HMAC_SECRET: ${JWT_HMAC_SECRET:-replace-with-at-least-32-bytes-dev-secret}
-      AIOJ_INTERNAL_API_TOKEN: ${AIOJ_INTERNAL_API_TOKEN:-}
       AI_SERVICE_URI: http://ai-service:8204
       JUDGE_WORKER_BASE_URL: http://judge-worker:8203
       AIOJ_TESTCASE_STORAGE_ROOT: /aioj/testcases
@@ -226,6 +231,10 @@ services:
       args:
         SERVICE_MODULE: ai-service
     environment:
+      AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI:-}
+      AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM: ${AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM:-}
+      AGENT_EXECUTOR_INTERNAL_TOKEN: ${AGENT_EXECUTOR_INTERNAL_TOKEN:-}
+      AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI_NEXT: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI_NEXT:-}
       SERVER_PORT: 8204
       JAVA_OPTS: ${AI_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError}
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ai_oj_next}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
@@ -238,11 +247,9 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-change-redis-me}
       FLYWAY_ENABLED: ${AI_FLYWAY_ENABLED:-false}
       JWT_HMAC_SECRET: ${JWT_HMAC_SECRET:-replace-with-at-least-32-bytes-dev-secret}
-      AIOJ_INTERNAL_API_TOKEN: ${AIOJ_INTERNAL_API_TOKEN:-}
       PROBLEM_SERVICE_URI: http://problem-service:8202
       # Plan T1.10: draft code runs in agent-executor; ai-service holds no sandbox token.
       AGENT_EXECUTOR_ENDPOINT: ${AGENT_EXECUTOR_ENDPOINT:-http://agent-executor:8205}
-      AGENT_EXECUTOR_INTERNAL_TOKEN: ${AGENT_EXECUTOR_INTERNAL_TOKEN:-}
       AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:-262144}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/chat/completions}
@@ -295,6 +302,9 @@ services:
       args:
         SERVICE_MODULE: judge-worker
     environment:
+      AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE:-}
+      AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM: ${AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM:-}
+      AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE_NEXT: ${AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE_NEXT:-}
       SERVER_PORT: 8203
       JAVA_OPTS: ${JUDGE_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError}
       MYSQL_URL: ${MYSQL_URL:-jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ai_oj_next}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
@@ -309,7 +319,6 @@ services:
       AIOJ_JUDGE_CACHE_ROOT: /aioj/cases
       SANDBOX_ENDPOINT: ${SANDBOX_ENDPOINT:-http://sandbox:8090/execute}
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:-}
-      AIOJ_INTERNAL_API_TOKEN: ${AIOJ_INTERNAL_API_TOKEN:-}
       PROBLEM_SERVICE_BASE_URL: ${PROBLEM_SERVICE_BASE_URL:-http://problem-service:8202}
       JUDGE_PREFETCH: ${JUDGE_PREFETCH:-2}
       JUDGE_CONCURRENCY: ${JUDGE_CONCURRENCY:-2}
@@ -412,8 +421,9 @@ services:
       args:
         SERVICE_MODULE: agent-executor
     environment:
+      AGENT_EXECUTOR_INTERNAL_TOKEN: ${AGENT_EXECUTOR_INTERNAL_TOKEN:-}
+      AGENT_EXECUTOR_INTERNAL_TOKEN_NEXT: ${AGENT_EXECUTOR_INTERNAL_TOKEN_NEXT:-}
       JAVA_OPTS: ${AGENT_EXECUTOR_JAVA_OPTS:--XX:InitialRAMPercentage=15 -XX:MaxRAMPercentage=60 -XX:+ExitOnOutOfMemoryError}
-      AGENT_EXECUTOR_INTERNAL_TOKEN: ${AGENT_EXECUTOR_INTERNAL_TOKEN:?set AGENT_EXECUTOR_INTERNAL_TOKEN, see .env.example}
       AGENT_SANDBOX_ENDPOINT: http://agent-sandbox:8090/execute
       AGENT_SANDBOX_TOKEN: ${AGENT_SANDBOX_TOKEN:-}
       AGENT_EXECUTOR_WORK_ROOT: /aioj/agent-work

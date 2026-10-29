@@ -16,6 +16,8 @@ RabbitMQ -> judge-worker -> go-judge Sandbox
 
 Browsers access only `/api/v1/**` through the gateway. Cross-service contracts and Flyway migrations are centralized in `backend/api-contract`; shared responses, errors, tracing, and security filters live in `backend/common-lib`.
 
+Internal HTTP clients are created by the common-lib factory, using the direction's `X-Internal-Token` for each target. The four independent business-direction credentials and executor-only credential are not interchangeable. Targets allow only prefixes registered for that caller and accept current/NEXT inbound values during rotation. The gateway and auth-service hold no internal credentials. See [security architecture](security-architecture.md).
+
 ## Components
 
 | Component | Responsibility |

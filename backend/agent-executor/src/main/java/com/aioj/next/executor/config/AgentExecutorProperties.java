@@ -15,6 +15,7 @@ import java.util.List;
 @ConfigurationProperties(prefix = "aioj.executor")
 public class AgentExecutorProperties {
     private String internalApiToken = "";
+    private String internalApiNextToken = "";
     private String sandboxEndpoint = "http://localhost:8090/execute";
     private String sandboxToken = "";
     private Duration sandboxTimeout = Duration.ofSeconds(10);
@@ -46,6 +47,9 @@ public class AgentExecutorProperties {
     private int maxDraftPackageEntries = 500;
     private int maxDraftPackageCases = 200;
     private long maxDraftPackageRunMillis = 540_000L;
+
+    public String getInternalApiNextToken() { return internalApiNextToken; }
+    public void setInternalApiNextToken(String token) { internalApiNextToken = token; }
 
     public String getInternalApiToken() {
         return internalApiToken;

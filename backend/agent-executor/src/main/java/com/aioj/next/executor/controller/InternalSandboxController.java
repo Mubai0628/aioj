@@ -22,7 +22,6 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -367,9 +366,8 @@ public class InternalSandboxController {
     }
 
     private void requireInternalToken(String token) {
-        String expected = properties.getInternalApiToken();
-        if (expected == null || expected.isBlank() || token == null
-                || !MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8))) {
+        if (!com.aioj.next.common.security.InternalApiTokenFilter.matches(token,
+                properties.getInternalApiToken(), properties.getInternalApiNextToken())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "internal token missing or invalid");
         }
     }

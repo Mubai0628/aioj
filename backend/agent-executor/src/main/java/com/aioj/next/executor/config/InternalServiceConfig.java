@@ -1,0 +1,15 @@
+package com.aioj.next.executor.config;
+
+import com.aioj.next.common.http.InternalRestClientFactory;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@EnableConfigurationProperties(InternalApiProperties.class)
+public class InternalServiceConfig {
+    @Bean
+    InternalRestClientFactory internalRestClientFactory(InternalApiProperties properties) {
+        return new InternalRestClientFactory(properties);
+    }
+}

@@ -1,5 +1,6 @@
 package com.aioj.next.problem.domain.postmortem;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.StudentPostmortemAnalysisRequest;
@@ -23,11 +24,8 @@ public class StudentPostmortemAiClient {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
-    public StudentPostmortemAiClient(PlagiarismProperties properties, ObjectMapper objectMapper) {
-        this.restClient = RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getAiServiceUri()))
-                .defaultHeader("X-Internal-Token", properties.getInternalApiToken())
-                .build();
+    public StudentPostmortemAiClient(PlagiarismProperties properties, ObjectMapper objectMapper, InternalRestClientFactory clients) {
+        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()));
         this.objectMapper = objectMapper;
     }
 

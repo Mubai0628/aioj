@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = InternalAiProblemDraftImportController.class)
 @Import({SecurityConfig.class, InternalAiProblemDraftImportController.class})
 @TestPropertySource(properties = {
-        "aioj.internal.api-token=problem-import-test-token",
+        "aioj.internal.inbound.ai-service.token=problem-import-test-token",
         "aioj.security.jwt.hmac-secret=problem-import-security-test-secret-0123456789"
 })
 class InternalAiProblemDraftImportControllerSecurityTest {

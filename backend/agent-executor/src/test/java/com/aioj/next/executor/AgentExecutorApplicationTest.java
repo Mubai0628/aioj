@@ -19,6 +19,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "aioj.executor.internal-api-token=executor-test-token",
+        "aioj.executor.internal-api-next-token=executor-test-next-token",
+        "aioj.internal.inbound.ai-service.token=executor-test-token",
+        "aioj.internal.inbound.ai-service.next-token=executor-test-next-token",
         "aioj.executor.cache-root=${java.io.tmpdir}/aioj-agent-executor-test"
 })
 class AgentExecutorApplicationTest {
@@ -42,10 +45,12 @@ class AgentExecutorApplicationTest {
         HttpResponse<String> missing = send(compile(body));
         HttpResponse<String> wrong = send(compile(body).header("X-Internal-Token", "shared-internal-token"));
         HttpResponse<String> right = send(compile(body).header("X-Internal-Token", "executor-test-token"));
+        HttpResponse<String> next = send(compile(body).header("X-Internal-Token", "executor-test-next-token"));
 
         assertThat(missing.statusCode()).isEqualTo(401);
         assertThat(wrong.statusCode()).isEqualTo(401);
         assertThat(right.statusCode()).as("reaches the endpoint, which rejects the language").isEqualTo(400);
+        assertThat(next.statusCode()).as("NEXT passes both the filter and controller").isEqualTo(400);
     }
 
     private HttpRequest.Builder compile(String body) {

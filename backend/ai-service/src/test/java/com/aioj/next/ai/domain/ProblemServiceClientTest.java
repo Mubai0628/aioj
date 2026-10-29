@@ -40,7 +40,7 @@ class ProblemServiceClientTest {
 
     private ProblemServiceClient client(RestClient.Builder builder, long cacheTtlMs) {
         InternalApiProperties internalApiProperties = new InternalApiProperties();
-        internalApiProperties.setApiToken("test-token");
+        internalApiProperties.getOutbound().computeIfAbsent("problem-service", ignored -> new com.aioj.next.common.security.InternalServiceProperties.Credential()).setToken("test-token");
         return new ProblemServiceClient(objectMapper, internalApiProperties, auditWriter, cacheTtlMs, builder.build());
     }
 

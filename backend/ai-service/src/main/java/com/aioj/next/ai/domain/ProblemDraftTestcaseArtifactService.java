@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.contract.ai.ProblemDraftTestcaseArtifactPreviewResponse;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.problem.OfficialTestcasePackageReport;
@@ -40,14 +41,11 @@ public class ProblemDraftTestcaseArtifactService {
 
     public ProblemDraftTestcaseArtifactService(ProblemDraftTestcaseArtifactMapper mapper,
                                                ObjectMapper objectMapper,
-                                               AiProperties properties) {
+                                               AiProperties properties, InternalRestClientFactory clients) {
         this.mapper = mapper;
         this.objectMapper = objectMapper;
         this.storageRoot = Path.of(properties.getProblemDraft().getTestcaseArtifactStorageRoot()).toAbsolutePath().normalize();
-        this.executorClient = RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getAgentExecutorUri()))
-                .defaultHeader("X-Internal-Token", properties.getAgentExecutorToken())
-                .build();
+        this.executorClient = clients.create("agent-executor", stripTrailingSlash(properties.getAgentExecutorUri()));
     }
 
     public ProblemDraftTestcaseArtifactEntity storeFromOfficialPackage(Long draftId, Long creatorUserId,

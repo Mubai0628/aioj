@@ -8,6 +8,8 @@
 
 安全修复面向当前 `main` 与最新正式 SemVer Release。服务器秘密和生产数据不得进入 GitHub、镜像层、Release 资产、命令参数或日志。
 
+内部 HTTP 使用四个业务调用方向的独立随机令牌及执行器专用令牌，不再使用共享 `AIOJ_INTERNAL_API_TOKEN`。目标服务以定长摘要比较识别调用方，再按路径前缀授权；未知凭据返回 401，已识别但无权限返回 403，空配置 fail-closed。网关和 auth-service 不持有内部令牌。入站支持当前/NEXT 双值轮换，出站只用当前值；生产凭据须独立随机生成，禁止记录令牌。详见双语安全架构文档。
+
 当前单节点生产拓扑包含 `privileged` go-judge Sandbox。正常提交仍受命名空间、cgroup、时间、进程、内存和输出限制，但这些限制不能证明能够抵御 Sandbox、Docker、容器运行时或 Linux 内核逃逸。成功逃逸可能导致宿主机 root 等价控制、数据与密钥泄露、评测结果篡改、资源耗尽或持久化入侵。维护者已明确接受该风险相对独立判题节点的安全降级。
 
 为 Agent 工具执行新增的 agent-sandbox 是第二个 `privileged` 容器。它复用判题 Sandbox 镜像，令牌和限额独立，只接入 internal 网络 `agent-sandbox-net`，没有端口、业务卷和应用秘密，只由 agent-executor 调用。它的逃逸风险与判题 Sandbox 相同，维护者同样接受。改用 gVisor（`runsc`）去掉 `privileged` 的可行性尚未评估，留待有 Linux 主机时进行。
@@ -19,6 +21,8 @@ AI 题目草稿产生的标程、参考解、生成器与测试包，助教代�
 Do not open a public issue containing credentials, personal data, hidden tests, participant source, provider prompts, private infrastructure details, or directly usable exploitation steps. Report privately through the verified contact channel on the maintainer's GitHub profile and include only the minimum evidence needed to reproduce the issue.
 
 Security fixes target current `main` and the latest formal SemVer release. Server secrets and production data must never enter GitHub, image layers, release assets, command arguments, or logs.
+
+Internal HTTP uses four independent random business-direction tokens and the executor-only token, not the old shared `AIOJ_INTERNAL_API_TOKEN`. Targets identify callers using fixed-length digest comparisons and authorize path prefixes: unknown credentials return 401, recognized but unauthorized callers return 403, and empty configuration fails closed. The gateway and auth-service hold no internal tokens. Inbound authentication supports current/NEXT rotation, while outbound calls use only current; production credentials must be independently random and must never be logged. See the bilingual security architecture documents.
 
 The selected single-node production topology includes a `privileged` go-judge Sandbox. Normal submissions remain bounded by namespaces, cgroups, time, process, memory, and output controls, but those controls do not prove resistance to Sandbox, Docker, container-runtime, or Linux-kernel escape. A successful escape could yield host-root-equivalent control, expose data and secrets, alter judge results, exhaust resources, or establish persistence. The maintainer has explicitly accepted this downgrade relative to an isolated judge node.
 

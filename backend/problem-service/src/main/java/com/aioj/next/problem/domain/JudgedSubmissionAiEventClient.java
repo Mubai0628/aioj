@@ -1,5 +1,6 @@
 package com.aioj.next.problem.domain;
 
+import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.problem.config.PlagiarismProperties;
 import org.slf4j.Logger;
@@ -17,11 +18,8 @@ public class JudgedSubmissionAiEventClient {
 
     private final RestClient restClient;
 
-    public JudgedSubmissionAiEventClient(PlagiarismProperties properties) {
-        this.restClient = RestClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getAiServiceUri()))
-                .defaultHeader(INTERNAL_TOKEN_HEADER, properties.getInternalApiToken())
-                .build();
+    public JudgedSubmissionAiEventClient(PlagiarismProperties properties, InternalRestClientFactory clients) {
+        this.restClient = clients.create("ai-service", stripTrailingSlash(properties.getAiServiceUri()));
     }
 
     public boolean notifyJudgedSubmission(AiJudgedSubmissionEventRequest request) {
