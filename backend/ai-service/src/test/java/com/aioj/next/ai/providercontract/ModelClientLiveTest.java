@@ -32,15 +32,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Plan T1.2b, A1.3: real-provider smoke of the model call package. Billed, so it
  * runs only with {@code AIOJ_LIVE_PROVIDER_TESTS=true} and the provider's key, and
- * stops at the authorized budget (DeepSeek 8 calls, Kimi 4). Retries are off, so
- * every attempt is one counted call. Prints usage facts only, never content.
+ * stops at the authorized budget (DeepSeek 8 calls; Kimi had 4 until it was retired
+ * on 2026-10-29). Retries are off, so every attempt is one counted call. Prints
+ * usage facts only, never content.
  */
 @EnabledIfEnvironmentVariable(named = "AIOJ_LIVE_PROVIDER_TESTS", matches = "true")
 class ModelClientLiveTest {
     static final int DEEPSEEK_BUDGET = 8;
-    static final int KIMI_BUDGET = 4;
+    // Kimi, retired on 2026-10-29: static final int KIMI_BUDGET = 4;
     private static final AtomicInteger DEEPSEEK_CALLS = new AtomicInteger();
-    private static final AtomicInteger KIMI_CALLS = new AtomicInteger();
+    // Kimi, retired on 2026-10-29: private static final AtomicInteger KIMI_CALLS = new AtomicInteger();
 
     private static final String TOOL_SYSTEM = "You are a programming tutor. Before answering any question about a "
             + "problem, call the problem.read tool with its id. Answer in one short sentence.";
@@ -138,35 +139,37 @@ class ModelClientLiveTest {
         assertWithinBudget();
     }
 
-    @Test
-    @EnabledIfEnvironmentVariable(named = "KIMI_API_KEY", matches = ".+")
-    void kimiToolLoopRunsEndToEndWithNativeRequired() {
-        ModelEndpointConfig kimi = kimi();
-        try (DefaultModelClient client = client(KIMI_CALLS)) {
-            Loop loop = toolLoop(client, KIMI_CALLS, kimi, ToolChoice.REQUIRED, 2);
-            print("kimi tool loop", loop.last, "steps=" + loop.steps + " toolCalls=" + loop.toolCalls
-                    + " reasoningEchoed=" + loop.reasoningEchoed);
-            assertThat(loop.toolCalls).isPositive();
-            assertThat(loop.steps).isEqualTo(2);
-            assertThat(loop.last.content()).isNotBlank();
-        }
-        assertWithinBudget();
-    }
+    // Kimi, retired on 2026-10-29:
+    // @Test
+    // @EnabledIfEnvironmentVariable(named = "KIMI_API_KEY", matches = ".+")
+    // void kimiToolLoopRunsEndToEndWithNativeRequired() {
+    //     ModelEndpointConfig kimi = kimi();
+    //     try (DefaultModelClient client = client(KIMI_CALLS)) {
+    //         Loop loop = toolLoop(client, KIMI_CALLS, kimi, ToolChoice.REQUIRED, 2);
+    //         print("kimi tool loop", loop.last, "steps=" + loop.steps + " toolCalls=" + loop.toolCalls
+    //                 + " reasoningEchoed=" + loop.reasoningEchoed);
+    //         assertThat(loop.toolCalls).isPositive();
+    //         assertThat(loop.steps).isEqualTo(2);
+    //         assertThat(loop.last.content()).isNotBlank();
+    //     }
+    //     assertWithinBudget();
+    // }
 
-    @Test
-    @EnabledIfEnvironmentVariable(named = "KIMI_API_KEY", matches = ".+")
-    void kimiStreamReportsUsage() {
-        ModelEndpointConfig kimi = kimi();
-        try (DefaultModelClient client = client(KIMI_CALLS)) {
-            spend(KIMI_CALLS);
-            ModelResponse response = client.stream(request(kimi, "Say hello in five words.", 1024),
-                    CallOptions.of("live.stream"), ModelStreamListener.NONE);
-            print("kimi stream", response, "");
-            assertThat(response.usage().reported()).as("stream_options.include_usage").isTrue();
-            assertThat(response.content()).isNotBlank();
-        }
-        assertWithinBudget();
-    }
+    // Kimi, retired on 2026-10-29:
+    // @Test
+    // @EnabledIfEnvironmentVariable(named = "KIMI_API_KEY", matches = ".+")
+    // void kimiStreamReportsUsage() {
+    //     ModelEndpointConfig kimi = kimi();
+    //     try (DefaultModelClient client = client(KIMI_CALLS)) {
+    //         spend(KIMI_CALLS);
+    //         ModelResponse response = client.stream(request(kimi, "Say hello in five words.", 1024),
+    //                 CallOptions.of("live.stream"), ModelStreamListener.NONE);
+    //         print("kimi stream", response, "");
+    //         assertThat(response.usage().reported()).as("stream_options.include_usage").isTrue();
+    //         assertThat(response.content()).isNotBlank();
+    //     }
+    //     assertWithinBudget();
+    // }
 
     /** Tool loop: the first step uses {@code firstChoice}, later steps AUTO; stops when the model answers. */
     private static Loop toolLoop(DefaultModelClient client, AtomicInteger counter, ModelEndpointConfig endpoint,
@@ -208,17 +211,18 @@ class ModelClientLiveTest {
         return ModelEndpointConfig.builder(ProviderId.DEEPSEEK)
                 .baseUrl(env("AIOJ_LIVE_DEEPSEEK_BASE_URL", "https://api.deepseek.com/chat/completions"))
                 .apiKey(System.getenv("DEEPSEEK_API_KEY"))
-                .model(env("AIOJ_LIVE_DEEPSEEK_MODEL", "deepseek-v4-flash"))
+                .model(env("AIOJ_LIVE_DEEPSEEK_MODEL", "deepseek-flash"))
                 .thinking(thinking, "high").maxTokens(2048).build();
     }
 
-    private static ModelEndpointConfig kimi() {
-        return ModelEndpointConfig.builder(ProviderId.KIMI)
-                .baseUrl(env("AIOJ_LIVE_KIMI_BASE_URL", "https://api.moonshot.cn/v1/chat/completions"))
-                .apiKey(System.getenv("KIMI_API_KEY"))
-                .model(env("AIOJ_LIVE_KIMI_MODEL", "kimi-k3"))
-                .thinking(true, "high").maxTokens(2048).build();
-    }
+    // Kimi, retired on 2026-10-29:
+    // private static ModelEndpointConfig kimi() {
+    //     return ModelEndpointConfig.builder(ProviderId.KIMI)
+    //             .baseUrl(env("AIOJ_LIVE_KIMI_BASE_URL", "https://api.moonshot.cn/v1/chat/completions"))
+    //             .apiKey(System.getenv("KIMI_API_KEY"))
+    //             .model(env("AIOJ_LIVE_KIMI_MODEL", "kimi-k3"))
+    //             .thinking(true, "high").maxTokens(2048).build();
+    // }
 
     /** Counts every attempt against the budget. */
     private static DefaultModelClient client(AtomicInteger counter) {
@@ -233,17 +237,17 @@ class ModelClientLiveTest {
 
     /** Called before every live call: the budget is a hard stop. */
     private static void spend(AtomicInteger counter) {
-        int budget = counter == DEEPSEEK_CALLS ? DEEPSEEK_BUDGET : KIMI_BUDGET;
+        int budget = DEEPSEEK_BUDGET; // Kimi, retired on 2026-10-29: counter == DEEPSEEK_CALLS ? DEEPSEEK_BUDGET : KIMI_BUDGET
         if (counter.get() >= budget) {
             throw new IllegalStateException("live call budget exhausted: " + counter.get() + "/" + budget);
         }
     }
 
     private static void assertWithinBudget() {
-        System.out.println("[live] calls so far: deepseek=" + DEEPSEEK_CALLS.get() + "/" + DEEPSEEK_BUDGET
-                + " kimi=" + KIMI_CALLS.get() + "/" + KIMI_BUDGET);
+        System.out.println("[live] calls so far: deepseek=" + DEEPSEEK_CALLS.get() + "/" + DEEPSEEK_BUDGET);
+        // Kimi, retired on 2026-10-29: + " kimi=" + KIMI_CALLS.get() + "/" + KIMI_BUDGET
         assertThat(DEEPSEEK_CALLS.get()).isLessThanOrEqualTo(DEEPSEEK_BUDGET);
-        assertThat(KIMI_CALLS.get()).isLessThanOrEqualTo(KIMI_BUDGET);
+        // assertThat(KIMI_CALLS.get()).isLessThanOrEqualTo(KIMI_BUDGET);
     }
 
     private static void print(String label, ModelResponse response, String extra) {

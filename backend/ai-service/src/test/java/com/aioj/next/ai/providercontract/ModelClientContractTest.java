@@ -80,74 +80,134 @@ class ModelClientContractTest {
         assertThat(strictFlag(body, 0)).isNull();
     }
 
-    /** gap closed: the K3 guide fixes the temperature and replaces max_tokens. */
+    // Kimi, retired on 2026-10-29:
+    // /** gap closed: the K3 guide fixes the temperature and replaces max_tokens. */
+    // @Test
+    // void kimiK3RequestFollowsTheK3Guide() {
+    //     provider.reply(Reply.json(200, ProviderPayloads.kimiText("ok", "plan")));
+    //     ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
+    //
+    //     complete(kimi, loopRequest(kimi, ToolChoice.REQUIRED));
+    //
+    //     JsonNode body = provider.onlyRequest().json();
+    //     assertThat(body.path("model").asString()).isEqualTo("kimi-k3");
+    //     assertThat(body.path("reasoning_effort").asString()).isEqualTo("high");
+    //     assertThat(body.has("thinking")).as("K3 always thinks and takes no thinking field").isFalse();
+    //     assertThat(body.path("tool_choice").asString()).isEqualTo("required");
+    //     assertLoopMessages(body);
+    //     assertToolsPassThrough(body);
+    //     assertThat(strictFlag(body, 0)).isTrue();
+    //     assertThat(strictFlag(body, 1)).isTrue();
+    //     assertThat(body.has("temperature")).isFalse();
+    //     assertThat(body.has("max_tokens")).isFalse();
+    //     assertThat(body.path("max_completion_tokens").asInt()).isEqualTo(4096);
+    // }
+
+    // Kimi, retired on 2026-10-29:
+    // @Test
+    // void kimiK26AndK27CodeSendNoTemperatureAndK27CodeAlwaysThinks() {
+    //     provider.reply(Reply.json(200, ProviderPayloads.kimiText("ok", null)));
+    //     provider.reply(Reply.json(200, ProviderPayloads.kimiText("ok", null)));
+    //     ModelEndpointConfig k26 = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k2.6", true, "high");
+    //     ModelEndpointConfig k27 = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k2.7-code", false, "high");
+    //
+    //     try (DefaultModelClient client = client(k26, fastProperties())) {
+    //         client.complete(userOnly(k26, CallProfile.CHAT_STREAM), CallOptions.of("test"));
+    //         client.complete(userOnly(k27, CallProfile.CHAT_STREAM), CallOptions.of("test"));
+    //         assertThat(client.capabilities(k26).toolChoiceRequiredNative()).isFalse();
+    //         assertThat(client.capabilities(k27).thinkingAlwaysOn()).isTrue();
+    //     }
+    //
+    //     JsonNode k26Body = provider.requests().get(0).json();
+    //     assertThat(k26Body.path("thinking").path("type").asString()).isEqualTo("enabled");
+    //     assertThat(k26Body.has("temperature")).isFalse();
+    //     assertThat(k26Body.path("max_tokens").asInt()).isEqualTo(4096);
+    //     JsonNode k27Body = provider.requests().get(1).json();
+    //     assertThat(k27Body.path("thinking").path("type").asString()).as("K2.7-code only works thinking")
+    //             .isEqualTo("enabled");
+    //     assertThat(k27Body.has("temperature")).isFalse();
+    // }
+
+    // Retired with Kimi on 2026-10-29 (GenericOpenAiAdapter is no longer registered):
+    // /** Plan Q13: a plain OpenAI-compatible endpoint gets the standard fields, no thinking and no tools. */
+    // @Test
+    // void anOpenAiCompatibleRequestUsesOnlyTheStandardFieldsAndCallsNoTools() {
+    //     provider.reply(Reply.json(200, ProviderPayloads.deepSeekText("ok", null)));
+    //     ModelEndpointConfig compatible = endpoint(ProviderId.OPENAI_COMPATIBLE, provider.chatUrl(), "glm-4", true,
+    //             "max");
+    //
+    //     try (DefaultModelClient client = client(compatible, fastProperties())) {
+    //         assertThat(client.complete(userOnly(compatible, CallProfile.COMPLETION), CallOptions.of("test")).content())
+    //                 .isEqualTo("ok");
+    //         assertThatThrownBy(() -> client.complete(loopRequest(compatible, ToolChoice.AUTO), CallOptions.of("test")))
+    //                 .isInstanceOfSatisfying(ModelException.class,
+    //                         error -> assertThat(error.kind()).isEqualTo(ModelErrorKind.CAPABILITY_UNSUPPORTED));
+    //     }
+    //
+    //     JsonNode body = provider.onlyRequest().json();
+    //     assertThat(body.path("model").asString()).isEqualTo("glm-4");
+    //     assertThat(body.path("max_tokens").asInt()).isEqualTo(4096);
+    //     assertThat(body.path("temperature").asDouble()).isEqualTo(0.3);
+    //     assertThat(body.has("thinking")).isFalse();
+    //     assertThat(body.has("reasoning_effort")).isFalse();
+    //     assertThat(body.has("tools")).isFalse();
+    // }
+
+    /** Plan 15.2 (2026-10-29): DeepSeek's low effort goes out as it is; thinking off is sent as disabled. */
     @Test
-    void kimiK3RequestFollowsTheK3Guide() {
-        provider.reply(Reply.json(200, ProviderPayloads.kimiText("ok", "plan")));
-        ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
-
-        complete(kimi, loopRequest(kimi, ToolChoice.REQUIRED));
-
-        JsonNode body = provider.onlyRequest().json();
-        assertThat(body.path("model").asString()).isEqualTo("kimi-k3");
-        assertThat(body.path("reasoning_effort").asString()).isEqualTo("high");
-        assertThat(body.has("thinking")).as("K3 always thinks and takes no thinking field").isFalse();
-        assertThat(body.path("tool_choice").asString()).isEqualTo("required");
-        assertLoopMessages(body);
-        assertToolsPassThrough(body);
-        assertThat(strictFlag(body, 0)).isTrue();
-        assertThat(strictFlag(body, 1)).isTrue();
-        assertThat(body.has("temperature")).isFalse();
-        assertThat(body.has("max_tokens")).isFalse();
-        assertThat(body.path("max_completion_tokens").asInt()).isEqualTo(4096);
-    }
-
-    @Test
-    void kimiK26AndK27CodeSendNoTemperatureAndK27CodeAlwaysThinks() {
-        provider.reply(Reply.json(200, ProviderPayloads.kimiText("ok", null)));
-        provider.reply(Reply.json(200, ProviderPayloads.kimiText("ok", null)));
-        ModelEndpointConfig k26 = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k2.6", true, "high");
-        ModelEndpointConfig k27 = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k2.7-code", false, "high");
-
-        try (DefaultModelClient client = client(k26, fastProperties())) {
-            client.complete(userOnly(k26, CallProfile.CHAT_STREAM), CallOptions.of("test"));
-            client.complete(userOnly(k27, CallProfile.CHAT_STREAM), CallOptions.of("test"));
-            assertThat(client.capabilities(k26).toolChoiceRequiredNative()).isFalse();
-            assertThat(client.capabilities(k27).thinkingAlwaysOn()).isTrue();
-        }
-
-        JsonNode k26Body = provider.requests().get(0).json();
-        assertThat(k26Body.path("thinking").path("type").asString()).isEqualTo("enabled");
-        assertThat(k26Body.has("temperature")).isFalse();
-        assertThat(k26Body.path("max_tokens").asInt()).isEqualTo(4096);
-        JsonNode k27Body = provider.requests().get(1).json();
-        assertThat(k27Body.path("thinking").path("type").asString()).as("K2.7-code only works thinking")
-                .isEqualTo("enabled");
-        assertThat(k27Body.has("temperature")).isFalse();
-    }
-
-    /** Plan Q13: a plain OpenAI-compatible endpoint gets the standard fields, no thinking and no tools. */
-    @Test
-    void anOpenAiCompatibleRequestUsesOnlyTheStandardFieldsAndCallsNoTools() {
+    void deepSeekLowEffortAndThinkingOffHaveTheOfficialShape() {
+        provider.reply(Reply.json(200, ProviderPayloads.deepSeekText("ok", "plan")));
         provider.reply(Reply.json(200, ProviderPayloads.deepSeekText("ok", null)));
-        ModelEndpointConfig compatible = endpoint(ProviderId.OPENAI_COMPATIBLE, provider.chatUrl(), "glm-4", true,
-                "max");
+        ModelEndpointConfig low = endpoint(ProviderId.DEEPSEEK, provider.chatUrl(), "deepseek-flash", true, "low");
+        ModelEndpointConfig off = endpoint(ProviderId.DEEPSEEK, provider.chatUrl(), "deepseek-flash", false, "low");
 
-        try (DefaultModelClient client = client(compatible, fastProperties())) {
-            assertThat(client.complete(userOnly(compatible, CallProfile.COMPLETION), CallOptions.of("test")).content())
-                    .isEqualTo("ok");
-            assertThatThrownBy(() -> client.complete(loopRequest(compatible, ToolChoice.AUTO), CallOptions.of("test")))
-                    .isInstanceOfSatisfying(ModelException.class,
-                            error -> assertThat(error.kind()).isEqualTo(ModelErrorKind.CAPABILITY_UNSUPPORTED));
+        try (DefaultModelClient client = client(low, fastProperties())) {
+            client.complete(loopRequest(low, ToolChoice.AUTO), CallOptions.of("test"));
+            client.complete(loopRequest(off, ToolChoice.AUTO), CallOptions.of("test"));
         }
 
-        JsonNode body = provider.onlyRequest().json();
-        assertThat(body.path("model").asString()).isEqualTo("glm-4");
-        assertThat(body.path("max_tokens").asInt()).isEqualTo(4096);
-        assertThat(body.path("temperature").asDouble()).isEqualTo(0.3);
-        assertThat(body.has("thinking")).isFalse();
-        assertThat(body.has("reasoning_effort")).isFalse();
-        assertThat(body.has("tools")).isFalse();
+        JsonNode lowBody = provider.requests().get(0).json();
+        assertThat(lowBody.path("model").asString()).isEqualTo("deepseek-flash");
+        assertThat(lowBody.path("thinking").path("type").asString()).isEqualTo("enabled");
+        assertThat(lowBody.path("reasoning_effort").asString()).isEqualTo("low");
+        assertThat(lowBody.has("temperature")).as("no temperature in thinking mode").isFalse();
+        JsonNode offBody = provider.requests().get(1).json();
+        assertThat(offBody.path("thinking").path("type").asString())
+                .as("DeepSeek thinks by default, so off is said explicitly").isEqualTo("disabled");
+        assertThat(offBody.has("reasoning_effort")).isFalse();
+        assertThat(offBody.path("temperature").asDouble()).isEqualTo(0.3);
+    }
+
+    /** Plan 15.2: a configuration that still names a retired or unregistered chat provider never sends. */
+    @Test
+    void retiredAndUnregisteredChatProvidersFailBeforeSending() {
+        ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
+        ModelEndpointConfig compatible = endpoint(ProviderId.OPENAI_COMPATIBLE, provider.chatUrl(), "glm-4", false,
+                "high");
+
+        try (DefaultModelClient client = client(kimi, fastProperties(), recorder)) {
+            assertThatThrownBy(() -> client.complete(userOnly(kimi, CallProfile.COMPLETION), CallOptions.of("test")))
+                    .isInstanceOfSatisfying(ModelException.class, error -> {
+                        assertThat(error.kind()).isEqualTo(ModelErrorKind.CONFIGURATION_INVALID);
+                        assertThat(error.getMessage()).isEqualTo("AI provider kimi was retired on 2026-10-29; use deepseek");
+                    });
+            assertThatThrownBy(() -> client.stream(userOnly(kimi, CallProfile.CHAT_STREAM), CallOptions.of("test"),
+                    null)).isInstanceOfSatisfying(ModelException.class,
+                    error -> assertThat(error.kind()).isEqualTo(ModelErrorKind.CONFIGURATION_INVALID));
+            assertThatThrownBy(() -> client.listModels(kimi, CallOptions.of("test")))
+                    .isInstanceOfSatisfying(ModelException.class,
+                            error -> assertThat(error.kind()).isEqualTo(ModelErrorKind.CONFIGURATION_INVALID));
+            assertThatThrownBy(() -> client.complete(userOnly(compatible, CallProfile.COMPLETION),
+                    CallOptions.of("test"))).isInstanceOfSatisfying(ModelException.class, error -> {
+                        assertThat(error.kind()).isEqualTo(ModelErrorKind.CAPABILITY_UNSUPPORTED);
+                        assertThat(error.getMessage()).isEqualTo("AI provider openai-compatible is not available for chat");
+                    });
+            assertThat(client.capabilities(kimi).chat()).isFalse();
+        }
+
+        assertThat(provider.requests()).isEmpty();
+        assertThat(recorder.records).as("refused calls are still reported").extracting(ModelCallRecord::provider)
+                .containsExactly(ProviderId.KIMI, ProviderId.KIMI, ProviderId.KIMI, ProviderId.OPENAI_COMPATIBLE);
     }
 
     @Test
@@ -169,20 +229,21 @@ class ModelClientContractTest {
         assertThat(response.usage().reported()).isTrue();
     }
 
-    /** gap closed: Kimi reports cache hits as cached_tokens. */
-    @Test
-    void kimiToolCallsAreParsedWithCachedTokens() {
-        provider.reply(Reply.json(200, ProviderPayloads.kimiToolCalls("need the statement")));
-        ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
-
-        ModelResponse response = complete(kimi, loopRequest(kimi, ToolChoice.AUTO));
-
-        assertThat(response.reasoningContent()).isEqualTo("need the statement");
-        assertThat(response.toolCalls()).extracting(ToolCall::name)
-                .containsExactly("problem.read", "context.search_exact");
-        assertThat(response.usage().promptTokens()).isEqualTo(1200);
-        assertThat(response.usage().cacheHitTokens()).isEqualTo(1024);
-    }
+    // Kimi, retired on 2026-10-29:
+    // /** gap closed: Kimi reports cache hits as cached_tokens. */
+    // @Test
+    // void kimiToolCallsAreParsedWithCachedTokens() {
+    //     provider.reply(Reply.json(200, ProviderPayloads.kimiToolCalls("need the statement")));
+    //     ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
+    //
+    //     ModelResponse response = complete(kimi, loopRequest(kimi, ToolChoice.AUTO));
+    //
+    //     assertThat(response.reasoningContent()).isEqualTo("need the statement");
+    //     assertThat(response.toolCalls()).extracting(ToolCall::name)
+    //             .containsExactly("problem.read", "context.search_exact");
+    //     assertThat(response.usage().promptTokens()).isEqualTo(1200);
+    //     assertThat(response.usage().cacheHitTokens()).isEqualTo(1024);
+    // }
 
     @Test
     void finishReasonsOutsideTheOpenAiSetAreKeptAsText() {
@@ -255,34 +316,36 @@ class ModelClientContractTest {
         assertThat(provider.requests()).hasSize(1);
     }
 
-    @Test
-    void kimiQuotaExhaustionIsNotRetriedLikeARateLimit() {
-        provider.reply(Reply.json(429, ProviderPayloads.error("exceeded_current_quota_error", "no balance")));
-        ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
+    // Kimi, retired on 2026-10-29:
+    // @Test
+    // void kimiQuotaExhaustionIsNotRetriedLikeARateLimit() {
+    //     provider.reply(Reply.json(429, ProviderPayloads.error("exceeded_current_quota_error", "no balance")));
+    //     ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
+    //
+    //     assertThatThrownBy(() -> complete(kimi, loopRequest(kimi, ToolChoice.AUTO)))
+    //             .isInstanceOfSatisfying(ModelException.class, error -> {
+    //                 assertThat(error.kind()).isEqualTo(ModelErrorKind.QUOTA_EXHAUSTED);
+    //                 assertThat(error.getMessage()).doesNotContain(BODY_SENTINEL);
+    //             });
+    //     assertThat(provider.requests()).hasSize(1);
+    // }
 
-        assertThatThrownBy(() -> complete(kimi, loopRequest(kimi, ToolChoice.AUTO)))
-                .isInstanceOfSatisfying(ModelException.class, error -> {
-                    assertThat(error.kind()).isEqualTo(ModelErrorKind.QUOTA_EXHAUSTED);
-                    assertThat(error.getMessage()).doesNotContain(BODY_SENTINEL);
-                });
-        assertThat(provider.requests()).hasSize(1);
-    }
-
-    @Test
-    void kimiGatewayTimeoutHtmlPageIsUnavailableAndRetried() {
-        for (int i = 0; i < 3; i++) {
-            provider.reply(Reply.html(504, "<html><body><h1>504 Gateway Time-out</h1></body></html>"));
-        }
-        ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
-
-        assertThatThrownBy(() -> complete(kimi, loopRequest(kimi, ToolChoice.AUTO)))
-                .isInstanceOfSatisfying(ModelException.class, error -> {
-                    assertThat(error.kind()).isEqualTo(ModelErrorKind.UNAVAILABLE);
-                    assertThat(error.getMessage()).contains("HTTP 504").doesNotContain("<html>");
-                    assertThat(error.providerErrorType()).isNull();
-                });
-        assertThat(provider.requests()).hasSize(3);
-    }
+    // Kimi, retired on 2026-10-29:
+    // @Test
+    // void kimiGatewayTimeoutHtmlPageIsUnavailableAndRetried() {
+    //     for (int i = 0; i < 3; i++) {
+    //         provider.reply(Reply.html(504, "<html><body><h1>504 Gateway Time-out</h1></body></html>"));
+    //     }
+    //     ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
+    //
+    //     assertThatThrownBy(() -> complete(kimi, loopRequest(kimi, ToolChoice.AUTO)))
+    //             .isInstanceOfSatisfying(ModelException.class, error -> {
+    //                 assertThat(error.kind()).isEqualTo(ModelErrorKind.UNAVAILABLE);
+    //                 assertThat(error.getMessage()).contains("HTTP 504").doesNotContain("<html>");
+    //                 assertThat(error.providerErrorType()).isNull();
+    //             });
+    //     assertThat(provider.requests()).hasSize(3);
+    // }
 
     @Test
     void deepSeekThinkingRejectionBecomesThinkingUnavailable() {
@@ -411,16 +474,16 @@ class ModelClientContractTest {
                 {"object":"list","data":[{"id":"deepseek-v4-pro","object":"model","owned_by":"deepseek"},
                  {"id":"deepseek-v4-flash","object":"model","owned_by":"deepseek","context_length":131072}]}""";
         provider.reply(Reply.json(200, catalog));
-        provider.reply(Reply.json(200, catalog));
         ModelEndpointConfig deepSeek = endpoint(ProviderId.DEEPSEEK, provider.chatUrl(), "deepseek-v4-pro", false, "high");
-        ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.baseUrl() + "/v1/chat/completions", "kimi-k3",
-                false, "high");
+        // Kimi, retired on 2026-10-29, served its catalog under /v1:
+        // ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.baseUrl() + "/v1/chat/completions", "kimi-k3",
+        //         false, "high");
         ModelEndpointConfig dashScope = ModelEndpointConfig.builder(ProviderId.DASHSCOPE)
                 .baseUrl(provider.baseUrl()).apiKey(API_KEY).model("text-embedding-v4").build();
 
         try (DefaultModelClient client = client(deepSeek, fastProperties())) {
             List<ModelInfo> models = client.listModels(deepSeek, CallOptions.of("test"));
-            client.listModels(kimi, CallOptions.of("test"));
+            // client.listModels(kimi, CallOptions.of("test"));
             assertThat(models).extracting(ModelInfo::id).containsExactly("deepseek-v4-pro", "deepseek-v4-flash");
             assertThat(models.get(1).contextLength()).isEqualTo(131072);
             assertThatThrownBy(() -> client.listModels(dashScope, CallOptions.of("test")))
@@ -428,9 +491,8 @@ class ModelClientContractTest {
                             error -> assertThat(error.kind()).isEqualTo(ModelErrorKind.CAPABILITY_UNSUPPORTED));
         }
 
-        assertThat(provider.requests()).extracting(FakeProvider.RecordedRequest::method).containsExactly("GET", "GET");
-        assertThat(provider.requests()).extracting(FakeProvider.RecordedRequest::path)
-                .containsExactly("/models", "/v1/models");
+        assertThat(provider.requests()).extracting(FakeProvider.RecordedRequest::method).containsExactly("GET");
+        assertThat(provider.requests()).extracting(FakeProvider.RecordedRequest::path).containsExactly("/models");
     }
 
     @Test

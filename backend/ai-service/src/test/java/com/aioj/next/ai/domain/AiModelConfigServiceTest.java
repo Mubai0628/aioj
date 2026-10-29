@@ -12,16 +12,34 @@ import com.aioj.next.contract.ai.AiModelConfigUpdateRequest;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import com.aioj.next.ai.model.DefaultModelClient;
+import com.aioj.next.ai.model.api.CallOptions;
+import com.aioj.next.ai.model.api.CallProfile;
+import com.aioj.next.ai.model.api.ChatMessage;
 import com.aioj.next.ai.model.api.EndpointTuning;
+import com.aioj.next.ai.model.api.ModelCallRecord;
+import com.aioj.next.ai.model.api.ModelEndpointConfig;
+import com.aioj.next.ai.model.api.ModelErrorKind;
+import com.aioj.next.ai.model.api.ModelException;
+import com.aioj.next.ai.model.api.ModelRequest;
+import com.aioj.next.ai.model.api.ProviderId;
+import com.aioj.next.ai.model.config.ModelClientProperties;
 import com.aioj.next.contract.ai.AiModelCallSettings;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -78,59 +96,61 @@ class AiModelConfigServiceTest {
         assertThat(text.apiKey()).isNotEqualTo("wrong-global-key");
     }
 
-    @Test
-    void kimiUsesKimiKeyEvenWhenAiApiKeyExists() {
-        Fixture fixture = new Fixture(Map.of(
-                "AI_API_KEY", "wrong-global-key",
-                "DEEPSEEK_API_KEY", "deepseek-key",
-                "KIMI_API_KEY", "kimi-key"
-        ));
-        AiModelConfigEntity text = new AiModelConfigEntity();
-        text.setId(1L);
-        text.setScope("TEXT_GENERATION");
-        text.setEnabled(true);
-        text.setProvider("moonshot");
-        text.setBaseUrl("https://api.moonshot.ai/v1/chat/completions");
-        text.setModel("kimi-k2.6");
-        text.setJsonOutputEnabled(true);
-        text.setThinkingEnabled(true);
-        text.setReasoningEffort("high");
-        fixture.rows.put("TEXT_GENERATION", text);
+    // Kimi, retired on 2026-10-29 (its key is no longer read):
+    // @Test
+    // void kimiUsesKimiKeyEvenWhenAiApiKeyExists() {
+    //     Fixture fixture = new Fixture(Map.of(
+    //             "AI_API_KEY", "wrong-global-key",
+    //             "DEEPSEEK_API_KEY", "deepseek-key",
+    //             "KIMI_API_KEY", "kimi-key"
+    //     ));
+    //     AiModelConfigEntity text = new AiModelConfigEntity();
+    //     text.setId(1L);
+    //     text.setScope("TEXT_GENERATION");
+    //     text.setEnabled(true);
+    //     text.setProvider("moonshot");
+    //     text.setBaseUrl("https://api.moonshot.ai/v1/chat/completions");
+    //     text.setModel("kimi-k2.6");
+    //     text.setJsonOutputEnabled(true);
+    //     text.setThinkingEnabled(true);
+    //     text.setReasoningEffort("high");
+    //     fixture.rows.put("TEXT_GENERATION", text);
+    //
+    //     AiModelEffectiveConfig config = fixture.service.effectiveConfig(AiModelScope.TEXT_GENERATION);
+    //
+    //     assertThat(config.provider()).isEqualTo("kimi");
+    //     assertThat(config.baseUrl()).isEqualTo("https://api.moonshot.cn/v1/chat/completions");
+    //     assertThat(config.apiKey()).isEqualTo("kimi-key");
+    //     assertThat(config.apiKeyEnvName()).isEqualTo("KIMI_API_KEY");
+    // }
 
-        AiModelEffectiveConfig config = fixture.service.effectiveConfig(AiModelScope.TEXT_GENERATION);
-
-        assertThat(config.provider()).isEqualTo("kimi");
-        assertThat(config.baseUrl()).isEqualTo("https://api.moonshot.cn/v1/chat/completions");
-        assertThat(config.apiKey()).isEqualTo("kimi-key");
-        assertThat(config.apiKeyEnvName()).isEqualTo("KIMI_API_KEY");
-    }
-
-    @Test
-    void missingKimiTestConfigDoesNotUseDeepSeekFallbackKey() {
-        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
-
-        var response = fixture.service.testConfig("TEXT_GENERATION", new AiModelConfigTestRequest(
-                true,
-                "moonshot",
-                "https://api.moonshot.ai/v1/chat/completions",
-                "kimi-k2.6",
-                "CLEAR",
-                null,
-                true,
-                true,
-                "high",
-                null,
-                null,
-                null,
-                "return ok",
-                null
-        ), 9L);
-
-        assertThat(response.success()).isFalse();
-        assertThat(response.provider()).isEqualTo("kimi");
-        assertThat(response.errorMessage()).contains("API key is not configured");
-        verify(fixture.completionClient, never()).complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean());
-    }
+    // Kimi, retired on 2026-10-29:
+    // @Test
+    // void missingKimiTestConfigDoesNotUseDeepSeekFallbackKey() {
+    //     Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
+    //
+    //     var response = fixture.service.testConfig("TEXT_GENERATION", new AiModelConfigTestRequest(
+    //             true,
+    //             "moonshot",
+    //             "https://api.moonshot.ai/v1/chat/completions",
+    //             "kimi-k2.6",
+    //             "CLEAR",
+    //             null,
+    //             true,
+    //             true,
+    //             "high",
+    //             null,
+    //             null,
+    //             null,
+    //             "return ok",
+    //             null
+    //     ), 9L);
+    //
+    //     assertThat(response.success()).isFalse();
+    //     assertThat(response.provider()).isEqualTo("kimi");
+    //     assertThat(response.errorMessage()).contains("API key is not configured");
+    //     verify(fixture.completionClient, never()).complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean());
+    // }
 
     @Test
     void disabledProblemDraftTestInheritsDefaultTextGenerationConfig() {
@@ -140,9 +160,9 @@ class AiModelConfigServiceTest {
 
         var response = fixture.service.testConfig("PROBLEM_DRAFT", new AiModelConfigTestRequest(
                 false,
-                "kimi",
-                "https://api.moonshot.cn/v1/chat/completions",
-                "kimi-k2.6",
+                "deepseek",
+                "https://api.deepseek.com/chat/completions",
+                "deepseek-flash",
                 "CLEAR",
                 null,
                 true,
@@ -174,8 +194,8 @@ class AiModelConfigServiceTest {
     }
 
     @Test
-    void runtimeSceneOverrideFallsBackToDefaultDeepSeekWhenProviderKeyIsMissing() {
-        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
+    void aStoredSceneOverrideOnARetiredProviderRunsOnTheDefaultDeepSeek() {
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key", "KIMI_API_KEY", "kimi-key"));
         AiModelConfigEntity draft = new AiModelConfigEntity();
         draft.setId(2L);
         draft.setScope("PROBLEM_DRAFT");
@@ -197,29 +217,93 @@ class AiModelConfigServiceTest {
         assertThat(runtime.source()).isEqualTo("TEXT_GENERATION");
     }
 
+    /** Plan 15.2: a Kimi row from before 2026-10-29 still reads; a call made with it is refused as retired. */
     @Test
-    void adminListShowsSavedProviderAndMissingProviderSpecificKey() {
+    void aStoredKimiRowIsListedAsStoredAndItsCallsFailAsRetired() {
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key", "KIMI_API_KEY", "kimi-key"));
+        AiModelConfigEntity text = new AiModelConfigEntity();
+        text.setId(1L);
+        text.setScope("TEXT_GENERATION");
+        text.setEnabled(true);
+        text.setProvider("moonshot");
+        text.setBaseUrl("https://api.moonshot.cn/v1/chat/completions");
+        text.setModel("kimi-k2.6");
+        text.setJsonOutputEnabled(true);
+        text.setThinkingEnabled(true);
+        text.setReasoningEffort("high");
+        fixture.rows.put("TEXT_GENERATION", text);
+
+        AiModelConfigResponse display = fixture.service.listConfigs().stream()
+                .filter(item -> "TEXT_GENERATION".equals(item.scope()))
+                .findFirst()
+                .orElseThrow();
+        ModelEndpointConfig endpoint = AiModelConfigEndpointSource.toEndpoint(
+                fixture.service.effectiveConfig(AiModelScope.TEXT_GENERATION));
+        List<ModelCallRecord> records = new ArrayList<>();
+
+        assertThat(display.provider()).isEqualTo("kimi");
+        assertThat(display.model()).isEqualTo("kimi-k2.6");
+        assertThat(display.source()).isEqualTo("DATABASE");
+        assertThat(display.apiKeyConfigured()).as("KIMI_API_KEY is no longer read").isFalse();
+        assertThat(endpoint.provider()).isEqualTo(ProviderId.KIMI);
+        try (DefaultModelClient client = new DefaultModelClient(scope -> endpoint, List.of(records::add),
+                new ModelClientProperties())) {
+            assertThatThrownBy(() -> client.complete(ModelRequest.builder("TEXT_GENERATION").endpoint(endpoint)
+                    .message(ChatMessage.user("ping")).profile(CallProfile.COMPLETION).build(), CallOptions.of("test")))
+                    .isInstanceOfSatisfying(ModelException.class, error -> {
+                        assertThat(error.kind()).isEqualTo(ModelErrorKind.CONFIGURATION_INVALID);
+                        assertThat(error.getMessage()).isEqualTo("AI provider kimi was retired on 2026-10-29; use deepseek");
+                    });
+        }
+        assertThat(records).as("the refused call is still counted, under kimi").singleElement().satisfies(record -> {
+            assertThat(record.provider()).isEqualTo(ProviderId.KIMI);
+            assertThat(record.errorKind()).isEqualTo(ModelErrorKind.CONFIGURATION_INVALID);
+            assertThat(record.attempts()).isZero();
+        });
+    }
+
+    @Test
+    void theModelListOfAStoredRetiredProviderSaysWhyItIsEmpty() {
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key", "KIMI_API_KEY", "kimi-key"));
+        AiModelListResponse unsupported = new AiModelListResponse("TEXT_GENERATION", "kimi",
+                "https://api.moonshot.cn/v1/chat/completions", false, "", true, "UNSUPPORTED",
+                "This provider was retired on 2026-10-29; text scopes use deepseek.", java.util.List.of());
+        when(fixture.modelCatalogClient.listModels(AiModelScope.TEXT_GENERATION, "kimi",
+                "https://api.moonshot.cn/v1/chat/completions", null)).thenReturn(unsupported);
+
+        assertThat(fixture.service.listModels("TEXT_GENERATION", "moonshot",
+                "https://api.moonshot.cn/v1/chat/completions")).isSameAs(unsupported);
+    }
+
+    @Test
+    void anEnabledRowOnARetiredProviderIsReportedAtStartupWithoutFailing() {
         Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
         AiModelConfigEntity draft = new AiModelConfigEntity();
-        draft.setId(2L);
         draft.setScope("PROBLEM_DRAFT");
         draft.setEnabled(true);
         draft.setProvider("moonshot");
-        draft.setBaseUrl("https://api.moonshot.ai/v1/chat/completions");
-        draft.setModel("kimi-k2.6");
-        draft.setJsonOutputEnabled(true);
-        draft.setThinkingEnabled(true);
-        draft.setReasoningEffort("high");
-        fixture.rows.put("PROBLEM_DRAFT", draft);
+        AiModelConfigEntity memory = new AiModelConfigEntity();
+        memory.setScope("MEMORY_EXTRACTION");
+        memory.setEnabled(true);
+        memory.setProvider("deepseek");
+        when(fixture.mapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(draft, memory))
+                .thenThrow(new IllegalStateException("database down"));
+        Logger logger = (Logger) LoggerFactory.getLogger(AiModelConfigService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            fixture.service.warnAboutRetiredProviders();
+            fixture.service.warnAboutRetiredProviders();
+        } finally {
+            logger.detachAppender(appender);
+        }
 
-        AiModelConfigResponse display = fixture.service.listConfigs().stream()
-                .filter(item -> "PROBLEM_DRAFT".equals(item.scope()))
-                .findFirst()
-                .orElseThrow();
-
-        assertThat(display.provider()).isEqualTo("kimi");
-        assertThat(display.apiKeyConfigured()).isFalse();
-        assertThat(display.apiKeyEnvName()).isEqualTo("KIMI_API_KEY");
+        assertThat(appender.list).extracting(ILoggingEvent::getLevel).containsOnly(Level.WARN);
+        assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage).containsExactly(
+                "AI model config PROBLEM_DRAFT is still enabled on provider moonshot, which was retired on 2026-10-29; "
+                        + "the scope falls back to the default text configuration",
+                "Could not check the AI model configs for retired providers: java.lang.IllegalStateException: database down");
     }
 
     @Test
@@ -263,21 +347,18 @@ class AiModelConfigServiceTest {
                 null,
                 null
         ), 9L)).isInstanceOf(DomainException.class)
-                .hasMessage("Unknown text AI provider zhipu; choose deepseek, kimi or openai-compatible");
+                .hasMessage("Unknown text AI provider zhipu; choose deepseek");
     }
 
     @Test
     void testRejectsMismatchedTextApiAndModel() {
-        Fixture fixture = new Fixture(Map.of(
-                "DEEPSEEK_API_KEY", "deepseek-key",
-                "KIMI_API_KEY", "kimi-key"
-        ));
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
 
         assertThatThrownBy(() -> fixture.service.testConfig("TEXT_GENERATION", new AiModelConfigTestRequest(
                 true,
-                "kimi",
-                "https://api.moonshot.ai/v1/chat/completions",
-                "deepseek-v4-pro",
+                "deepseek",
+                "https://api.deepseek.com/chat/completions",
+                "kimi-k2.6",
                 "CLEAR",
                 null,
                 true,
@@ -420,64 +501,97 @@ class AiModelConfigServiceTest {
         assertThat(response).isSameAs(expected);
     }
 
-    @Test
-    void listModelsNormalizesKimiBaseUrlToCnEndpoint() {
-        Fixture fixture = new Fixture(Map.of("KIMI_API_KEY", "kimi-key"));
-        AiModelListResponse expected = new AiModelListResponse(
-                "TEXT_GENERATION",
-                "kimi",
-                "https://api.moonshot.cn/v1/chat/completions",
-                true,
-                "KIMI_API_KEY",
-                true,
-                "SUCCESS",
-                null,
-                java.util.List.of()
-        );
-        when(fixture.modelCatalogClient.listModels(
-                eq(AiModelScope.TEXT_GENERATION),
-                eq("kimi"),
-                eq("https://api.moonshot.cn/v1/chat/completions"),
-                argThat(key -> key != null && "kimi-key".equals(key.apiKey()) && "KIMI_API_KEY".equals(key.apiKeyEnvName()))
-        )).thenReturn(expected);
-
-        var response = fixture.service.listModels("TEXT_GENERATION", "kimi", "https://api.moonshot.ai/v1/chat/completions");
-
-        assertThat(response).isSameAs(expected);
-    }
+    // Kimi, retired on 2026-10-29:
+    // @Test
+    // void listModelsNormalizesKimiBaseUrlToCnEndpoint() {
+    //     Fixture fixture = new Fixture(Map.of("KIMI_API_KEY", "kimi-key"));
+    //     AiModelListResponse expected = new AiModelListResponse(
+    //             "TEXT_GENERATION",
+    //             "kimi",
+    //             "https://api.moonshot.cn/v1/chat/completions",
+    //             true,
+    //             "KIMI_API_KEY",
+    //             true,
+    //             "SUCCESS",
+    //             null,
+    //             java.util.List.of()
+    //     );
+    //     when(fixture.modelCatalogClient.listModels(
+    //             eq(AiModelScope.TEXT_GENERATION),
+    //             eq("kimi"),
+    //             eq("https://api.moonshot.cn/v1/chat/completions"),
+    //             argThat(key -> key != null && "kimi-key".equals(key.apiKey()) && "KIMI_API_KEY".equals(key.apiKeyEnvName()))
+    //     )).thenReturn(expected);
+    //
+    //     var response = fixture.service.listModels("TEXT_GENERATION", "kimi", "https://api.moonshot.ai/v1/chat/completions");
+    //
+    //     assertThat(response).isSameAs(expected);
+    // }
 
     @Test
     void saveStoresTheChosenProviderByItsRealName() {
-        Fixture fixture = new Fixture(Map.of("KIMI_API_KEY", "kimi-key", "AI_EMBEDDING_API_KEY", "embedding-key",
-                "OPENAI_COMPATIBLE_API_KEY", "compatible-key"));
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key", "AI_EMBEDDING_API_KEY", "embedding-key"));
 
-        fixture.service.updateConfig("TEXT_GENERATION", update("moonshot",
-                "https://api.moonshot.cn/v1/chat/completions", "kimi-k3", null), 9L);
+        fixture.service.updateConfig("TEXT_GENERATION", update("DeepSeek",
+                "https://api.deepseek.com/chat/completions", "deepseek-flash", null), 9L);
         fixture.service.updateConfig("EMBEDDING", update("qwen",
                 "https://dashscope.aliyuncs.com/compatible-mode/v1", "text-embedding-v4", null), 9L);
-        fixture.service.updateConfig("MEMORY_EXTRACTION", update("openai",
-                "https://llm.example.test/v1/chat/completions", "glm-4", null), 9L);
 
-        assertThat(fixture.rows.get("TEXT_GENERATION").getProvider()).isEqualTo("kimi");
+        assertThat(fixture.rows.get("TEXT_GENERATION").getProvider()).isEqualTo("deepseek");
         assertThat(fixture.rows.get("EMBEDDING").getProvider()).isEqualTo("dashscope");
-        assertThat(fixture.rows.get("MEMORY_EXTRACTION").getProvider()).isEqualTo("openai-compatible");
-        AiModelEffectiveConfig compatible = fixture.service.effectiveConfig(AiModelScope.MEMORY_EXTRACTION);
-        assertThat(compatible.apiKeyEnvName()).isEqualTo("OPENAI_COMPATIBLE_API_KEY");
+
+        fixture.service.updateConfig("EMBEDDING", update("custom",
+                "https://llm.example.test/v1/embeddings", "bge-m3", null), 9L);
+
+        assertThat(fixture.rows.get("EMBEDDING").getProvider()).isEqualTo("openai-compatible");
+        AiModelEffectiveConfig compatible = fixture.service.effectiveConfig(AiModelScope.EMBEDDING);
+        assertThat(compatible.apiKeyEnvName()).isEqualTo("AI_EMBEDDING_API_KEY");
         assertThat(compatible.hasApiKey()).isTrue();
     }
 
     @Test
-    void saveRefusesAProviderTheScopeCannotUse() {
-        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
+    void saveRefusesAProviderTheScopeCannotUseOrThatWasRetired() {
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key", "KIMI_API_KEY", "kimi-key",
+                "OPENAI_COMPATIBLE_API_KEY", "compatible-key"));
 
-        assertThatThrownBy(() -> fixture.service.updateConfig("PROBLEM_DRAFT", update("openai-compatible",
-                "https://llm.example.test/v1/chat/completions", "glm-4", null), 9L))
+        assertThatThrownBy(() -> fixture.service.updateConfig("TEXT_GENERATION", update("moonshot",
+                "https://api.moonshot.cn/v1/chat/completions", "kimi-k3", null), 9L))
                 .isInstanceOf(DomainException.class)
-                .hasMessageContaining("PROBLEM_DRAFT calls tools");
+                .hasMessage("Text AI provider kimi was retired on 2026-10-29; choose deepseek");
+        assertThatThrownBy(() -> fixture.service.updateConfig("MEMORY_EXTRACTION", update("openai",
+                "https://llm.example.test/v1/chat/completions", "glm-4", null), 9L))
+                .hasMessage("Text AI provider openai-compatible was retired on 2026-10-29; choose deepseek");
+        assertThatThrownBy(() -> fixture.service.testConfig("PROBLEM_DRAFT", new AiModelConfigTestRequest(true,
+                "kimi", "https://api.moonshot.cn/v1/chat/completions", "kimi-k3", "KEEP", null, true, false, "high",
+                null, null, null, "return ok", null), 9L))
+                .hasMessage("Text AI provider kimi was retired on 2026-10-29; choose deepseek");
         assertThatThrownBy(() -> fixture.service.updateConfig("EMBEDDING", update("deepseek",
                 "https://api.deepseek.com", "deepseek-embed", null), 9L))
                 .hasMessage("Unknown embedding AI provider deepseek; choose dashscope or openai-compatible");
         assertThat(fixture.rows).isEmpty();
+        verify(fixture.completionClient, never()).complete(any(AiModelEffectiveConfig.class), anyList(), anyDouble(), anyInt(), anyBoolean());
+    }
+
+    /** DeepSeek's effort levels are low, high and max (2026-10-29); anything else is saved as high. */
+    @Test
+    void saveKeepsTheLowEffortAndTurnsAnUnknownOneIntoHigh() {
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
+
+        fixture.service.updateConfig("TEXT_GENERATION", effort("low"), 9L);
+        assertThat(fixture.rows.get("TEXT_GENERATION").getReasoningEffort()).isEqualTo("low");
+        assertThat(fixture.service.effectiveConfig(AiModelScope.TEXT_GENERATION).reasoningEffort()).isEqualTo("low");
+
+        fixture.service.updateConfig("TEXT_GENERATION", effort("medium"), 9L);
+        assertThat(fixture.rows.get("TEXT_GENERATION").getReasoningEffort()).isEqualTo("high");
+    }
+
+    @Test
+    void theEnvironmentDefaultTakesTheLowEffortToo() {
+        Fixture fixture = new Fixture(Map.of("DEEPSEEK_API_KEY", "deepseek-key"));
+        fixture.properties.getDeepseek().setThinkingEnabled(true);
+        fixture.properties.getDeepseek().setReasoningEffort("LOW");
+
+        assertThat(fixture.service.effectiveConfig(AiModelScope.TEXT_GENERATION).reasoningEffort()).isEqualTo("low");
     }
 
     @Test
@@ -547,6 +661,11 @@ class AiModelConfigServiceTest {
                                                      AiModelCallSettings settings) {
         return new AiModelConfigUpdateRequest(true, provider, baseUrl, model, "KEEP", null, true, false, "high",
                 null, null, null, settings);
+    }
+
+    private static AiModelConfigUpdateRequest effort(String effort) {
+        return new AiModelConfigUpdateRequest(true, "deepseek", "https://api.deepseek.com/chat/completions",
+                "deepseek-flash", "KEEP", null, true, true, effort, null, null, null, null);
     }
 
     private static final class Fixture {

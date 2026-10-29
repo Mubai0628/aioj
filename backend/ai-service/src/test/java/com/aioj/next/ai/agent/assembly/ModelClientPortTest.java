@@ -262,16 +262,21 @@ class ModelClientPortTest {
         assertThat(client.options.get(0).cancellation().isCancelled()).isTrue();
     }
 
+    /**
+     * No DeepSeek model takes a native {@code tool_choice=required} (Kimi K3 did, until it was retired on
+     * 2026-10-29); the capability below is made up to keep the rule covered.
+     */
     @Test
     void requiredToolChoiceFollowsTheProvider() {
-        ProviderCapabilities k3 = new ProviderCapabilities(ProviderId.KIMI, "kimi-k3", true, false, true, true, true,
-                true, true, false, false, true, true);
-        ModelEndpointConfig kimi = ModelEndpointConfig.builder(ProviderId.KIMI).baseUrl("http://127.0.0.1:9/v1")
-                .apiKey("test-key").model("kimi-k3").enabled(true).build();
+        ProviderCapabilities required = new ProviderCapabilities(ProviderId.DEEPSEEK, "deepseek-required", true,
+                false, true, true, true, true, true, false, false, true, true);
+        ModelEndpointConfig endpoint = ModelEndpointConfig.builder(ProviderId.DEEPSEEK)
+                .baseUrl("http://127.0.0.1:9/chat/completions").apiKey("test-key").model("deepseek-required")
+                .enabled(true).build();
 
         assertThat(open(CallProfile.CHAT_STREAM, false).supportsRequiredToolChoice()).isFalse();
-        assertThat(ModelClientPort.open(new FakeModelClient(kimi, k3), "TEXT_GENERATION", CallProfile.CHAT_STREAM,
-                options("chat_stream"), false, null).supportsRequiredToolChoice()).isTrue();
+        assertThat(ModelClientPort.open(new FakeModelClient(endpoint, required), "TEXT_GENERATION",
+                CallProfile.CHAT_STREAM, options("chat_stream"), false, null).supportsRequiredToolChoice()).isTrue();
     }
 
     @Test

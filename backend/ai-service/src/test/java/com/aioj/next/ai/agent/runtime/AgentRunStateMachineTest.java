@@ -37,7 +37,7 @@ class AgentRunStateMachineTest {
     @Test
     void persistenceFailureStillReturnsUsableRunHandle() {
         doThrow(new RuntimeException("db down")).when(mapper).insert(any(AiAgentRunEntity.class));
-        AiAgentRunEntity run = stateMachine.start("turn-2", "c1", 7L, "kimi", "kimi-k3",
+        AiAgentRunEntity run = stateMachine.start("turn-2", "c1", 7L, "deepseek", "deepseek-flash",
                 "ps-2", "STREAM", new LoopBudget(8, 6, 3, 3));
         assertThat(run.getId()).isNotNull();
         // subsequent updates must not throw either

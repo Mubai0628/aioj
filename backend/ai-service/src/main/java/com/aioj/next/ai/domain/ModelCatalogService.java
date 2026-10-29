@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Provider model catalogs for the admin model settings, on {@link ModelClient}
@@ -20,6 +21,14 @@ import java.util.Locale;
  */
 @Component
 public class ModelCatalogService {
+    static final List<String> DEEPSEEK_EFFORTS = List.of("low", "high", "max");
+    /** Names DeepSeek has retired but still serves (2026-10-29); the settings page flags them. */
+    static final Set<String> RETIRED_DEEPSEEK_MODELS = Set.of("deepseek-chat", "deepseek-reasoner",
+            "deepseek-v4-flash", "deepseek-v4-flash-vision-exp");
+    /** Retired on 2026-10-29 for text scopes; embeddings keep openai-compatible. */
+    private static final Set<String> RETIRED_TEXT_PROVIDERS = Set.of("kimi", "moonshot", "openai-compatible",
+            "openai", "custom");
+
     private final ModelClient modelClient;
 
     public ModelCatalogService(ModelClient modelClient) {
@@ -29,6 +38,10 @@ public class ModelCatalogService {
     public AiModelListResponse listModels(AiModelScope scope, String provider, String baseUrl,
                                            EnvironmentAiModelConfigResolver.ApiKeyResolution key) {
         String normalizedProvider = normalizeProvider(provider);
+        if (scope != AiModelScope.EMBEDDING && RETIRED_TEXT_PROVIDERS.contains(normalizedProvider)) {
+            return response(scope, normalizedProvider, baseUrl, key, "UNSUPPORTED",
+                    "This provider was retired on 2026-10-29; text scopes use deepseek.", List.of());
+        }
         ProviderId providerId = providerId(scope, normalizedProvider);
         if (providerId == ProviderId.DASHSCOPE) {
             return response(scope, normalizedProvider, baseUrl, key, "UNSUPPORTED",
@@ -58,35 +71,39 @@ public class ModelCatalogService {
         String ownedBy = info.ownedBy() == null ? "" : info.ownedBy();
         String model = id.toLowerCase(Locale.ROOT);
         if ("deepseek".equals(provider) || model.startsWith("deepseek-")) {
-            boolean deprecated = "deepseek-chat".equals(model) || "deepseek-reasoner".equals(model);
-            boolean supportsThinking = model.startsWith("deepseek-v4-") || deprecated;
+            // DeepSeek's catalog names models but not their abilities. Since 2026-10-29 every DeepSeek model
+            // counts as thinking-capable (the official deepseek-flash replaced deepseek-v4-flash, which a
+            // "deepseek-v4-" rule missed); effort levels are the documented low, high and max.
+            boolean supportsThinking = model.startsWith("deepseek");
             return new AiModelListResponse.ModelOption(id, ownedBy, true, supportsThinking,
-                    supportsThinking ? List.of("high", "max") : List.of(), null, null, info.contextLength(),
-                    deprecated);
+                    supportsThinking ? DEEPSEEK_EFFORTS : List.of(), null, null, info.contextLength(),
+                    RETIRED_DEEPSEEK_MODELS.contains(model));
         }
-        if ("moonshot".equals(provider) || "kimi".equals(provider)
-                || ownedBy.toLowerCase(Locale.ROOT).contains("moonshot")) {
-            // K3 always thinks and takes an effort level, so it only accepts temperature 1.
-            boolean k3 = model.startsWith("kimi-k3");
-            boolean kimiThinking = info.supportsReasoning() || model.startsWith("kimi-k2.5")
-                    || model.startsWith("kimi-k2.6") || k3;
-            return new AiModelListResponse.ModelOption(id, ownedBy, true, kimiThinking,
-                    k3 ? List.of("high", "max") : List.of(), null,
-                    k3 ? Double.valueOf(1.0) : kimiThinking ? Double.valueOf(0.6) : null, info.contextLength(),
-                    false);
-        }
+        // Kimi, retired on 2026-10-29:
+        // if ("moonshot".equals(provider) || "kimi".equals(provider)
+        //         || ownedBy.toLowerCase(Locale.ROOT).contains("moonshot")) {
+        //     // K3 always thinks and takes an effort level, so it only accepts temperature 1.
+        //     boolean k3 = model.startsWith("kimi-k3");
+        //     boolean kimiThinking = info.supportsReasoning() || model.startsWith("kimi-k2.5")
+        //             || model.startsWith("kimi-k2.6") || k3;
+        //     return new AiModelListResponse.ModelOption(id, ownedBy, true, kimiThinking,
+        //             k3 ? List.of("high", "max") : List.of(), null,
+        //             k3 ? Double.valueOf(1.0) : kimiThinking ? Double.valueOf(0.6) : null, info.contextLength(),
+        //             false);
+        // }
         return new AiModelListResponse.ModelOption(id, ownedBy, false, false, List.of(), null, null,
                 info.contextLength(), false);
     }
 
-    /** Text scopes are DeepSeek or Kimi; embeddings are DashScope or a custom OpenAI-compatible endpoint. */
+    /** Text scopes are DeepSeek; embeddings are DashScope or a custom OpenAI-compatible endpoint. */
     private static ProviderId providerId(AiModelScope scope, String provider) {
         if (scope != AiModelScope.EMBEDDING) {
             switch (provider) {
                 case "deepseek":
                     return ProviderId.DEEPSEEK;
-                case "kimi", "moonshot":
-                    return ProviderId.KIMI;
+                // Kimi, retired on 2026-10-29 (listModels answers for it before this point):
+                // case "kimi", "moonshot":
+                //     return ProviderId.KIMI;
                 default:
                     break;
             }
@@ -94,7 +111,7 @@ public class ModelCatalogService {
         return switch (provider) {
             case "dashscope", "qwen", "alibaba" -> ProviderId.DASHSCOPE;
             case "deepseek" -> ProviderId.DEEPSEEK;
-            case "kimi", "moonshot" -> ProviderId.KIMI;
+            // Kimi, retired on 2026-10-29: case "kimi", "moonshot" -> ProviderId.KIMI;
             default -> ProviderId.OPENAI_COMPATIBLE;
         };
     }

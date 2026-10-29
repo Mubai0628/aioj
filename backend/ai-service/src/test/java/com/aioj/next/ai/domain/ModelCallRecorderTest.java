@@ -80,7 +80,7 @@ class ModelCallRecorderTest {
         when(mapper.insert(any(AiModelCallEntity.class))).thenThrow(new IllegalStateException("database down"));
 
         assertThatCode(() -> recorder.onFinish(new ModelCallRecord(ModelOperation.STREAM, "TEXT_GENERATION",
-                "agent.chat_stream", ProviderId.KIMI, "kimi-k3", ModelUsage.NONE, 10, 1, ModelErrorKind.CANCELLED,
+                "agent.chat_stream", ProviderId.DEEPSEEK, "deepseek-flash", ModelUsage.NONE, 10, 1, ModelErrorKind.CANCELLED,
                 null, null, Instant.now()))).doesNotThrowAnyException();
     }
 

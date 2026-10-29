@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  * {@link HarnessAgentRunner}; the request and result types here are what the turn
  * coordinators build and read.
  *
- * <p>tool_choice=REQUIRED is native only where the provider supports it (Kimi);
+ * <p>tool_choice=REQUIRED is native only where the provider supports it (Kimi did, until it was retired on 2026-10-29);
  * for other providers the loop simulates it once (system nudge + one retry)
  * and reports {@code missed_required_tool} instead of silently pretending.</p>
  *

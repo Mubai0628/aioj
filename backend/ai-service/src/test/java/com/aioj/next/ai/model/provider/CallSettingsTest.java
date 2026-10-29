@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class CallSettingsTest {
     private final DeepSeekAdapter deepSeek = new DeepSeekAdapter();
-    private final KimiAdapter kimi = new KimiAdapter();
+    // Kimi, retired on 2026-10-29: private final KimiAdapter kimi = new KimiAdapter();
 
     /** The T1.3 eval case: effort max with an 8,192 budget spent everything on reasoning. */
     @Test
@@ -68,15 +68,31 @@ class CallSettingsTest {
         assertThat(disabled.maxTokens()).isEqualTo(8192);
     }
 
-    /** Kimi's output limits are not checked yet, so it keeps the general floor at any effort. */
+    // Kimi, retired on 2026-10-29:
+    // /** Kimi's output limits are not checked yet, so it keeps the general floor at any effort. */
+    // @Test
+    // void kimiKeepsTheGeneralFloorAtMaxEffort() {
+    //     ModelEndpointConfig endpoint = endpoint(ProviderId.KIMI, "kimi-k3", "max", null);
+    //
+    //     CallSettings settings = resolve(endpoint, request(endpoint, CallProfile.COMPLETION, 1800), kimi);
+    //
+    //     assertThat(settings.thinking()).isTrue();
+    //     assertThat(settings.maxTokens()).isEqualTo(CallProfile.MIN_MAX_TOKENS_WHEN_THINKING);
+    // }
+
+    /** DeepSeek's levels since 2026-10-29 are low, high and max; low keeps the general floor. */
     @Test
-    void kimiKeepsTheGeneralFloorAtMaxEffort() {
-        ModelEndpointConfig endpoint = endpoint(ProviderId.KIMI, "kimi-k3", "max", null);
+    void lowEffortIsKeptWithTheGeneralFloorAndAnUnknownOneIsHigh() {
+        ModelEndpointConfig low = endpoint(ProviderId.DEEPSEEK, "deepseek-flash", "low", 8192);
+        ModelEndpointConfig unknown = endpoint(ProviderId.DEEPSEEK, "deepseek-flash", "medium", 8192);
 
-        CallSettings settings = resolve(endpoint, request(endpoint, CallProfile.COMPLETION, 1800), kimi);
+        CallSettings lowSettings = resolve(low, request(low, CallProfile.COMPLETION, 1800), deepSeek);
 
-        assertThat(settings.thinking()).isTrue();
-        assertThat(settings.maxTokens()).isEqualTo(CallProfile.MIN_MAX_TOKENS_WHEN_THINKING);
+        assertThat(lowSettings.thinking()).isTrue();
+        assertThat(lowSettings.reasoningEffort()).isEqualTo("low");
+        assertThat(lowSettings.maxTokens()).isEqualTo(CallProfile.MIN_MAX_TOKENS_WHEN_THINKING);
+        assertThat(resolve(unknown, request(unknown, CallProfile.CHAT_STREAM, null), deepSeek).reasoningEffort())
+                .isEqualTo("high");
     }
 
     private static CallSettings resolve(ModelEndpointConfig endpoint, ModelRequest request, ChatAdapter adapter) {

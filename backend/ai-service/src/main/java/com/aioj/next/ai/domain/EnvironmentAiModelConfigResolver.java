@@ -59,14 +59,15 @@ final class EnvironmentAiModelConfigResolver implements AiModelConfigResolver {
             }
             return resolution(candidates, "DEEPSEEK_API_KEY");
         }
-        if ("kimi".equals(textProvider)) {
-            List<EnvCandidate> candidates = new ArrayList<>();
-            candidates.add(envCandidate("KIMI_API_KEY"));
-            return resolution(candidates, "KIMI_API_KEY");
-        }
-        if ("openai-compatible".equals(textProvider)) {
-            return resolution(List.of(envCandidate("OPENAI_COMPATIBLE_API_KEY")), "OPENAI_COMPATIBLE_API_KEY");
-        }
+        // Kimi and the plain OpenAI-compatible text option were retired on 2026-10-29; their keys are no longer read.
+        // if ("kimi".equals(textProvider)) {
+        //     List<EnvCandidate> candidates = new ArrayList<>();
+        //     candidates.add(envCandidate("KIMI_API_KEY"));
+        //     return resolution(candidates, "KIMI_API_KEY");
+        // }
+        // if ("openai-compatible".equals(textProvider)) {
+        //     return resolution(List.of(envCandidate("OPENAI_COMPATIBLE_API_KEY")), "OPENAI_COMPATIBLE_API_KEY");
+        // }
         return new ApiKeyResolution("", "", "NONE", "");
     }
 
@@ -179,9 +180,10 @@ final class EnvironmentAiModelConfigResolver implements AiModelConfigResolver {
         if ("deepseek".equals(normalized)) {
             return List.of("DEEPSEEK");
         }
-        if ("moonshot".equals(normalized) || "kimi".equals(normalized)) {
-            return List.of("MOONSHOT", "KIMI");
-        }
+        // Kimi, retired on 2026-10-29:
+        // if ("moonshot".equals(normalized) || "kimi".equals(normalized)) {
+        //     return List.of("MOONSHOT", "KIMI");
+        // }
         if ("dashscope".equals(normalized) || "qwen".equals(normalized) || "alibaba".equals(normalized)) {
             return List.of("DASHSCOPE", "QWEN", "ALIBABA");
         }
@@ -223,8 +225,10 @@ final class EnvironmentAiModelConfigResolver implements AiModelConfigResolver {
         return value != null && !value.isBlank();
     }
 
+    /** DeepSeek takes low, high and max (2026-10-29); anything else is its default, high. */
     private String reasoningEffort(String value) {
-        return "max".equalsIgnoreCase(value) ? "max" : "high";
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return "low".equals(normalized) || "max".equals(normalized) ? normalized : "high";
     }
 
     record ApiKeyResolution(String apiKey, String apiKeyPreview, String apiKeySource, String apiKeyEnvName) {

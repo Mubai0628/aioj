@@ -6,10 +6,11 @@ import com.aioj.next.ai.model.api.ModelClient;
 import com.aioj.next.ai.model.api.ModelRequest;
 import com.aioj.next.ai.model.api.ModelResponse;
 import com.aioj.next.ai.model.api.ModelUsage;
+import com.aioj.next.ai.model.api.ProviderCapabilities;
 import com.aioj.next.ai.model.api.ProviderId;
 import com.aioj.next.ai.model.api.ResponseFormat;
 import com.aioj.next.ai.model.provider.DeepSeekAdapter;
-import com.aioj.next.ai.model.provider.KimiAdapter;
+// Kimi, retired on 2026-10-29: import com.aioj.next.ai.model.provider.KimiAdapter;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -87,12 +88,18 @@ class ModelCompletionsTest {
         assertThat(result.completionTokens()).isEqualTo(2030);
     }
 
+    /**
+     * No DeepSeek model always thinks (Kimi K3 did, until it was retired on 2026-10-29); the capability
+     * below is made up to keep the rule covered.
+     */
     @Test
     void aBlankAnswerThatCannotDropThinkingFails() {
-        when(modelClient.capabilities(any())).thenReturn(new KimiAdapter().capabilities("kimi-k3"));
+        when(modelClient.capabilities(any())).thenReturn(new ProviderCapabilities(ProviderId.DEEPSEEK,
+                "deepseek-always-thinks", true, false, true, false, false, true, true, false, false, true, true));
         when(modelClient.complete(any(), any())).thenReturn(answer(" ", new ModelUsage(10, 5, 0, true)));
 
-        assertThatThrownBy(() -> completions.complete(config("kimi", "kimi-k3", true, true), MESSAGES, 0.1, 512, false))
+        assertThatThrownBy(() -> completions.complete(config("deepseek", "deepseek-always-thinks", true, true),
+                MESSAGES, 0.1, 512, false))
                 .isInstanceOfSatisfying(DomainException.class, error -> {
                     assertThat(error.errorCode()).isEqualTo(ErrorCode.INTERNAL_ERROR);
                     assertThat(error.getMessage()).isEqualTo("AI provider returned empty content");

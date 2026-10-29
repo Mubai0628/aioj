@@ -13,7 +13,7 @@ import java.util.Locale;
  * Per-call settings after the call profile's safety defaults are applied to the
  * endpoint configuration.
  *
- * @param reasoningEffort {@code high} or {@code max}
+ * @param reasoningEffort {@code low}, {@code high} or {@code max}, the levels DeepSeek takes
  */
 public record CallSettings(boolean thinking, String reasoningEffort, double temperature, int maxTokens,
                            ResponseFormat responseFormat) {
@@ -30,8 +30,7 @@ public record CallSettings(boolean thinking, String reasoningEffort, double temp
                                        ProviderCapabilities capabilities) {
         CallProfile profile = request.profile();
         boolean thinking = capabilities.thinks(endpoint, profile, request.thinkingDisabled());
-        String effort = endpoint.reasoningEffort() != null
-                && "max".equals(endpoint.reasoningEffort().trim().toLowerCase(Locale.ROOT)) ? "max" : "high";
+        String effort = effort(endpoint.reasoningEffort());
         int maxTokens = request.maxTokens() != null && request.maxTokens() > 0
                 ? request.maxTokens()
                 : endpoint.maxTokens() == null || endpoint.maxTokens() <= 0
@@ -48,6 +47,12 @@ public record CallSettings(boolean thinking, String reasoningEffort, double temp
             format = ResponseFormat.jsonObject();
         }
         return new CallSettings(thinking, effort, temperature, maxTokens, format);
+    }
+
+    /** A configured effort DeepSeek takes; anything else is its default, {@code high}. */
+    static String effort(String configured) {
+        String effort = configured == null ? "" : configured.trim().toLowerCase(Locale.ROOT);
+        return "low".equals(effort) || "max".equals(effort) ? effort : "high";
     }
 
     private static int minimumWhenThinking(ProviderId provider, String effort) {

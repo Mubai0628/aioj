@@ -15,12 +15,15 @@ import java.util.Locale;
 /** The providers' {@code GET /models} catalogs, for the admin model settings. */
 public final class ModelCatalog {
 
-    /** DeepSeek serves it at the host root, Kimi under /v1; DashScope's compatible mode has none. */
+    /** DeepSeek serves it at the host root; DashScope's compatible mode has none. */
     public URI modelsUri(ModelEndpointConfig endpoint) {
         URI configured = ProviderErrors.endpointUri(endpoint.baseUrl(), endpoint.provider(), endpoint.model());
         return switch (endpoint.provider()) {
             case DEEPSEEK -> URI.create(ProviderErrors.origin(configured) + "/models");
-            case KIMI -> URI.create(ProviderErrors.origin(configured) + "/v1/models");
+            // Kimi, retired on 2026-10-29, served it under /v1:
+            // case KIMI -> URI.create(ProviderErrors.origin(configured) + "/v1/models");
+            case KIMI -> throw new ModelException(ModelErrorKind.CONFIGURATION_INVALID, ProviderId.KIMI,
+                    endpoint.model(), "AI provider kimi was retired on 2026-10-29; use deepseek");
             case DASHSCOPE -> throw new ModelException(ModelErrorKind.CAPABILITY_UNSUPPORTED, ProviderId.DASHSCOPE,
                     endpoint.model(), "This provider does not expose a compatible model list API.");
             case OPENAI_COMPATIBLE -> derived(configured);

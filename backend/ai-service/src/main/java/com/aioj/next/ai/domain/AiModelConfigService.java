@@ -17,6 +17,8 @@ import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,10 +41,14 @@ public class AiModelConfigService implements AiModelConfigResolver {
     private static final long CACHE_TTL_MILLIS = 30_000;
     private static final ZoneId ZONE = ZoneId.systemDefault();
     /** Plan A6.1: the provider is chosen, never guessed; these are the names a scope may store. */
-    private static final Set<String> TEXT_PROVIDERS = Set.of("deepseek", "kimi", "openai-compatible");
+    // Kimi and the plain OpenAI-compatible text option were retired on 2026-10-29; before, text scopes took
+    // Set.of("deepseek", "kimi", "openai-compatible"). Rows that still name them stay readable.
+    private static final Set<String> TEXT_PROVIDERS = Set.of("deepseek");
+    private static final Set<String> RETIRED_TEXT_PROVIDERS = Set.of("kimi", "openai-compatible");
     private static final Set<String> EMBEDDING_PROVIDERS = Set.of("dashscope", "openai-compatible");
     /** Plan Q13: tools only run on verified providers, and these scopes call tools. */
-    private static final Set<AiModelScope> TOOL_SCOPES = Set.of(AiModelScope.TEXT_GENERATION, AiModelScope.PROBLEM_DRAFT);
+    // Retired with the plain OpenAI-compatible text option on 2026-10-29:
+    // private static final Set<AiModelScope> TOOL_SCOPES = Set.of(AiModelScope.TEXT_GENERATION, AiModelScope.PROBLEM_DRAFT);
 
     private final AiModelConfigMapper mapper;
     private final ModelCompletions completionClient;
@@ -107,7 +113,13 @@ public class AiModelConfigService implements AiModelConfigResolver {
     public AiModelListResponse listModels(String scopeName, String provider, String baseUrl) {
         AiModelScope scope = parseScope(scopeName);
         AiModelEffectiveConfig current = loadDisplayConfig(scope);
-        String effectiveProvider = providerForScope(scope, textOr(provider, current.provider()));
+        String requested = textOr(provider, current.provider());
+        String retired = environmentResolver.canonicalTextProvider(requested);
+        if (isTextScope(scope) && RETIRED_TEXT_PROVIDERS.contains(retired)) {
+            // A stored row on a retired provider still opens in the settings page; its list says why it is empty.
+            return modelCatalogClient.listModels(scope, retired, textOr(baseUrl, current.baseUrl()), null);
+        }
+        String effectiveProvider = providerForScope(scope, requested);
         String effectiveBaseUrl = normalizeTextBaseUrl(scope, effectiveProvider, textOr(baseUrl, current.baseUrl()));
         EnvironmentAiModelConfigResolver.ApiKeyResolution key = environmentResolver.apiKeyFor(scope, effectiveProvider);
         return modelCatalogClient.listModels(scope, effectiveProvider, effectiveBaseUrl, key);
@@ -319,6 +331,30 @@ public class AiModelConfigService implements AiModelConfigResolver {
                 || scope == AiModelScope.INTENT;
     }
 
+    /**
+     * V73 turns off the stored text configurations that name a retired provider; one that is still on
+     * (switched back by hand, or a database V73 has not reached) is reported, not refused. No key is read
+     * for it, so a scene override falls back to the default text configuration, and a default text
+     * configuration on it fails its calls with the model client's "retired" configuration error.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void warnAboutRetiredProviders() {
+        try {
+            for (AiModelConfigEntity row : mapper.selectList(new QueryWrapper<AiModelConfigEntity>()
+                    .eq("enabled", true)
+                    .ne("scope", AiModelScope.EMBEDDING.name()))) {
+                if (RETIRED_TEXT_PROVIDERS.contains(environmentResolver.canonicalTextProvider(row.getProvider()))) {
+                    log.warn("AI model config {} is still enabled on provider {}, which was retired on 2026-10-29; {}",
+                            row.getScope(), row.getProvider(), AiModelScope.TEXT_GENERATION.name().equals(row.getScope())
+                                    ? "its calls fail until it is switched to deepseek"
+                                    : "the scope falls back to the default text configuration");
+                }
+            }
+        } catch (RuntimeException ex) {
+            log.warn("Could not check the AI model configs for retired providers: {}", ex.toString());
+        }
+    }
+
     /** Plan A6.1: an unknown provider is refused; the old aliases are stored by their real names. */
     private String providerForScope(AiModelScope scope, String provider) {
         String name = required("provider", provider).toLowerCase(Locale.ROOT);
@@ -335,14 +371,18 @@ public class AiModelConfigService implements AiModelConfigResolver {
             return canonical;
         }
         String canonical = environmentResolver.canonicalTextProvider(name);
-        if (!TEXT_PROVIDERS.contains(canonical)) {
+        if (RETIRED_TEXT_PROVIDERS.contains(canonical)) {
             throw new DomainException(ErrorCode.BAD_REQUEST,
-                    "Unknown text AI provider " + name + "; choose deepseek, kimi or openai-compatible");
+                    "Text AI provider " + canonical + " was retired on 2026-10-29; choose deepseek");
         }
-        if ("openai-compatible".equals(canonical) && TOOL_SCOPES.contains(scope)) {
-            throw new DomainException(ErrorCode.BAD_REQUEST, scope.name()
-                    + " calls tools, which run only on deepseek or kimi; openai-compatible suits the other text scopes");
+        if (!TEXT_PROVIDERS.contains(canonical)) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "Unknown text AI provider " + name + "; choose deepseek");
         }
+        // Retired with the plain OpenAI-compatible text option on 2026-10-29:
+        // if ("openai-compatible".equals(canonical) && TOOL_SCOPES.contains(scope)) {
+        //     throw new DomainException(ErrorCode.BAD_REQUEST, scope.name()
+        //             + " calls tools, which run only on deepseek or kimi; openai-compatible suits the other text scopes");
+        // }
         return canonical;
     }
 
@@ -374,21 +414,25 @@ public class AiModelConfigService implements AiModelConfigResolver {
                     || normalizedBaseUrl.contains("moonshot")
                     || normalizedBaseUrl.contains("kimi");
         }
-        if ("kimi".equals(normalizedProvider)) {
-            return normalizedModel.startsWith("deepseek-")
-                    || normalizedBaseUrl.contains("deepseek");
-        }
-        return !"openai-compatible".equals(normalizedProvider);
+        // Kimi, retired on 2026-10-29:
+        // if ("kimi".equals(normalizedProvider)) {
+        //     return normalizedModel.startsWith("deepseek-")
+        //             || normalizedBaseUrl.contains("deepseek");
+        // }
+        // A stored row on a retired provider is read as it is (saving one is refused); a call made with it fails
+        // as retired in the model client.
+        return !RETIRED_TEXT_PROVIDERS.contains(normalizedProvider);
     }
 
     private String normalizeTextBaseUrl(AiModelScope scope, String provider, String baseUrl) {
         String current = textOr(baseUrl, "");
-        if (isTextScope(scope) && "kimi".equals(provider)) {
-            String normalized = current.toLowerCase(Locale.ROOT);
-            if (normalized.isBlank() || normalized.contains("api.moonshot.ai")) {
-                return "https://api.moonshot.cn/v1/chat/completions";
-            }
-        }
+        // Kimi, retired on 2026-10-29:
+        // if (isTextScope(scope) && "kimi".equals(provider)) {
+        //     String normalized = current.toLowerCase(Locale.ROOT);
+        //     if (normalized.isBlank() || normalized.contains("api.moonshot.ai")) {
+        //         return "https://api.moonshot.cn/v1/chat/completions";
+        //     }
+        // }
         return current;
     }
 
@@ -462,9 +506,10 @@ public class AiModelConfigService implements AiModelConfigResolver {
         return value == null || value.isBlank() ? fallback : value.trim();
     }
 
+    /** DeepSeek takes low, high and max (2026-10-29); anything else is its default, high. */
     private String reasoningEffort(String value, String fallback) {
         String normalized = textOr(value, fallback == null ? "high" : fallback).toLowerCase(Locale.ROOT);
-        return "max".equals(normalized) ? "max" : "high";
+        return "low".equals(normalized) || "max".equals(normalized) ? normalized : "high";
     }
 
     private Double temperature(Double value, Double fallback) {

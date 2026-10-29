@@ -68,21 +68,22 @@ class ModelClientStreamContractTest {
         assertThat(listener.deltas).as("reasoning never reaches the listener").isEmpty();
     }
 
-    @Test
-    void kimiStreamAsksForUsageAndReadsItFromTheEmptyChoicesChunk() {
-        provider.reply(Reply.sse(ProviderPayloads.kimiToolStream()));
-        ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
-
-        ModelResponse response = stream(kimi, loopRequest(kimi, ToolChoice.AUTO), new Listener(), null);
-
-        JsonNode body = provider.onlyRequest().json();
-        assertThat(body.path("stream_options").path("include_usage").asBoolean(false)).isTrue();
-        assertThat(response.toolCalls()).extracting(ToolCall::name)
-                .containsExactly("problem.read", "context.search_exact");
-        assertThat(response.usage().promptTokens()).isEqualTo(1200);
-        assertThat(response.usage().completionTokens()).isEqualTo(80);
-        assertThat(response.usage().cacheHitTokens()).isEqualTo(1024);
-    }
+    // Kimi, retired on 2026-10-29:
+    // @Test
+    // void kimiStreamAsksForUsageAndReadsItFromTheEmptyChoicesChunk() {
+    //     provider.reply(Reply.sse(ProviderPayloads.kimiToolStream()));
+    //     ModelEndpointConfig kimi = endpoint(ProviderId.KIMI, provider.chatUrl(), "kimi-k3", true, "high");
+    //
+    //     ModelResponse response = stream(kimi, loopRequest(kimi, ToolChoice.AUTO), new Listener(), null);
+    //
+    //     JsonNode body = provider.onlyRequest().json();
+    //     assertThat(body.path("stream_options").path("include_usage").asBoolean(false)).isTrue();
+    //     assertThat(response.toolCalls()).extracting(ToolCall::name)
+    //             .containsExactly("problem.read", "context.search_exact");
+    //     assertThat(response.usage().promptTokens()).isEqualTo(1200);
+    //     assertThat(response.usage().completionTokens()).isEqualTo(80);
+    //     assertThat(response.usage().cacheHitTokens()).isEqualTo(1024);
+    // }
 
     @Test
     void textDeltasReachTheListenerInOrder() {

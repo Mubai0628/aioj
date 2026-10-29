@@ -6,7 +6,8 @@ import java.util.List;
  * Provider responses in the shapes the official docs give (checked 2026-10-23):
  * DeepSeek api-docs.deepseek.com (create-chat-completion, thinking_mode,
  * error_codes) and Kimi platform.kimi.com (api/chat, api/errors,
- * guide/use-thinking-models, guide/kimi-k3-quickstart).
+ * guide/use-thinking-models, guide/kimi-k3-quickstart). Kimi was retired on
+ * 2026-10-29; its samples are kept commented out below.
  *
  * <p>The two differ where it matters for parsing: DeepSeek reports cache hits
  * as {@code prompt_cache_hit_tokens} (and in {@code prompt_tokens_details}) and
@@ -62,29 +63,32 @@ final class ProviderPayloads {
                  "completion_tokens_details":{"reasoning_tokens":50}}""";
     }
 
-    static String kimiText(String content, String reasoning) {
-        return """
-                {"id":"kimi-1","object":"chat.completion","created":1761200000,"model":"kimi-k3",
-                 "choices":[{"index":0,"message":{"role":"assistant","content":%s,"reasoning_content":%s},
-                   "finish_reason":"stop"}],
-                 "usage":%s}
-                """.formatted(quote(content), quote(reasoning), kimiUsage());
-    }
+    // Kimi, retired on 2026-10-29:
+    // static String kimiText(String content, String reasoning) {
+    //     return """
+    //             {"id":"kimi-1","object":"chat.completion","created":1761200000,"model":"kimi-k3",
+    //              "choices":[{"index":0,"message":{"role":"assistant","content":%s,"reasoning_content":%s},
+    //                "finish_reason":"stop"}],
+    //              "usage":%s}
+    //             """.formatted(quote(content), quote(reasoning), kimiUsage());
+    // }
 
-    static String kimiToolCalls(String reasoning) {
-        return """
-                {"id":"kimi-2","object":"chat.completion","created":1761200001,"model":"kimi-k3",
-                 "choices":[{"index":0,"message":{"role":"assistant","content":"","reasoning_content":%s,
-                   "tool_calls":%s},"finish_reason":"tool_calls"}],
-                 "usage":%s}
-                """.formatted(quote(reasoning), toolCalls(), kimiUsage());
-    }
+    // Kimi, retired on 2026-10-29:
+    // static String kimiToolCalls(String reasoning) {
+    //     return """
+    //             {"id":"kimi-2","object":"chat.completion","created":1761200001,"model":"kimi-k3",
+    //              "choices":[{"index":0,"message":{"role":"assistant","content":"","reasoning_content":%s,
+    //                "tool_calls":%s},"finish_reason":"tool_calls"}],
+    //              "usage":%s}
+    //             """.formatted(quote(reasoning), toolCalls(), kimiUsage());
+    // }
 
-    static String kimiUsage() {
-        return """
-                {"prompt_tokens":1200,"completion_tokens":80,"total_tokens":1280,"cached_tokens":1024,
-                 "prompt_tokens_details":{"cached_tokens":1024,"cache_write_tokens":0}}""";
-    }
+    // Kimi, retired on 2026-10-29:
+    // static String kimiUsage() {
+    //     return """
+    //             {"prompt_tokens":1200,"completion_tokens":80,"total_tokens":1280,"cached_tokens":1024,
+    //              "prompt_tokens_details":{"cached_tokens":1024,"cache_write_tokens":0}}""";
+    // }
 
     /**
      * DeepSeek stream: reasoning deltas, then two tool calls whose arguments
@@ -111,20 +115,21 @@ final class ProviderPayloads {
                 chunk("ds-s2", "deepseek-v4-pro", "{\"content\":\"\"}", "stop", deepSeekUsage()));
     }
 
-    /** Kimi stream: same deltas, but the usage comes in an extra chunk with {@code choices: []}. */
-    static List<String> kimiToolStream() {
-        return List.of(
-                chunk("kimi-s1", "kimi-k3", "{\"role\":\"assistant\",\"reasoning_content\":\"Read the \"}", null, null),
-                chunk("kimi-s1", "kimi-k3", "{\"reasoning_content\":\"problem first.\"}", null, null),
-                chunk("kimi-s1", "kimi-k3", toolDelta(0, "call_1", "problem__read", ""), null, null),
-                chunk("kimi-s1", "kimi-k3", toolDelta(0, null, null, "{\\\"id\\\":"), null, null),
-                chunk("kimi-s1", "kimi-k3", toolDelta(0, null, null, "7}"), null, null),
-                chunk("kimi-s1", "kimi-k3", toolDelta(1, "call_2", "context__search_exact", "{\\\"query\\\":"), null, null),
-                chunk("kimi-s1", "kimi-k3", toolDelta(1, null, null, "\\\"dp\\\",\\\"limit\\\":3}"), null, null),
-                chunk("kimi-s1", "kimi-k3", "{}", "tool_calls", null),
-                oneLine("{\"id\":\"kimi-s1\",\"object\":\"chat.completion.chunk\",\"created\":1761200003,\"model\":\"kimi-k3\","
-                        + "\"choices\":[],\"usage\":" + kimiUsage() + "}"));
-    }
+    // Kimi, retired on 2026-10-29:
+    // /** Kimi stream: same deltas, but the usage comes in an extra chunk with {@code choices: []}. */
+    // static List<String> kimiToolStream() {
+    //     return List.of(
+    //             chunk("kimi-s1", "kimi-k3", "{\"role\":\"assistant\",\"reasoning_content\":\"Read the \"}", null, null),
+    //             chunk("kimi-s1", "kimi-k3", "{\"reasoning_content\":\"problem first.\"}", null, null),
+    //             chunk("kimi-s1", "kimi-k3", toolDelta(0, "call_1", "problem__read", ""), null, null),
+    //             chunk("kimi-s1", "kimi-k3", toolDelta(0, null, null, "{\\\"id\\\":"), null, null),
+    //             chunk("kimi-s1", "kimi-k3", toolDelta(0, null, null, "7}"), null, null),
+    //             chunk("kimi-s1", "kimi-k3", toolDelta(1, "call_2", "context__search_exact", "{\\\"query\\\":"), null, null),
+    //             chunk("kimi-s1", "kimi-k3", toolDelta(1, null, null, "\\\"dp\\\",\\\"limit\\\":3}"), null, null),
+    //             chunk("kimi-s1", "kimi-k3", "{}", "tool_calls", null),
+    //             oneLine("{\"id\":\"kimi-s1\",\"object\":\"chat.completion.chunk\",\"created\":1761200003,\"model\":\"kimi-k3\","
+    //                     + "\"choices\":[],\"usage\":" + kimiUsage() + "}"));
+    // }
 
     static String error(String type, String message) {
         return "{\"error\":{\"message\":\"" + message + " " + BODY_SENTINEL + "\",\"type\":\"" + type + "\",\"code\":null}}";

@@ -177,6 +177,10 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
         String exact = EXACT_KEYS.get(raw);
         if (exact != null) return exact;
         String lower = raw.toLowerCase(Locale.ROOT);
+        // Kimi and the plain OpenAI-compatible text option were retired on 2026-10-29.
+        if (lower.contains("was retired on 2026-10-29") || lower.startsWith("unknown text ai provider")) {
+            return "ai.providerUnsupported";
+        }
         if (lower.contains("request failed: 504") || lower.contains("gateway time-out") || lower.contains("timed out") || lower.contains("timeout")) {
             return "request.timeout";
         }
@@ -467,7 +471,7 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
             case "ai.providerUnavailable" -> "AI 模型服务暂不可用，请稍后重试。";
             case "ai.providerRejected" -> "AI 模型服务拒绝了请求，请检查模型配置和额度。";
             case "ai.rateLimited" -> "AI 模型请求过于频繁或额度不足，请稍后重试。";
-            case "ai.providerUnsupported" -> "文本 AI 只能选择 DeepSeek 或 Kimi。";
+            case "ai.providerUnsupported" -> "文本 AI 只能选择 DeepSeek（Kimi 已于 2026-10-29 停用）。";
             case "ai.providerModelMismatch" -> "所选 API 与模型或 Base URL 不匹配，请重新选择。";
             case "ai.keyActionUnsupported" -> "当前密钥操作不受支持，请使用服务器环境变量配置。";
             case "ai.temperatureRange" -> "Temperature 必须在 0 到 2 之间。";

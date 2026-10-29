@@ -16,12 +16,23 @@ class ModelCatalogTest {
     void derivesEachProvidersCatalogUrl() {
         assertThat(catalog.modelsUri(endpoint(ProviderId.DEEPSEEK, "https://api.deepseek.com/chat/completions")))
                 .hasToString("https://api.deepseek.com/models");
-        assertThat(catalog.modelsUri(endpoint(ProviderId.KIMI, "https://api.moonshot.cn/v1/chat/completions")))
-                .hasToString("https://api.moonshot.cn/v1/models");
+        // Kimi, retired on 2026-10-29:
+        // assertThat(catalog.modelsUri(endpoint(ProviderId.KIMI, "https://api.moonshot.cn/v1/chat/completions")))
+        //         .hasToString("https://api.moonshot.cn/v1/models");
         assertThat(catalog.modelsUri(endpoint(ProviderId.OPENAI_COMPATIBLE, "https://example.test/v1/chat/completions")))
                 .hasToString("https://example.test/v1/models");
         assertThat(catalog.modelsUri(endpoint(ProviderId.OPENAI_COMPATIBLE, "https://example.test/v1/embeddings")))
                 .hasToString("https://example.test/v1/models");
+    }
+
+    @Test
+    void aRetiredProviderHasNoCatalog() {
+        assertThatThrownBy(() -> catalog.modelsUri(endpoint(ProviderId.KIMI,
+                "https://api.moonshot.cn/v1/chat/completions")))
+                .isInstanceOfSatisfying(ModelException.class, error -> {
+                    assertThat(error.kind()).isEqualTo(ModelErrorKind.CONFIGURATION_INVALID);
+                    assertThat(error.getMessage()).isEqualTo("AI provider kimi was retired on 2026-10-29; use deepseek");
+                });
     }
 
     @Test

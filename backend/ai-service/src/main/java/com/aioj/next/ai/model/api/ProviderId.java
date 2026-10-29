@@ -9,6 +9,11 @@ import java.util.Locale;
  */
 public enum ProviderId {
     DEEPSEEK("deepseek"),
+    /**
+     * Kimi (Moonshot), retired on 2026-10-29: its adapter and settings are commented out and nothing
+     * calls it. The name stays so that stored configurations, call records and usage that name it
+     * still parse.
+     */
     KIMI("kimi"),
     /** Alibaba Cloud Model Studio, used for OpenAI-compatible embeddings. */
     DASHSCOPE("dashscope"),
@@ -37,5 +42,10 @@ public enum ProviderId {
             default -> throw new ModelException(ModelErrorKind.CONFIGURATION_INVALID, null, null,
                     "Unknown AI provider: " + (normalized.isEmpty() ? "(blank)" : normalized));
         };
+    }
+
+    /** A retired provider is kept for historical data only; a call that names it is a configuration error. */
+    public boolean retired() {
+        return this == KIMI;
     }
 }

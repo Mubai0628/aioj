@@ -25,8 +25,9 @@ import com.aioj.next.ai.model.provider.CallSettings;
 import com.aioj.next.ai.model.provider.ChatAdapter;
 import com.aioj.next.ai.model.provider.DeepSeekAdapter;
 import com.aioj.next.ai.model.provider.EmbeddingAdapter;
-import com.aioj.next.ai.model.provider.GenericOpenAiAdapter;
-import com.aioj.next.ai.model.provider.KimiAdapter;
+// Retired on 2026-10-29 with their registrations below.
+// import com.aioj.next.ai.model.provider.GenericOpenAiAdapter;
+// import com.aioj.next.ai.model.provider.KimiAdapter;
 import com.aioj.next.ai.model.provider.ModelCatalog;
 import com.aioj.next.ai.model.provider.StreamAccumulator;
 import com.aioj.next.ai.model.resilience.CircuitBreaker;
@@ -79,8 +80,10 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
         this.configSource = configSource;
         this.listeners = List.copyOf(listeners);
         chatAdapters.put(ProviderId.DEEPSEEK, new DeepSeekAdapter());
-        chatAdapters.put(ProviderId.KIMI, new KimiAdapter());
-        chatAdapters.put(ProviderId.OPENAI_COMPATIBLE, new GenericOpenAiAdapter());
+        // Kimi and the plain OpenAI-compatible text option were retired on 2026-10-29 (phase 1, batch 6). Their
+        // code is kept so they can come back; until then OPENAI_COMPATIBLE serves embeddings only.
+        // chatAdapters.put(ProviderId.KIMI, new KimiAdapter());
+        // chatAdapters.put(ProviderId.OPENAI_COMPATIBLE, new GenericOpenAiAdapter());
         this.transport = new HttpTransport(properties.getConnectTimeout());
         ModelClientProperties.Bulkhead bulkhead = properties.getBulkhead();
         this.bulkheads = new ScopeBulkheads(bulkhead::concurrencyFor, bulkhead.getMaxWaiting(), bulkhead.getMaxWait());
@@ -128,6 +131,7 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
         try {
             ModelEndpointConfig endpoint = request.endpoint() != null ? request.endpoint() : resolve(request.scope());
             call.endpoint = endpoint;
+            ensureNotRetired(endpoint);
             ensureUsable(endpoint);
             if (!capabilities(endpoint).embeddings()) {
                 throw new ModelException(ModelErrorKind.CAPABILITY_UNSUPPORTED, endpoint.provider(), endpoint.model(),
@@ -167,6 +171,7 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
             if (candidate == null || candidate.provider() == null) {
                 throw new ModelException(ModelErrorKind.CONFIGURATION_INVALID, null, null, "No AI provider was given");
             }
+            ensureNotRetired(candidate);
             if (!candidate.hasApiKey()) {
                 throw new ModelException(ModelErrorKind.CONFIGURATION_INVALID, candidate.provider(), candidate.model(),
                         "Server environment API key is not configured for this provider.");
@@ -203,6 +208,7 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
         try {
             ModelEndpointConfig endpoint = request.endpoint() != null ? request.endpoint() : resolve(request.scope());
             call.endpoint = endpoint;
+            ensureNotRetired(endpoint);
             ensureUsable(endpoint);
             ChatAdapter adapter = chatAdapters.get(endpoint.provider());
             if (adapter == null) {
@@ -320,6 +326,14 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
         if (stream && !capabilities.streaming()) {
             throw new ModelException(ModelErrorKind.CAPABILITY_UNSUPPORTED, endpoint.provider(), endpoint.model(),
                     subject + " cannot stream");
+        }
+    }
+
+    /** A stored configuration may still name a retired provider; say so instead of a missing key or adapter. */
+    private static void ensureNotRetired(ModelEndpointConfig endpoint) {
+        if (endpoint.provider().retired()) {
+            throw new ModelException(ModelErrorKind.CONFIGURATION_INVALID, endpoint.provider(), endpoint.model(),
+                    "AI provider " + endpoint.provider().configName() + " was retired on 2026-10-29; use deepseek");
         }
     }
 

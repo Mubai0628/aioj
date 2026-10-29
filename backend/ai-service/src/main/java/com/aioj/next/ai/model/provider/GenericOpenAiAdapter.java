@@ -10,6 +10,9 @@ import tools.jackson.databind.node.ObjectNode;
  * completions: the standard parameters, JSON object output and streaming. It calls no tools
  * and has no thinking controls, since those are switched on only for providers whose
  * behaviour has been verified (DeepSeek and Kimi).
+ *
+ * <p>Retired with Kimi on 2026-10-29 (phase 1, batch 6): text scopes use DeepSeek only, so
+ * {@code DefaultModelClient} no longer registers this adapter. It is kept so it can come back.
  */
 public final class GenericOpenAiAdapter extends OpenAiCompatibleAdapter {
 

@@ -23,7 +23,7 @@ type FormState = {
   model: string;
   jsonOutputEnabled: boolean;
   thinkingEnabled: boolean;
-  reasoningEffort: "high" | "max";
+  reasoningEffort: ReasoningEffort;
   temperature: string;
   maxTokens: string;
   embeddingDimension: string;
@@ -40,6 +40,15 @@ type FormState = {
 /** A switch that can also be left to the server default. */
 type TriState = "default" | "on" | "off";
 
+/** The effort levels DeepSeek documents (2026-10-29). */
+type ReasoningEffort = "low" | "high" | "max";
+
+/** Names DeepSeek has retired but still serves (2026-10-29); the page flags them. */
+const RETIRED_DEEPSEEK_MODELS = ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"];
+
+/** Kimi and the plain OpenAI-compatible text option were retired on 2026-10-29: shown when stored, never offered. */
+const RETIRED_TEXT_PROVIDERS = ["kimi", "openai-compatible"];
+
 type ModelCapability = Pick<AiModelOption, "supportsJsonOutput" | "supportsThinking" | "thinkingEffortModes" | "fixedTemperature" | "recommendedTemperature" | "contextLength" | "deprecated"> & {
   providerKind: "deepseek" | "kimi" | "compatible" | "embedding" | "custom";
 };
@@ -53,8 +62,9 @@ const CALL_SETTING_FIELDS = [
   { key: "maxRetries", min: 0, max: 5 }
 ] as const;
 
-/** Plan Q13: these scopes call tools, which run only on DeepSeek or Kimi. */
-const TOOL_SCOPES: AiModelConfigScope[] = ["TEXT_GENERATION", "PROBLEM_DRAFT"];
+// Plan Q13: these scopes call tools, which ran only on DeepSeek or Kimi. Retired with Kimi and the plain
+// OpenAI-compatible text option on 2026-10-29:
+// const TOOL_SCOPES: AiModelConfigScope[] = ["TEXT_GENERATION", "PROBLEM_DRAFT"];
 
 const SCOPES: AiModelConfigScope[] = ["TEXT_GENERATION", "MEMORY_EXTRACTION", "REPORT_ANALYSIS", "PROBLEM_DRAFT", "ACCOUNT_IMPORT_PARSE", "INTENT", "AGENT_CURATOR", "EMBEDDING"];
 
@@ -243,7 +253,7 @@ function ConfigSection({
   const showThinking = !isEmbedding && capability.supportsThinking;
   const showEffort = showThinking && form.thinkingEnabled && capability.thinkingEffortModes.length > 0;
   const showTemperature = !isEmbedding && !temperatureControlledByProvider(capability, form.thinkingEnabled);
-  const providerOptions = isEmbedding ? embeddingProviderOptions(t) : textProviderOptions(scope, t);
+  const providerOptions = isEmbedding ? embeddingProviderOptions(t) : textProviderOptions(providerOptionValue(providerKind), t);
   const currentApiKeyEnvName = isEmbedding ? (modelList?.apiKeyEnvName || config?.apiKeyEnvName || "") : apiKeyEnvNameFor(effectiveProviderKind);
   const currentApiKeyConfigured = inheritsText ? Boolean(config?.apiKeyConfigured) : apiKeyConfiguredForCurrentForm(config, modelList, currentApiKeyEnvName);
 
@@ -302,7 +312,7 @@ function ConfigSection({
               onChange={(event) => onChange(providerPatch(scope, event.target.value))}
             >
               {providerOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
               ))}
             </select>
           </Field>
@@ -317,6 +327,9 @@ function ConfigSection({
                 disabled={inheritsText}
                 onChange={(event) => onChange(modelPatch(scope, form, modelList, event.target.value))}
               >
+                {form.model && !modelList.models.some((model) => sameText(model.id, form.model)) ? (
+                  <option value={form.model}>{form.model} / {isRetiredDeepSeekModel(form.model) ? t("aiModelConfig.deprecated") : t("aiModelConfig.notInModelList")}</option>
+                ) : null}
                 {modelList.models.map((model) => (
                   <option key={model.id} value={model.id}>
                     {model.id}{model.contextLength ? ` / ${model.contextLength}` : ""}{model.deprecated ? ` / ${t("aiModelConfig.deprecated")}` : ""}
@@ -351,7 +364,7 @@ function ConfigSection({
           ) : null}
           {showEffort ? (
             <Field label={t("aiModelConfig.reasoningEffort")}>
-              <select className={selectClass} value={form.reasoningEffort} disabled={inheritsText} onChange={(event) => onChange({ reasoningEffort: event.target.value as "high" | "max" })}>
+              <select className={selectClass} value={form.reasoningEffort} disabled={inheritsText} onChange={(event) => onChange({ reasoningEffort: event.target.value as ReasoningEffort })}>
                 {capability.thinkingEffortModes.map((mode) => (
                   <option key={mode} value={mode}>{mode}</option>
                 ))}
@@ -492,7 +505,7 @@ function formFromConfig(config: AiModelConfigResponse): FormState {
     model: config.model || "",
     jsonOutputEnabled: config.jsonOutputEnabled,
     thinkingEnabled: config.thinkingEnabled,
-    reasoningEffort: config.reasoningEffort === "max" ? "max" : "high",
+    reasoningEffort: config.reasoningEffort === "max" || config.reasoningEffort === "low" ? config.reasoningEffort : "high",
     temperature: config.temperature == null ? "" : String(config.temperature),
     maxTokens: config.maxTokens == null ? "" : String(config.maxTokens),
     embeddingDimension: config.embeddingDimension == null ? "" : String(config.embeddingDimension),
@@ -557,19 +570,20 @@ function providerPatch(scope: AiModelConfigScope, value: string): Partial<FormSt
       reasoningEffort: "high"
     };
   }
-  if (value === "kimi") {
-    return {
-      provider: "kimi",
-      baseUrl: "https://api.moonshot.cn/v1/chat/completions",
-      model: "kimi-k2.6",
-      jsonOutputEnabled: true,
-      thinkingEnabled: false,
-      reasoningEffort: "high"
-    };
-  }
-  if (value === "openai-compatible") {
-    return { provider: "openai-compatible", baseUrl: "", model: "", jsonOutputEnabled: true, thinkingEnabled: false, reasoningEffort: "high" };
-  }
+  // Kimi and the plain OpenAI-compatible text option, retired on 2026-10-29:
+  // if (value === "kimi") {
+  //   return {
+  //     provider: "kimi",
+  //     baseUrl: "https://api.moonshot.cn/v1/chat/completions",
+  //     model: "kimi-k2.6",
+  //     jsonOutputEnabled: true,
+  //     thinkingEnabled: false,
+  //     reasoningEffort: "high"
+  //   };
+  // }
+  // if (value === "openai-compatible") {
+  //   return { provider: "openai-compatible", baseUrl: "", model: "", jsonOutputEnabled: true, thinkingEnabled: false, reasoningEffort: "high" };
+  // }
   return providerPatch(scope, "deepseek");
 }
 
@@ -603,33 +617,35 @@ function capabilityFor(scope: AiModelConfigScope, form: FormState, option?: AiMo
     };
   }
   if (providerKind === "deepseek") {
+    // Since 2026-10-29 every DeepSeek model counts as thinking-capable, as on the server.
     const model = form.model.trim().toLowerCase();
-    const supportsThinking = model.startsWith("deepseek-v4-") || model === "deepseek-chat" || model === "deepseek-reasoner";
+    const supportsThinking = model.startsWith("deepseek");
     return {
       providerKind,
       supportsJsonOutput: true,
       supportsThinking,
-      thinkingEffortModes: supportsThinking ? ["high", "max"] : [],
+      thinkingEffortModes: supportsThinking ? ["low", "high", "max"] : [],
       fixedTemperature: null,
       recommendedTemperature: null,
       contextLength: null,
-      deprecated: model === "deepseek-chat" || model === "deepseek-reasoner"
+      deprecated: isRetiredDeepSeekModel(model)
     };
   }
-  if (providerKind === "kimi") {
-    const model = form.model.trim().toLowerCase();
-    const supportsThinking = model.startsWith("kimi-k2.5") || model.startsWith("kimi-k2.6") || model.startsWith("kimi-k3");
-    return {
-      providerKind: "kimi",
-      supportsJsonOutput: true,
-      supportsThinking,
-      thinkingEffortModes: [],
-      fixedTemperature: null,
-      recommendedTemperature: supportsThinking ? 0.6 : null,
-      contextLength: null,
-      deprecated: false
-    };
-  }
+  // Kimi, retired on 2026-10-29:
+  // if (providerKind === "kimi") {
+  //   const model = form.model.trim().toLowerCase();
+  //   const supportsThinking = model.startsWith("kimi-k2.5") || model.startsWith("kimi-k2.6") || model.startsWith("kimi-k3");
+  //   return {
+  //     providerKind: "kimi",
+  //     supportsJsonOutput: true,
+  //     supportsThinking,
+  //     thinkingEffortModes: [],
+  //     fixedTemperature: null,
+  //     recommendedTemperature: supportsThinking ? 0.6 : null,
+  //     contextLength: null,
+  //     deprecated: false
+  //   };
+  // }
   if (providerKind === "compatible") {
     return { ...emptyCapability("compatible"), supportsJsonOutput: true };
   }
@@ -650,17 +666,18 @@ function emptyCapability(providerKind: ModelCapability["providerKind"]): ModelCa
 }
 
 function temperatureControlledByProvider(capability: ModelCapability, thinkingEnabled: boolean) {
-  return (capability.providerKind === "deepseek" && capability.supportsThinking && thinkingEnabled)
-    || (capability.providerKind === "kimi" && capability.supportsThinking);
+  return capability.providerKind === "deepseek" && capability.supportsThinking && thinkingEnabled;
+  // Kimi, retired on 2026-10-29: || (capability.providerKind === "kimi" && capability.supportsThinking);
 }
 
 function temperatureHint(capability: ModelCapability, thinkingEnabled: boolean, t: (key: string, params?: Record<string, string | number>, fallback?: string) => string) {
   if (capability.providerKind === "deepseek") {
     return t("aiModelConfig.temperatureDeepSeekThinking");
   }
-  if (capability.providerKind === "kimi") {
-    return t("aiModelConfig.temperatureKimiThinking", { value: thinkingEnabled ? "1.0" : "0.6" });
-  }
+  // Kimi, retired on 2026-10-29:
+  // if (capability.providerKind === "kimi") {
+  //   return t("aiModelConfig.temperatureKimiThinking", { value: thinkingEnabled ? "1.0" : "0.6" });
+  // }
   return t("aiModelConfig.temperatureProviderControlled");
 }
 
@@ -684,22 +701,34 @@ function providerKindFor(provider: string, embedding: boolean): ModelCapability[
 
 function providerOptionValue(providerKind: ModelCapability["providerKind"]) {
   if (providerKind === "deepseek") return "deepseek";
+  // Retired on 2026-10-29, still recognized so a stored row shows what it names:
   if (providerKind === "kimi") return "kimi";
   if (providerKind === "compatible") return "openai-compatible";
   return "deepseek";
 }
 
-function textProviderOptions(scope: AiModelConfigScope, t: (key: string, params?: Record<string, string | number>, fallback?: string) => string) {
-  const options = [
-    { value: "deepseek", label: t("aiModelConfig.providerDeepSeek") },
-    { value: "kimi", label: t("aiModelConfig.providerKimi") }
+type ProviderOption = { value: string; label: string; disabled?: boolean };
+
+/** DeepSeek only since 2026-10-29; a stored retired provider is still shown, but cannot be chosen again. */
+function textProviderOptions(current: string, t: (key: string, params?: Record<string, string | number>, fallback?: string) => string) {
+  const options: ProviderOption[] = [
+    { value: "deepseek", label: t("aiModelConfig.providerDeepSeek") }
+    // Retired on 2026-10-29:
+    // { value: "kimi", label: t("aiModelConfig.providerKimi") },
+    // { value: "openai-compatible", label: t("aiModelConfig.providerOpenAiCompatible") } (scopes outside TOOL_SCOPES)
   ];
-  return TOOL_SCOPES.includes(scope)
-    ? options
-    : [...options, { value: "openai-compatible", label: t("aiModelConfig.providerOpenAiCompatible") }];
+  if (RETIRED_TEXT_PROVIDERS.includes(current)) {
+    const name = current === "kimi" ? t("aiModelConfig.providerKimi") : t("aiModelConfig.providerOpenAiCompatible");
+    options.push({ value: current, label: t("aiModelConfig.providerRetired", { name }), disabled: true });
+  }
+  return options;
 }
 
-function embeddingProviderOptions(t: (key: string, params?: Record<string, string | number>, fallback?: string) => string) {
+function isRetiredDeepSeekModel(model: string) {
+  return RETIRED_DEEPSEEK_MODELS.includes(model.trim().toLowerCase());
+}
+
+function embeddingProviderOptions(t: (key: string, params?: Record<string, string | number>, fallback?: string) => string): ProviderOption[] {
   return [
     { value: "dashscope", label: t("aiModelConfig.providerDashScope") },
     { value: "openai-compatible", label: t("aiModelConfig.providerCustom") }
@@ -778,9 +807,10 @@ function sameText(left: string, right: string) {
 }
 
 function apiKeyEnvNameFor(providerKind: ModelCapability["providerKind"]) {
-  if (providerKind === "kimi") return "KIMI_API_KEY";
+  // Retired on 2026-10-29; the server no longer reads their keys for text:
+  // if (providerKind === "kimi") return "KIMI_API_KEY";
+  // if (providerKind === "compatible") return "OPENAI_COMPATIBLE_API_KEY";
   if (providerKind === "deepseek") return "DEEPSEEK_API_KEY";
-  if (providerKind === "compatible") return "OPENAI_COMPATIBLE_API_KEY";
   return "";
 }
 
@@ -810,9 +840,10 @@ function canonicalEmbeddingProvider(provider: string) {
 }
 
 function normalizedTextBaseUrl(provider: string, baseUrl: string) {
-  if (provider === "kimi" && (!baseUrl.trim() || baseUrl.toLowerCase().includes("api.moonshot.ai"))) {
-    return "https://api.moonshot.cn/v1/chat/completions";
-  }
+  // Kimi, retired on 2026-10-29:
+  // if (provider === "kimi" && (!baseUrl.trim() || baseUrl.toLowerCase().includes("api.moonshot.ai"))) {
+  //   return "https://api.moonshot.cn/v1/chat/completions";
+  // }
   return baseUrl;
 }
 
