@@ -70,6 +70,7 @@ export function CodeRunPanel({
   const [result, setResult] = React.useState<CodeRunResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const lastClickRef = React.useRef(0);
+  const outcomeRef = React.useRef<HTMLDivElement | null>(null);
 
   const limitsQuery = useQuery({
     queryKey: ["code-run-limits"],
@@ -106,6 +107,11 @@ export function CodeRunPanel({
     }
   });
 
+  // The panel may scroll on wide screens: bring a new result or error into its view.
+  React.useEffect(() => {
+    if (result || error) outcomeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [result, error]);
+
   const canRun = !disabled && !switchedOff && Boolean(code.trim()) && !tooLarge && !runMutation.isPending
     && (mode === "CUSTOM" || samplesCount > 0);
 
@@ -117,8 +123,9 @@ export function CodeRunPanel({
   }
 
   return (
-    <section className="mt-3 shrink-0 rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)]" aria-label={t("codeRun.title")}>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+    // On wide screens the editor pane has a fixed height: the panel scrolls inside its share so the editor keeps the rest.
+    <section className="mt-3 shrink-0 rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] xl:max-h-[45%] xl:overflow-y-auto" aria-label={t("codeRun.title")}>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-xl px-3 py-2 xl:sticky xl:top-0 xl:z-10 xl:bg-[var(--oj-surface-muted)]">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h3 className="text-sm font-semibold text-[var(--oj-ink)]">{t("codeRun.title")}</h3>
           <div className="flex rounded-lg border border-[var(--oj-border)] bg-white p-0.5" role="tablist" aria-label={t("codeRun.modeLabel")}>
@@ -197,8 +204,10 @@ export function CodeRunPanel({
           {switchedOff ? t("codeRun.switchedOff") : t("codeRun.notCounted")}
           {limits && !switchedOff ? ` ${t("codeRun.limits", { perMinute: limits.perMinuteLimit, perDay: limits.perDayLimit })}` : ""}
         </p>
-        {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">{error}</p> : null}
-        {result ? <CodeRunResult result={result} onClose={() => setResult(null)} /> : null}
+        <div ref={outcomeRef} className="space-y-2 empty:hidden">
+          {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">{error}</p> : null}
+          {result ? <CodeRunResult result={result} onClose={() => setResult(null)} /> : null}
+        </div>
       </div>
     </section>
   );
@@ -225,7 +234,7 @@ function CodeRunResult({ result, onClose }: { result: CodeRunResponse; onClose: 
           <X className="size-4" aria-hidden="true" />
         </button>
       </div>
-      <div className="max-h-72 space-y-2 overflow-y-auto p-3">
+      <div className="max-h-72 space-y-2 overflow-y-auto p-3 xl:max-h-none xl:overflow-visible">
         {result.compileOutput ? (
           <div>
             <p className="mb-1 text-xs font-medium text-[var(--oj-ink)]">{t("codeRun.compileOutput")}</p>
