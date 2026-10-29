@@ -48,6 +48,16 @@ class GlobalExceptionHandlerTest {
     private MockMvc mockMvc;
 
     @Test
+    void unexposed_resource_is_not_found_without_leaking_its_path() throws Exception {
+        mockMvc.perform(get("/actuator/not-exposed"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(ErrorCode.NOT_FOUND.code()))
+                .andExpect(jsonPath("$.errorKey").isNotEmpty())
+                .andExpect(jsonPath("$.message", not(stringContainsInOrder("actuator"))))
+                .andExpect(jsonPath("$.details").value(nullValue()));
+    }
+
+    @Test
     void domain_exception_maps_status_and_code() throws Exception {
         mockMvc.perform(get("/test/domain"))
                 .andExpect(status().isConflict())

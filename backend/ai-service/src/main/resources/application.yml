@@ -153,11 +153,29 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
+        agent:
+          include: agentHarness,modelProviders,agentExecutor,agentChannel,problemService
+          show-components: always
+          show-details: when_authorized
+          roles: ADMIN,TEACHER
+          status:
+            order: down,out-of-service,degraded,up,unknown
+            http-mapping:
+              down: 503
+              out-of-service: 503
+              degraded: 200
       # T1.6: agentHarness reports DEGRADED when a scenario lacks a required tool. It ranks below
       # UP, so the overall status (and the compose healthcheck) stays UP, and answers HTTP 200.
       status:
         order: down,out-of-service,up,degraded,unknown
         http-mapping:
+          down: 503
+          out-of-service: 503
           degraded: 200
 
 springdoc:

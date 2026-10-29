@@ -34,6 +34,13 @@ public class ChannelMetrics {
     private final MeterRegistry registry;
     private final Map<String, Snapshot> latest = new ConcurrentHashMap<>();
     private final Set<String> registered = ConcurrentHashMap.newKeySet();
+    private volatile HealthSnapshot healthSnapshot = new HealthSnapshot(0, 0, null, false);
+
+    public record HealthSnapshot(long backlog, long deadLetters, java.time.Instant sampledAt, boolean available) { }
+
+    public HealthSnapshot healthSnapshot() {
+        return healthSnapshot;
+    }
 
     public ChannelMetrics(AgentAsyncJobService jobService, HarnessEventChannel channel,
                           ObjectProvider<MeterRegistry> registry) {
@@ -54,7 +61,9 @@ public class ChannelMetrics {
         try {
             refresh(LocalDateTime.now());
         } catch (RuntimeException ex) {
-            log.warn("AI channel metrics refresh failed: {}", ex.toString());
+            HealthSnapshot previous = healthSnapshot;
+            healthSnapshot = new HealthSnapshot(previous.backlog(), previous.deadLetters(), previous.sampledAt(), false);
+            log.warn("AI channel metrics refresh failed: {}", ex.getClass().getSimpleName());
         }
     }
 
@@ -92,6 +101,14 @@ public class ChannelMetrics {
             latest.put(consumer, new Snapshot(byStatus[0], byStatus[1], byStatus[2], wait));
             register(consumer);
         }
+        long backlog = 0;
+        long deadLetters = 0;
+        for (long[] values : counts.values()) {
+            backlog += values[0] + values[1];
+            deadLetters += values[2];
+        }
+        healthSnapshot = new HealthSnapshot(backlog, deadLetters,
+                now.atZone(java.time.ZoneId.systemDefault()).toInstant(), true);
     }
 
     Snapshot snapshot(String consumer) {

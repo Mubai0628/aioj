@@ -124,12 +124,16 @@ class ModelClientResilienceTest {
                         assertThat(error.getMessage()).contains("temporarily unavailable");
                     });
             assertThat(provider.requests()).hasSize(3);
+            assertThat(client.textCircuitStates()).isNotEmpty().allSatisfy((scope, state) ->
+                    assertThat(state).isEqualTo("OPEN"));
+            assertThat(client.textCircuitStates().toString()).doesNotContain("http://", "https://");
 
             Thread.sleep(350);
             provider.reply(Reply.json(200, ProviderPayloads.deepSeekText("probe", null)));
             provider.reply(Reply.json(200, ProviderPayloads.deepSeekText("closed", null)));
             assertThat(call(client, deepSeek).content()).isEqualTo("probe");
             assertThat(call(client, deepSeek).content()).isEqualTo("closed");
+            assertThat(client.textCircuitStates().values()).containsOnly("CLOSED");
         }
         assertThat(provider.requests()).hasSize(5);
     }

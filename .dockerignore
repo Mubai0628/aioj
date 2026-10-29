@@ -4,6 +4,11 @@
 .playwright-mcp
 .codex-smoke-logs
 
+# Local-only operational context and design notes are never build inputs.
+scripts/local
+AGENTS.md
+docs/*.md
+
 node_modules
 **/node_modules
 dist

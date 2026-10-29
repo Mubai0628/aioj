@@ -71,6 +71,7 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
     private final HttpTransport transport;
     private final ScopeBulkheads bulkheads;
     private final CircuitBreakers breakers;
+    private final Map<String, CircuitBreaker> textScopeCircuits = new java.util.concurrent.ConcurrentHashMap<>();
     private final RetryPolicy retryPolicy;
     private final Duration firstByteTimeout;
     private final Duration totalTimeout;
@@ -95,6 +96,13 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
                 retry.getMaxRetryAfter(), () -> ThreadLocalRandom.current().nextDouble());
         this.firstByteTimeout = properties.getFirstByteTimeout();
         this.totalTimeout = properties.getTotalTimeout();
+    }
+
+    @Override
+    public Map<String, String> textCircuitStates() {
+        Map<String, String> states = new java.util.TreeMap<>();
+        textScopeCircuits.forEach((scope, circuit) -> states.put(scope, circuit.state().name()));
+        return Map.copyOf(states);
     }
 
     @Override
@@ -279,6 +287,9 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
     private <T> T withRetries(Call call, ModelEndpointConfig endpoint, Attempt<T> attempt) {
         CircuitBreaker breaker = breakers.forEndpoint(endpoint.provider().configName() + " "
                 + String.valueOf(endpoint.baseUrl()).trim());
+        if (call.scope != null && (call.operation == ModelOperation.COMPLETE || call.operation == ModelOperation.STREAM)) {
+            textScopeCircuits.put(call.scope, breaker);
+        }
         while (true) {
             throwIfCancelledOrLate(call.options, endpoint);
             if (!breaker.tryPass()) {

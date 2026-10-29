@@ -10,6 +10,11 @@ import java.util.List;
  */
 public interface ModelClient {
 
+    /** Passive text-scope circuit states only: no endpoint, credential, prompt, or provider call. */
+    default java.util.Map<String, String> textCircuitStates() {
+        return java.util.Map.of();
+    }
+
     /**
      * The endpoint a scope is configured with. A caller that makes several calls in
      * one run (the Agent loop) resolves once and puts the result on each request, so

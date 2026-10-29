@@ -50,7 +50,7 @@ published_port() {
 gateway_port=$(published_port gateway-service 8101)
 web_user_port=$(published_port web-user 80)
 web_admin_port=$(published_port web-admin 80)
-curl -fsS --max-time 10 "http://127.0.0.1:$gateway_port/actuator/health" | grep -q '"status":"UP"'
+curl -fsS --max-time 10 "http://127.0.0.1:$gateway_port/actuator/health/readiness" | grep -q '"status":"UP"'
 curl -fsS --max-time 10 "http://127.0.0.1:$web_user_port/" >/dev/null
 curl -fsS --max-time 10 "http://127.0.0.1:$web_admin_port/" >/dev/null
 

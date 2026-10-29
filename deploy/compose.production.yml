@@ -110,7 +110,7 @@ services:
     networks: [app-net]
     healthcheck:
       <<: *backend-health
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8201/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8201/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]
     mem_limit: 512m
     cpus: "4.00"
     logging: *bounded-logging
@@ -172,7 +172,7 @@ services:
     networks: [app-net]
     healthcheck:
       <<: *backend-health
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8202/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8202/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]
     mem_limit: 1024m
     cpus: "1.25"
     logging: *bounded-logging
@@ -248,7 +248,7 @@ services:
     networks: [app-net, judge-net]
     healthcheck:
       <<: *backend-health
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8203/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8203/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]
     mem_limit: 512m
     cpus: "0.75"
     logging: *bounded-logging
@@ -311,7 +311,7 @@ services:
     networks: [app-net, agent-sandbox-net]
     healthcheck:
       <<: *backend-health
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8205/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8205/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]
     logging: *bounded-logging
     mem_limit: 256m
     cpus: "0.25"
@@ -387,7 +387,7 @@ services:
     networks: [app-net]
     healthcheck:
       <<: *backend-health
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8204/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8204/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]
     mem_limit: 768m
     cpus: "0.75"
     logging: *bounded-logging
@@ -419,7 +419,7 @@ services:
     networks: [app-net]
     healthcheck:
       <<: *backend-health
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8101/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8101/actuator/health/readiness | grep -q '\"status\":\"UP\"'"]
     mem_limit: 384m
     cpus: "0.50"
     logging: *bounded-logging

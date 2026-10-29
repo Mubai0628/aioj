@@ -20,6 +20,14 @@ Internal HTTP clients are created by the common-lib factory, using the direction
 
 The factory uses JDK HttpClient with explicit connect/read timeouts, overridable per client under `aioj.internal.http.clients.<name>`. Circuit breakers and immediately rejecting, non-queuing bulkheads are shared per target. Defaults trip at a 50% failure rate over 20 calls or 3 consecutive failures, then permit only one probe after 30 seconds. Only GET retries once on network failure, timeout, or 502/503/504, with short jitter and a shared bounded attempt budget; POST never retries. Strict contest context still fails closed, while optional context keeps its existing fallbacks. Remote context, model, and executor work are separated from short DB transactions. Judged events wait until the transaction has fully returned, and notification failure cannot change a committed result. HTTP inside a DB transaction warns and counts in production and errors in tests. Connection pools cover short DB stages rather than remote-waiting threads; the Harness DB quota continues to reserve capacity for non-Agent requests.
 
+## Health levels
+
+- `/actuator/health/liveness` checks only process liveness, never databases, caches, queues, or the Agent.
+- `/actuator/health/readiness` includes readiness state and only the service's non-degradable local dependencies. Compose and deployment gates use it. Auth/AI require DB; problem/judge-worker require DB and RabbitMQ; gateway/agent-executor have no local DB/MQ. Health checks do not tighten Redis limiters/caches that already fail open or fall back.
+- AI's `/actuator/health/agent` groups the Harness, text-model circuits, executor, data channel, and problem-service. An individual failure is visible as `DEGRADED` / HTTP 200 without changing overall status or readiness. Component status is visible; details require an authenticated teacher/admin.
+
+Model and problem-service checks passively observe existing circuits, not verified connectivity. A short executor readiness probe runs every 10 seconds and executes no code. The channel reads existing scheduled count snapshots only; backlog/dead-letter and staleness thresholds are configurable under `aioj.ai.health`. No health check calls a model. Unexposed MVC resources use the existing error envelope with 404 and do not echo internal resource paths.
+
 ## Components
 
 | Component | Responsibility |

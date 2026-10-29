@@ -34,6 +34,11 @@ class AgentExecutorApplicationTest {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("UP");
+        for (String group : java.util.List.of("liveness", "readiness")) {
+            var grouped = send(HttpRequest.newBuilder(uri("/actuator/health/" + group)).GET());
+            assertThat(grouped.statusCode()).as(group).isEqualTo(200);
+            assertThat(grouped.body()).contains("UP");
+        }
     }
 
     @Test

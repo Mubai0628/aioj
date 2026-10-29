@@ -20,6 +20,14 @@ RabbitMQ -> judge-worker -> go-judge Sandbox
 
 工厂使用 JDK HttpClient 与显式连接/读取超时；每客户端可通过 `aioj.internal.http.clients.<名称>` 覆盖。熔断和立即失败、不排队的舱壁按目标服务共享，默认满窗 20 次、50% 失败率或连续 3 次故障后打开，30 秒后仅放一个探测。只有 GET 在网络失败、超时或 502/503/504 时短抖动重试一次，两个尝试共享有界预算；POST 从不重试。比赛严格上下文在故障时仍拒答，可选上下文仍按原路径降级。远程上下文、模型及执行器工作与 DB 短事务分阶段；判题事件等待事务完全返回后才推送，推送失败不能改变已提交结果。事务内 HTTP 在生产警告并计数，在测试中报错。应用连接池按短 DB 阶段而非远程等待线程数配置，Harness DB 配额继续为非 Agent 请求保留连接。
 
+## 健康分级
+
+- `/actuator/health/liveness` 只有进程活性，不依赖数据库、缓存、队列或 Agent。
+- `/actuator/health/readiness` 只有就绪状态和该服务不可降级的本地依赖；Compose 和部署门禁使用它。auth、ai 需要 DB；problem、judge-worker 需要 DB/RabbitMQ；gateway、agent-executor 无本地 DB/MQ。Redis 限流/缓存现有的失败放行或回退行为不被健康检查收紧。
+- ai-service 的 `/actuator/health/agent` 汇总 Harness、文本模型熔断、执行器、数据通道和 problem-service；任一项降级可见为 `DEGRADED` / HTTP 200，但不改变总状态或 readiness。组件状态可见，细节只给已认证的教师/管理员。
+
+模型和 problem-service 项只观察现有熔断状态，不代表已验证连通；执行器每 10 秒以短超时探测 readiness，不执行代码。数据通道只读现有定时统计快照，积压/死信和快照过期阈值可通过 `aioj.ai.health` 配置。所有健康项都不发模型请求。未暴露的 MVC 资源用现有错误包装返回 404，不回显内部资源路径。
+
 ## 组件
 
 | 组件 | 职责 |

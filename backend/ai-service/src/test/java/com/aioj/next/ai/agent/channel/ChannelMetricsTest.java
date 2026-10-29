@@ -43,6 +43,9 @@ class ChannelMetricsTest {
         assertThat(gauge("aioj.ai.channel.backlog", "EMBED_DIGEST")).isZero();
         // A consumer with nothing queued still reports, so an alert has a series to watch.
         assertThat(gauge("aioj.ai.channel.backlog", "PROFILE_AGGREGATE")).isZero();
+        assertThat(metrics.healthSnapshot().available()).isTrue();
+        assertThat(metrics.healthSnapshot().backlog()).isEqualTo(4);
+        assertThat(metrics.healthSnapshot().deadLetters()).isEqualTo(6);
     }
 
     @Test
@@ -55,9 +58,11 @@ class ChannelMetricsTest {
 
         metrics.refresh(NOW);
         assertThat(gauge("aioj.ai.channel.backlog", "TURN_CURATE")).isEqualTo(3);
+        assertThat(metrics.healthSnapshot().backlog()).isEqualTo(3);
         metrics.refresh(NOW.plusMinutes(1));
         assertThat(gauge("aioj.ai.channel.backlog", "TURN_CURATE")).isZero();
         assertThat(gauge("aioj.ai.channel.oldest.wait.seconds", "TURN_CURATE")).isZero();
+        assertThat(metrics.healthSnapshot().backlog()).isZero();
     }
 
     @Test
@@ -72,6 +77,8 @@ class ChannelMetricsTest {
         metrics.refresh();
 
         assertThat(gauge("aioj.ai.channel.dead.letters", "TURN_CURATE")).isEqualTo(1);
+        assertThat(metrics.healthSnapshot().available()).isFalse();
+        assertThat(metrics.healthSnapshot().deadLetters()).isEqualTo(1);
     }
 
     private ChannelMetrics metrics() {
