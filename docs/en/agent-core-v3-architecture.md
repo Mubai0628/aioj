@@ -60,7 +60,7 @@ Tool results use structured data with trusted provenance. Web content, statement
 
 ### Tutor code tools
 
-The tutor scenario has three code tools: `code.compile_check`, `code.run_samples`, and `code.run_custom`. The code comes only from the turn's selected code or the student's own submission, never from model-supplied source; execution goes through agent-executor into agent-sandbox, and compile results are cached per caller. Results use the shared execution feedback: verdict, time, memory, process peak, the first difference from the expected output, and compile diagnostics or a stderr summary. Contest-restricted turns never see these tools.
+The tutor scenario has three code tools: `code.compile_check`, `code.run_samples`, and `code.run_custom`. The code comes only from the turn's selected code, the code the problem page's editor sends with the turn, or the student's own submission; the server binds it and the model only names the source, never supplying code itself; execution goes through agent-executor into agent-sandbox, and compile results are cached per caller. Results use the shared execution feedback: verdict, time, memory, process peak, the first difference from the expected output, and compile diagnostics or a stderr summary. Contest-restricted turns never see these tools.
 
 ### AI problem-draft scenario
 

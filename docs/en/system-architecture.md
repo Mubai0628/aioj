@@ -8,7 +8,7 @@
 Browser -> web-user / web-admin -> gateway
                                   |-> auth-service -> MySQL
                                   |-> problem-service -> MySQL / Redis / RabbitMQ
-                                  `-> ai-service -> model call package -> compatible provider
+                                  `-> ai-service -> model call package -> DeepSeek / embeddings
                                          `-> agent-executor -> agent-sandbox
 
 RabbitMQ -> judge-worker -> go-judge Sandbox
@@ -25,11 +25,11 @@ Browsers access only `/api/v1/**` through the gateway. Cross-service contracts a
 | problem-service | problems, testcases, contests, submissions, notifications, and asynchronous jobs |
 | judge-worker | consumes RabbitMQ judge messages and calls Sandbox; never executes code itself |
 | ai-service | agent runtime, model call package, unified data channel, conversations, memory, drafts, plagiarism review, and postmortems |
-| agent-executor | the only entry for Agent tool execution: compiles, runs, generators, and packages; calls only agent-sandbox |
+| agent-executor | the only execution entry for Agent tools and the problem page's self-test run: compiles, runs, generators, and packages; calls only agent-sandbox |
 | web-user / web-admin | student and administration React SPAs |
 | MySQL / Redis / RabbitMQ | authoritative business data, cache/short-lived state, and judge queue |
 | go-judge Sandbox | privileged runtime for isolated execution of untrusted code; formal judging only |
-| agent-sandbox | go-judge instance dedicated to Agent tools, called only by agent-executor |
+| agent-sandbox | go-judge instance dedicated to Agent tools and self-test runs, called only by agent-executor |
 
 `backend/agent-harness` is the domain-neutral library for the Agent loop, the tool pipeline, and context assembly; ai-service builds the tutor and AI problem-draft scenarios on it. `backend/sandbox-client` holds the go-judge protocol, language configuration, and output comparison shared by judging and the Agent.
 
@@ -47,11 +47,15 @@ problem-service persists a submission and publishes a RabbitMQ job. judge-worker
 
 ai-service calculates permission and policy on the server, builds minimal context, invokes the provider and authorized tools, and persists usage and audit evidence. AI accesses problem-service through minimal service contracts rather than reading another service's database tables.
 
-Every model call goes through the model call package inside ai-service, which owns timeouts, retries, circuit breaking, and one observation record per call; architecture tests forbid any other path. Student chat returns an event stream through `/ai/chat/stream`; text deltas and tool progress are described in the [Agent Core V3 architecture](agent-core-v3-architecture.md).
+Every model call goes through the model call package inside ai-service, which owns timeouts, retries, circuit breaking, and one observation record per call; architecture tests forbid any other path. Text models are DeepSeek only: Kimi and the plain OpenAI-compatible text option were retired on 2026-10-29, and a stored configuration that names one still shows but can no longer be saved or used for a call. Embeddings use DashScope or a custom OpenAI-compatible endpoint. Student chat returns an event stream through `/ai/chat/stream`; text deltas and tool progress are described in the [Agent Core V3 architecture](agent-core-v3-architecture.md).
 
 Work after a turn goes through the unified data channel: digest curation, embedding, learning-profile aggregation, judged-submission analysis, and memory merge review are its subscribers. An event and one job per subscriber are written in the same transaction; a failed job retries with backoff and moves to the dead-letter state once its attempts are spent, and an administrator can replay it per subscriber.
 
 AI problem drafting follows `ProblemDraftAgentCoordinator → AgentRuntime → agent-harness loop`. ai-service sends code, sample, generator, and package execution through a protected internal API to agent-executor, which calls agent-sandbox; ai-service never accesses Docker or a sandbox directly, and the judge Sandbox serves formal judging only. After human approval, a recoverable import saga commits the problem content and a `READY` package through problem-service. See [AI problem-draft Agent architecture](problem-draft-agent-architecture.md).
+
+### Self-test runs
+
+The Run button beside the problem page's editor sends the code to ai-service (`/api/v1/ai/code-runs`). problem-service checks that this user may see the problem (a private problem only for an active participant inside its contest run, with the contest context checked on the server) and returns the public samples and the time limit for the language; the code then runs through agent-executor in agent-sandbox, the tutor code tools' path, never through the judge Sandbox. A run makes no submission, no analysis, and no score, and uses only the public samples and the student's own input (at most 1 MB). The server enforces a gap between two runs of one person, one run in progress per person, a site-wide number of runs at once, and per-minute and per-day counts per person; administrators set these limits in the admin console.
 
 ### Notifications
 

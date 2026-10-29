@@ -56,13 +56,14 @@ Whether gVisor (`runsc`) can host go-judge and so remove `privileged` has not be
 - Every model call goes through the model call package, and architecture tests forbid any bypass; each call leaves an observation record.
 - Private statements, hidden tests, and unrelated personal data are not sent to the provider.
 - Chat stream events carry only text increments and each tool's name, status, and duration, never tool arguments, tool results, or model reasoning. Contest-restricted turns do not stream; they are replayed only after the output check passes.
-- The tutor's code tools run only the turn's selected code or the student's own submission, never model-supplied source; contest-restricted turns do not have them.
+- The tutor's code tools run only the turn's selected code, the code the problem page's editor sends with the turn, or the student's own submission, never model-supplied source; contest-restricted turns do not have them.
+- The problem page's self-test run uses only public samples and the student's own input, never hidden tests, and makes no submission; the server checks problem visibility and the contest context, and limits runs by gap, concurrency, and counts.
 - Prompts, tool results, and recalled content distinguish instruction authority from data provenance.
 - AI plagiarism and postmortem output is advisory evidence, not an automatic disciplinary decision or final grade.
 - Memory writes require a candidate, evidence, conflict checks, and user confirmation.
 - Problem-draft workspace, user, draft, execution, and artifact ownership are server-bound; model tool arguments cannot select or override these resources.
 - Raw DeepSeek `reasoning_content` exists only in memory for the current tool loop and never enters the database, logs, audit, or frontend.
-- Code, generators, and packages reach agent-sandbox only through agent-executor, never the judge Sandbox; hidden cases return aggregate results to the model, and general tool audit excludes raw source and process output.
+- Code, generators, packages, and self-test runs reach agent-sandbox only through agent-executor, never the judge Sandbox; hidden cases return aggregate results to the model, and general tool audit excludes raw source and process output.
 - Manual ZIPs require SHA, manifest, path, symlink, duplicate-entry, expanded-size, and compression-ratio checks; imports without full-package execution acceptance are explicitly `MANUAL_UNVERIFIED`.
 
 ## Secrets and delivery

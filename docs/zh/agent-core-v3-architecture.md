@@ -60,7 +60,7 @@ Agent Core V3 为学生 AI 助教和教师 AI 题目草稿提供可审计、可�
 
 ### 助教的代码工具
 
-问答场景有三个代码工具：`code.compile_check`、`code.run_samples`、`code.run_custom`。代码只取自本轮选中的代码或学生本人的提交，不接受模型给出的源码；执行经 agent-executor 进入 agent-sandbox，编译结果按调用者隔离缓存。结果是统一的执行反馈：判定、耗时、内存、进程峰值、与期望输出的第一处不同、编译诊断或 stderr 摘要。比赛受限轮看不到这三个工具。
+问答场景有三个代码工具：`code.compile_check`、`code.run_samples`、`code.run_custom`。代码只取自本轮选中的代码、题目页编辑器随本轮发来的代码，或学生本人的提交，由服务端绑定，模型只能指明来源，不接受模型给出的源码；执行经 agent-executor 进入 agent-sandbox，编译结果按调用者隔离缓存。结果是统一的执行反馈：判定、耗时、内存、进程峰值、与期望输出的第一处不同、编译诊断或 stderr 摘要。比赛受限轮看不到这三个工具。
 
 ### AI 题目草稿场景
 

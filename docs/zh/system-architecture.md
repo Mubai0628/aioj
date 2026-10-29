@@ -8,7 +8,7 @@
 浏览器 -> web-user / web-admin -> gateway
                                    |-> auth-service -> MySQL
                                    |-> problem-service -> MySQL / Redis / RabbitMQ
-                                   `-> ai-service -> 模型调用包 -> 兼容 Provider
+                                   `-> ai-service -> 模型调用包 -> DeepSeek / 向量模型
                                           `-> agent-executor -> agent-sandbox
 
 RabbitMQ -> judge-worker -> go-judge Sandbox
@@ -25,11 +25,11 @@ RabbitMQ -> judge-worker -> go-judge Sandbox
 | problem-service | 题目、测试包、比赛、提交、通知和异步任务 |
 | judge-worker | 消费 RabbitMQ 判题消息并调用 Sandbox，不直接执行代码 |
 | ai-service | Agent 运行时、模型调用包、统一数据通道、对话、记忆、题目草稿、查重与复盘 |
-| agent-executor | Agent 工具执行的唯一入口：编译、运行、生成器与测试包，只调用 agent-sandbox |
+| agent-executor | Agent 工具和题目页自测运行的唯一执行入口：编译、运行、生成器与测试包，只调用 agent-sandbox |
 | web-user / web-admin | 学生与管理 React 单页应用 |
 | MySQL / Redis / RabbitMQ | 权威业务数据、缓存/短期状态与判题队列 |
 | go-judge Sandbox | 隔离执行不可信代码的特权运行时，只接正式判题 |
-| agent-sandbox | Agent 工具专用的 go-judge 实例，只由 agent-executor 调用 |
+| agent-sandbox | Agent 工具和自测运行专用的 go-judge 实例，只由 agent-executor 调用 |
 
 `backend/agent-harness` 是与领域无关的 Agent 循环、工具管线和上下文装配库，ai-service 在它上面实现助教问答和 AI 题目草稿两个场景；`backend/sandbox-client` 是判题与 Agent 共用的 go-judge 协议、语言配置和输出比较。
 
@@ -47,11 +47,15 @@ problem-service 持久化提交并向 RabbitMQ 发布判题任务。judge-worker
 
 ai-service 在服务器端计算权限与策略，构建最小上下文，调用 Provider 和受权工具，并持久化用量与审计证据。AI 访问 problem-service 使用最小跨服务契约，不直接读取其他服务的数据库表。
 
-所有模型调用都经 ai-service 内的模型调用包：超时、重试、熔断和每次调用的观测记录都在这里，架构测试禁止其他调用路径。学生问答通过 `/ai/chat/stream` 返回事件流，正文增量和工具进度见 [Agent Core V3 架构](agent-core-v3-architecture.md)。
+所有模型调用都经 ai-service 内的模型调用包：超时、重试、熔断和每次调用的观测记录都在这里，架构测试禁止其他调用路径。文本模型只用 DeepSeek：Kimi 和通用 OpenAI 兼容的文本选项已于 2026-10-29 停用，库里留下的这类配置照常显示，但不能再保存或发起调用。向量模型可以用 DashScope 或自定义的 OpenAI 兼容接口。学生问答通过 `/ai/chat/stream` 返回事件流，正文增量和工具进度见 [Agent Core V3 架构](agent-core-v3-architecture.md)。
 
 轮次结束后的工作经统一数据通道完成：摘要整理、向量化、学习画像聚合、判题分析和记忆合并审查都是通道的订阅者。事件和每个订阅者的作业在同一个事务里写入；作业失败按退避重试，超过次数进入死信，管理员可以按订阅者重放。
 
 AI 题目草稿使用 `ProblemDraftAgentCoordinator → AgentRuntime → agent-harness 循环`。代码、样例、生成器和测试包执行由 ai-service 通过受保护的内部接口交给 agent-executor，再由 agent-executor 调用 agent-sandbox；ai-service 不直接访问 Docker 或任何沙箱，判题 Sandbox 只做正式判题。通过人工审核的草稿使用可恢复导入 saga 将题目信息和 `READY` 测试包提交给 problem-service。详见 [AI 题目草稿 Agent 架构](problem-draft-agent-architecture.md)。
+
+### 自测运行
+
+题目页编辑器旁的“运行”把代码交给 ai-service（`/api/v1/ai/code-runs`）。problem-service 按这个用户核对题目是否可见（私有题只对比赛时间内的有效参赛者开放，比赛上下文由服务端核对），并给出公开样例和该语言的时限；代码再经 agent-executor 在 agent-sandbox 里运行，和助教的代码工具同一条路，不经过判题 Sandbox。运行不建提交记录、不触发分析、不计成绩，只用公开样例和学生自己的输入（不超过 1 MB）。服务端限制同一人两次运行的间隔、每人同时一个运行、全站同时运行数和每人每分钟、每天的次数，这些限额由管理员在管理端设置。
 
 ### 通知
 
