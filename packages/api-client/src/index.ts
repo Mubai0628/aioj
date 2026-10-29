@@ -2016,6 +2016,72 @@ export interface AiModelConfigTestResponse {
   errorMessage?: string | null;
 }
 
+/** Plan 15.5: a self-test run of the editor's code. It makes no submission and uses no hidden test. */
+export type CodeRunMode = 'SAMPLES' | 'CUSTOM';
+
+export interface CodeRunPayload {
+  problemId: EntityId;
+  language: string;
+  sourceCode: string;
+  mode: CodeRunMode;
+  /** CUSTOM only: the program's stdin, at most 1 MB. */
+  input?: string;
+  /** CUSTOM only, optional: compared the way the judge compares, at most 1 MB. */
+  expectedOutput?: string;
+  contestRunId?: EntityId;
+  contestProblemId?: EntityId;
+}
+
+/** OK means a custom run finished normally with nothing to compare it with. */
+export type CodeRunVerdict = 'AC' | 'WA' | 'TLE' | 'MLE' | 'RE' | 'CE' | 'OLE' | 'SE' | 'OK';
+
+export interface CodeRunFirstDifference {
+  line: number;
+  column: number;
+  expected?: string | null;
+  actual?: string | null;
+}
+
+export interface CodeRunCaseResult {
+  index: number;
+  verdict: CodeRunVerdict | string;
+  timeMillis: number;
+  memoryKb: number;
+  /** The start of the output, at most 64 KB. */
+  stdout: string;
+  stdoutTruncated: boolean;
+  stderr: string;
+  firstDifference?: CodeRunFirstDifference | null;
+}
+
+export interface CodeRunResponse {
+  runId: string;
+  mode: CodeRunMode;
+  verdict: CodeRunVerdict | string;
+  passed: number;
+  total: number;
+  compileOutput?: string | null;
+  cases: CodeRunCaseResult[];
+}
+
+export interface CodeRunSettings {
+  enabled: boolean;
+  maxConcurrency: number;
+  perMinuteLimit: number;
+  perDayLimit: number;
+  minIntervalMillis: number;
+  updatedAt?: string | null;
+  updatedBy?: EntityId | number | null;
+}
+
+export interface CodeRunSettingsPayload {
+  enabled: boolean;
+  maxConcurrency: number;
+  perMinuteLimit: number;
+  perDayLimit: number;
+  minIntervalMillis: number;
+}
+
 export interface AiModelOption {
   id: string;
   ownedBy?: string | null;
@@ -4213,7 +4279,13 @@ export const api = {
     request<AiModelConfigTestResponse>(`/api/v1/admin/ai-model-configs/${scope}/test`, {
       method: 'POST',
       body: JSON.stringify(payload)
-    })
+    }),
+  runCode: (payload: CodeRunPayload) =>
+    request<CodeRunResponse>('/api/v1/ai/code-runs', { method: 'POST', body: JSON.stringify(payload) }),
+  codeRunLimits: () => request<CodeRunSettings>('/api/v1/ai/code-runs/settings'),
+  adminCodeRunSettings: () => request<CodeRunSettings>('/api/v1/admin/ai/code-run-settings'),
+  updateAdminCodeRunSettings: (payload: CodeRunSettingsPayload) =>
+    request<CodeRunSettings>('/api/v1/admin/ai/code-run-settings', { method: 'PUT', body: JSON.stringify(payload) })
 };
 
 /** The restricted-turn replay predates step numbers, so step remains optional. */

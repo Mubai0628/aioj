@@ -6,6 +6,7 @@ import { activeQueryRefetchInterval, api, ApiError, type EntityId, type ProblemL
 import { Badge, Button, cn } from "@aioj/ui-react";
 import { AiAssistantDialog } from "../components/AiAssistantDialog";
 import { CodeEditor } from "../components/CodeEditor";
+import { CodeRunPanel } from "../components/CodeRunPanel";
 import { ConfirmDialog, EmptyState, ErrorPanel, LoadingPanel, PageSection } from "../components/Common";
 import { LanguageEffectiveLimitPanel } from "../components/LanguageEffectiveLimitPanel";
 import { MarkdownView } from "../components/MarkdownView";
@@ -287,6 +288,14 @@ export function ProblemDetailView() {
               </div>
             </div>
             {submitMessage ? <p className="mt-3 rounded-xl border border-[var(--oj-border-soft)] bg-[var(--oj-surface-muted)] px-3 py-2 text-sm text-[var(--oj-ink-muted)]">{submitMessage}</p> : null}
+            <CodeRunPanel
+              problemId={problem.id}
+              language={language}
+              code={code}
+              samplesCount={problem.samples.length}
+              contestRunId={contestContext?.contestRunId}
+              contestProblemId={contestContext?.contestProblemId}
+            />
           </div>
         </aside>
       </section>

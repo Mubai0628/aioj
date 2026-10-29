@@ -13,6 +13,7 @@ import {
 import { Badge, Button } from "@aioj/ui-react";
 import { ErrorPanel, Field, LoadingPanel, PageHeader, inputClass, selectClass, textareaClass } from "../components/Common";
 import { useI18n } from "../lib/i18n";
+import { CodeRunSettingsCard } from "./CodeRunSettingsCard";
 import { useToast } from "../lib/toast";
 import { readableCaughtError, readableStoredError } from "../lib/readableError";
 
@@ -198,6 +199,7 @@ export function AiModelConfigsView() {
           ))}
         </div>
       )}
+      <CodeRunSettingsCard />
     </div>
   );
 }
