@@ -1,11 +1,18 @@
 package com.aioj.next.ai.agent.asyncjob;
 
 import com.aioj.next.ai.config.AiProperties;
+import com.aioj.next.ai.config.HarnessDbQuota;
 import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -20,6 +27,11 @@ import static org.mockito.Mockito.when;
 class AgentAsyncJobWorkerTest {
 
     private final AgentAsyncJobService jobService = mock(AgentAsyncJobService.class);
+
+    @BeforeEach
+    void leasesAreRenewed() {
+        when(jobService.renewLease(any(), anyString(), anyLong())).thenReturn(true);
+    }
 
     @Test
     void dispatchesToRegisteredHandlerAndCompletes() throws Exception {
@@ -178,6 +190,83 @@ class AgentAsyncJobWorkerTest {
         verify(jobService).failFinal(job, "embed job digest ownership mismatch: 11");
         verify(jobService, never()).fail(any(), any(), anyLong());
         verify(jobService, never()).complete(any());
+    }
+
+    /** Plan 15.4: a job that runs over is interrupted and retried, and the next one still runs. */
+    @Test
+    void aJobThatRunsOverItsLimitIsInterruptedAndTheNextOneRuns() throws Exception {
+        CountDownLatch interrupted = new CountDownLatch(1);
+        AgentAsyncJobHandler slow = handler("TURN_CURATE", () -> {
+            try {
+                Thread.sleep(30_000);
+            } catch (InterruptedException expected) {
+                interrupted.countDown();
+            }
+        });
+        AtomicInteger embedded = new AtomicInteger();
+        AgentAsyncJobHandler healthy = handler("EMBED_DIGEST", embedded::incrementAndGet);
+        AiProperties properties = new AiProperties();
+        properties.getAgentJobs().setJobTimeoutSeconds(1);
+        AgentAsyncJobWorker worker = new AgentAsyncJobWorker(jobService, properties, List.of(slow, healthy));
+        AiAsyncJobEntity first = job(8L, "TURN_CURATE");
+        AiAsyncJobEntity second = job(9L, "EMBED_DIGEST");
+        when(jobService.claimDueJobs(anyInt(), anyLong(), anyString(), any())).thenReturn(List.of(first, second));
+        long started = System.nanoTime();
+
+        worker.pollDueJobs();
+
+        org.assertj.core.api.Assertions.assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started))
+                .as("the worker waited about the limit, not the 30 s sleep").isLessThan(10_000);
+        org.assertj.core.api.Assertions.assertThat(interrupted.await(5, TimeUnit.SECONDS)).isTrue();
+        verify(jobService).fail(eq(first), any(TimeoutException.class), eq(60L));
+        verify(jobService, never()).complete(first);
+        verify(jobService).complete(second);
+        org.assertj.core.api.Assertions.assertThat(embedded.get()).isEqualTo(1);
+        worker.stopJobThreads();
+    }
+
+    /** Plan 15.4: the lease is extended past the job's limit before the job runs, on a Harness thread. */
+    @Test
+    void eachJobRenewsItsLeasePastItsLimitBeforeItRuns() {
+        AtomicBoolean renewed = new AtomicBoolean();
+        when(jobService.renewLease(any(), anyString(), anyLong())).thenAnswer(invocation -> {
+            renewed.set(true);
+            return true;
+        });
+        AtomicBoolean renewedFirst = new AtomicBoolean();
+        AtomicReference<Boolean> harnessThread = new AtomicReference<>();
+        AgentAsyncJobHandler handler = handler("TURN_CURATE", () -> {
+            renewedFirst.set(renewed.get());
+            harnessThread.set(HarnessDbQuota.isHarnessThread());
+        });
+        AgentAsyncJobWorker worker = new AgentAsyncJobWorker(jobService, new AiProperties(), List.of(handler));
+        AiAsyncJobEntity job = job(10L, "TURN_CURATE");
+        when(jobService.claimDueJobs(anyInt(), anyLong(), anyString(), any())).thenReturn(List.of(job));
+
+        worker.pollDueJobs();
+
+        verify(jobService).renewLease(eq(job), anyString(),
+                eq(330L + AgentAsyncJobWorker.LEASE_MARGIN_SECONDS));
+        org.assertj.core.api.Assertions.assertThat(renewedFirst.get()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(harnessThread.get()).isTrue();
+        verify(jobService).complete(job);
+    }
+
+    @Test
+    void aJobWhoseLeaseWasLostIsLeftToItsNewOwner() {
+        when(jobService.renewLease(any(), anyString(), anyLong())).thenReturn(false);
+        AgentAsyncJobHandler handler = handler("TURN_CURATE", () -> {
+            throw new AssertionError("a job leased to another worker never runs here");
+        });
+        AgentAsyncJobWorker worker = new AgentAsyncJobWorker(jobService, new AiProperties(), List.of(handler));
+        AiAsyncJobEntity job = job(11L, "TURN_CURATE");
+        when(jobService.claimDueJobs(anyInt(), anyLong(), anyString(), any())).thenReturn(List.of(job));
+
+        worker.pollDueJobs();
+
+        verify(jobService, never()).complete(any());
+        verify(jobService, never()).fail(any(), any(), anyLong());
+        verify(jobService, never()).failFinal(any(), anyString());
     }
 
     private AiAsyncJobEntity job(Long id, String type) {

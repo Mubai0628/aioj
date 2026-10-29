@@ -560,6 +560,11 @@ public class AiProperties {
         private long leaseSeconds = 120;
         private int maxAttempts = 5;
         private long backoffBaseSeconds = 60;
+        /**
+         * Plan 15.4: how long one job may run before the worker gives up on it and moves on. Longer than one
+         * model call attempt may take (300 s by default), so a slow but healthy call is not cut off and paid again.
+         */
+        private long jobTimeoutSeconds = 330;
 
         public boolean isEnabled() {
             return enabled;
@@ -607,6 +612,14 @@ public class AiProperties {
 
         public void setBackoffBaseSeconds(long backoffBaseSeconds) {
             this.backoffBaseSeconds = Math.max(1, backoffBaseSeconds);
+        }
+
+        public long getJobTimeoutSeconds() {
+            return jobTimeoutSeconds;
+        }
+
+        public void setJobTimeoutSeconds(long jobTimeoutSeconds) {
+            this.jobTimeoutSeconds = Math.max(1, jobTimeoutSeconds);
         }
     }
 

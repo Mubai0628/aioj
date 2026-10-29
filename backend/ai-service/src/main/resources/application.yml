@@ -28,6 +28,12 @@ spring:
   flyway:
     enabled: ${FLYWAY_ENABLED:false}
     clean-disabled: true
+  task:
+    scheduling:
+      pool:
+        # Plan 15.4: the scheduled tasks (async jobs, draft jobs, channel metrics, two cleanups) get
+        # their own threads, so a stuck job worker no longer holds back the draft job poll.
+        size: ${AI_SCHEDULING_POOL_SIZE:4}
 
 aioj:
   internal:

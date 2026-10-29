@@ -117,6 +117,23 @@ class AgentAsyncJobServiceTest {
         assertThat(sqlSet).contains("lease_owner=");
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void renewLeaseExtendsOnlyThisWorkersRunningJob() {
+        AiAsyncJobEntity job = job(1L);
+        when(mapper.update(isNull(), any(UpdateWrapper.class))).thenReturn(1).thenReturn(0);
+
+        assertThat(service.renewLease(job, "worker-1", 360L)).isTrue();
+        assertThat(service.renewLease(job, "worker-1", 360L)).as("claimed meanwhile by another worker").isFalse();
+
+        ArgumentCaptor<UpdateWrapper> captor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(mapper, org.mockito.Mockito.times(2)).update(isNull(), captor.capture());
+        UpdateWrapper<AiAsyncJobEntity> update = captor.getAllValues().get(0);
+        assertThat(update.getSqlSet()).contains("lease_expires_at=").doesNotContain("status=", "lease_owner=");
+        assertThat(update.getSqlSegment()).contains("id", "status", "lease_owner");
+        assertThat(update.getParamNameValuePairs()).containsValues(1L, AgentAsyncJobService.STATUS_RUNNING, "worker-1");
+    }
+
     private AiAsyncJobEntity job(Long id) {
         AiAsyncJobEntity job = new AiAsyncJobEntity();
         job.setId(id);

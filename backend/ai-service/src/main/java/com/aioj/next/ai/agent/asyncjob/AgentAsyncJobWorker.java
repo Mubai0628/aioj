@@ -9,6 +9,7 @@ import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
 import com.aioj.next.common.api.TraceIds;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -25,6 +26,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Polling worker for ai_async_jobs (design doc §6.3): claims due jobs under a lease,
@@ -36,11 +45,22 @@ import java.util.Set;
  * the job type, a Harness {@link EventSubscriber} gets the event rebuilt from the job, the jobs
  * of a disabled handler wait unclaimed, and failures are counted per consumer
  * ({@code aioj.ai.channel.failures}).</p>
+ *
+ * <p>Plan 15.4: each job runs on a job thread under a time limit
+ * ({@code aioj.ai.agent-jobs.job-timeout-seconds}). Its lease is extended past that limit as it
+ * starts; one that runs over is interrupted and retried with backoff, and the worker moves on.</p>
  */
 @Service
 public class AgentAsyncJobWorker {
 
     private static final Logger log = LoggerFactory.getLogger(AgentAsyncJobWorker.class);
+    /** The lease outlasts the time limit by this much, so a job that just made it is not reclaimed meanwhile. */
+    static final long LEASE_MARGIN_SECONDS = 30;
+    /**
+     * One thread runs the current job; the other lets the next one start while a job that ran over and
+     * ignores its interrupt finishes, at the latest at its model call's own limit.
+     */
+    private static final int JOB_THREADS = 2;
 
     private final AgentAsyncJobService jobService;
     private final AiProperties properties;
@@ -48,6 +68,7 @@ public class AgentAsyncJobWorker {
     private final MeterRegistry meters;
     private final ObjectMapper objectMapper;
     private final String workerId;
+    private final ThreadPoolExecutor jobThreads;
 
     /** Tests and callers without channel subscribers or metrics. */
     public AgentAsyncJobWorker(
@@ -92,6 +113,21 @@ public class AgentAsyncJobWorker {
         this.meters = meters;
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
         this.workerId = "agent-async-" + ManagementFactory.getRuntimeMXBean().getName();
+        AtomicInteger threadNumber = new AtomicInteger();
+        // The Harness prefix keeps the jobs on the Harness database quota (T1.6), as before on the poll thread.
+        this.jobThreads = new ThreadPoolExecutor(JOB_THREADS, JOB_THREADS, 60, TimeUnit.SECONDS,
+                new SynchronousQueue<>(), runnable -> {
+                    Thread thread = new Thread(runnable,
+                            HarnessDbQuota.THREAD_PREFIX + "agent-job-" + threadNumber.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                });
+        this.jobThreads.allowCoreThreadTimeOut(true);
+    }
+
+    @PreDestroy
+    public void stopJobThreads() {
+        jobThreads.shutdownNow();
     }
 
     @Scheduled(fixedDelayString = "${aioj.ai.agent-jobs.poll-interval-ms:5000}")
@@ -112,6 +148,10 @@ public class AgentAsyncJobWorker {
                     skipped
             );
             for (AiAsyncJobEntity job : jobs) {
+                if (Thread.currentThread().isInterrupted()) {
+                    // Shutting down: the rest keep their leases until they run out, then are claimed again.
+                    return;
+                }
                 process(job);
             }
         });
@@ -158,18 +198,72 @@ public class AgentAsyncJobWorker {
             jobService.failFinal(job, "No handler registered for job type: " + job.getJobType());
             return;
         }
+        long limitSeconds = properties.getAgentJobs().getJobTimeoutSeconds();
+        if (!jobService.renewLease(job, workerId, limitSeconds + LEASE_MARGIN_SECONDS)) {
+            log.warn("agent async job is no longer leased to this worker, skipped: jobId={} type={}", job.getId(),
+                    job.getJobType());
+            return;
+        }
         try {
-            handler.handle(job);
+            runWithinLimit(handler, job, limitSeconds);
             jobService.complete(job);
         } catch (AgentAsyncJobPermanentFailure ex) {
             log.warn("agent async job failed permanently: jobId={} type={} error={}", job.getId(), job.getJobType(),
                     ex.getMessage());
             countFailure(job);
             jobService.failFinal(job, ex.getMessage());
+        } catch (TimeoutException ex) {
+            log.warn("agent async job ran over its limit and was interrupted: jobId={} type={} limitSeconds={}",
+                    job.getId(), job.getJobType(), limitSeconds);
+            countFailure(job);
+            jobService.fail(job, ex, properties.getAgentJobs().getBackoffBaseSeconds());
+        } catch (InterruptedException ex) {
+            // Shutting down: the job keeps its lease until it runs out, then is claimed again.
+            Thread.currentThread().interrupt();
         } catch (Exception ex) {
             log.warn("agent async job failed: jobId={} type={} error={}", job.getId(), job.getJobType(), ex.toString());
             countFailure(job);
             jobService.fail(job, ex, properties.getAgentJobs().getBackoffBaseSeconds());
+        }
+    }
+
+    /** Runs one job on a job thread, under the trace it was given, and waits at most its limit. */
+    private void runWithinLimit(AgentAsyncJobHandler handler, AiAsyncJobEntity job, long limitSeconds)
+            throws Exception {
+        Map<String, String> context = MDC.getCopyOfContextMap();
+        Future<?> running;
+        try {
+            running = jobThreads.submit(() -> {
+                if (context != null) {
+                    MDC.setContextMap(context);
+                }
+                try {
+                    handler.handle(job);
+                    return null;
+                } finally {
+                    MDC.clear();
+                }
+            });
+        } catch (RejectedExecutionException busy) {
+            throw new IllegalStateException("every agent job thread is still held by a job that ran over", busy);
+        }
+        try {
+            running.get(limitSeconds, TimeUnit.SECONDS);
+        } catch (TimeoutException late) {
+            running.cancel(true);
+            throw new TimeoutException("agent async job ran over its " + limitSeconds + " s limit");
+        } catch (InterruptedException interrupted) {
+            running.cancel(true);
+            throw interrupted;
+        } catch (ExecutionException failed) {
+            Throwable cause = failed.getCause();
+            if (cause instanceof Exception exception) {
+                throw exception;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw failed;
         }
     }
 

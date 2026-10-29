@@ -114,6 +114,22 @@ public class AgentAsyncJobService {
         return claimed;
     }
 
+    /**
+     * Plan 15.4: extends a claimed job's lease as its processing starts, so a job late in its batch, or a
+     * slow one, keeps the lease for its whole time limit.
+     *
+     * @return false when the job is no longer this worker's (its lease ran out and another worker claimed it)
+     */
+    public boolean renewLease(AiAsyncJobEntity job, String workerId, long leaseSeconds) {
+        LocalDateTime now = LocalDateTime.now();
+        return mapper.update(null, new UpdateWrapper<AiAsyncJobEntity>()
+                .eq("id", job.getId())
+                .eq("status", STATUS_RUNNING)
+                .eq("lease_owner", workerId)
+                .set("lease_expires_at", now.plusSeconds(Math.max(1, leaseSeconds)))
+                .set("updated_at", now)) > 0;
+    }
+
     public void complete(AiAsyncJobEntity job) {
         LocalDateTime now = LocalDateTime.now();
         mapper.update(null, new UpdateWrapper<AiAsyncJobEntity>()
