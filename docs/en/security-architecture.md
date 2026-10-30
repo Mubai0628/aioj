@@ -61,6 +61,15 @@ agent-sandbox, added for Agent tool execution, reuses the judge Sandbox image an
 
 Whether gVisor (`runsc`) can host go-judge and so remove `privileged` has not been evaluated yet, because that needs a Linux host. Until then agent-sandbox stays `privileged`, and the maintainer has accepted this risk.
 
+### Review findings (2026-10-30)
+
+Both Sandboxes run go-judge v1.13.3 (upstream's latest at the time) with a read-only root filesystem and a size-capped tmpfs `/tmp`; PID, memory, CPU, output, and copy-out are bounded.
+
+- What callers ask for stays inside the container limits: a judge run gets at most 768 MB (the judge Sandbox's 1 GiB keeps 256 MiB for go-judge and its cached files, and problem settings refuse a larger memory limit); agent-executor allows 256 MiB per run and 384 MiB for compiles and generator scripts (agent-sandbox has 512 MiB).
+- agent-executor deletes a cached compile after 5 minutes, before go-judge's 10-minute file timeout, so a cache hit never runs a file the sandbox drops mid-run.
+- Recorded, not addressed yet: executed programs can create a user namespace and open an AF_NETLINK socket. go-judge has no switch for a custom seccomp policy; Docker's seccomp profile does not apply to a `privileged` container; changing the host's `user.max_user_namespaces` would affect the whole machine. Both widen the kernel interface a program can reach rather than giving network or file access, and they wait for the gVisor evaluation together with `privileged`.
+- Recorded, not addressed yet: go-judge writes its authentication token into the `Config loaded` startup log line. Anyone who can read `docker logs` can already read the environment with `docker inspect`, so the exposure is no wider; but sandbox container logs must not be forwarded elsewhere, and the token is rotated with the existing procedure.
+
 ## AI security
 
 - The model and its output are untrusted; authorization and tool execution remain server-side.

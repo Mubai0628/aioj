@@ -61,6 +61,15 @@ problem-service 只发布任务，judge-worker 只编排并调用 Sandbox。Sand
 
 gVisor（`runsc`）能否承载 go-judge、从而去掉 `privileged`，目前还没有评估，因为需要一台 Linux 主机。评估之前 agent-sandbox 保留 `privileged`，维护者已接受这一风险。
 
+### 复核结论（2026-10-30）
+
+两个 Sandbox 都是 go-judge v1.13.3（当时上游的最新版本），根文件系统只读，`/tmp` 都是有容量上限的 tmpfs，PID、内存、CPU、输出和 copy-out 各有上限。
+
+- 调用方的单次上限都留在容器限额之内：判题单次最多 768 MB（判题 Sandbox 的 1 GiB 里给 go-judge 和缓存文件留 256 MiB，题目设置也不接受更大的内存限制）；agent-executor 运行 256 MiB、编译和生成脚本 384 MiB（agent-sandbox 共 512 MiB）。
+- agent-executor 缓存的编译产物在 5 分钟后删除，早于 go-judge 的 10 分钟文件有效期，命中缓存时不会用到一个运行中途被沙箱删掉的文件。
+- 登记、暂不处理：被执行的程序能新建 user namespace，也能打开 AF_NETLINK 套接字。go-judge 没有自定义 seccomp 的开关；容器是 `privileged`，Docker 的 seccomp 配置不生效；改宿主机的 `user.max_user_namespaces` 会影响整台机器。这两项扩大的是能触达的内核接口，不直接给出网络或文件访问，与 `privileged` 一起等 gVisor 评估时处理。
+- 登记、暂不处理：go-judge 启动时把认证令牌写进日志的 `Config loaded` 一行。能读 `docker logs` 的人本来也能用 `docker inspect` 看到环境变量，暴露面没有变大；但沙箱容器的日志不得转发到别处，令牌按现有的轮换步骤更换。
+
 ## AI 安全
 
 - 模型和模型输出不可信，授权和工具执行在服务端。

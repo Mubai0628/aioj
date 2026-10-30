@@ -215,7 +215,8 @@ export const messages = {
       },
       problem: {
         notFound: '题目不存在或已被删除。',
-        importedDeleted: '导入关联的题目已被删除，请重新导入或删除草稿。'
+        importedDeleted: '导入关联的题目已被删除，请重新导入或删除草稿。',
+        memoryLimitTooLarge: '内存限制不能超过 768 MB。'
       },
       submission: {
         notFound: '提交记录不存在或已被删除。',
@@ -1356,6 +1357,7 @@ export const messages = {
       timeLimitInvalid: '时间限制不能小于 100 ms。',
       timeLimitMultiplierInvalid: '语言时限倍率必须在 1.0 到 10.0 之间。',
       memoryLimitInvalid: '内存限制不能小于 16 MB。',
+      memoryLimitTooLarge: '内存限制不能超过 768 MB。',
       sampleRequired: '至少需要保留 1 个样例。',
       emptySampleWarning: '存在空样例输入或输出，请确认是否有意保留。',
       deleteFailed: '无法删除题目。',
@@ -3764,7 +3766,8 @@ export const messages = {
       },
       problem: {
         notFound: 'The problem does not exist or has been deleted.',
-        importedDeleted: 'The imported linked problem has been deleted. Re-import or delete the draft.'
+        importedDeleted: 'The imported linked problem has been deleted. Re-import or delete the draft.',
+        memoryLimitTooLarge: 'Memory limit must not exceed 768 MB.'
       },
       submission: {
         notFound: 'The submission does not exist or has been deleted.',
@@ -4905,6 +4908,7 @@ export const messages = {
       timeLimitInvalid: 'Time limit must be at least 100 ms.',
       timeLimitMultiplierInvalid: 'Language time multipliers must be between 1.0 and 10.0.',
       memoryLimitInvalid: 'Memory limit must be at least 16 MB.',
+      memoryLimitTooLarge: 'Memory limit must not exceed 768 MB.',
       sampleRequired: 'Keep at least one sample.',
       emptySampleWarning: 'Some sample inputs or outputs are empty. Please confirm this is intentional.',
       deleteFailed: 'Unable to delete problem.',

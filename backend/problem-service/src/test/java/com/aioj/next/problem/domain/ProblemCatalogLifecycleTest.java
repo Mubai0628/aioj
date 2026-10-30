@@ -1,6 +1,7 @@
 package com.aioj.next.problem.domain;
 
 import com.aioj.next.common.error.DomainException;
+import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.contract.problem.ProblemCreateRequest;
@@ -151,6 +152,20 @@ class ProblemCatalogLifecycleTest {
         assertEquals("cpp", captor.getValue().getLanguage());
         assertEquals("int main(){return 0;}", captor.getValue().getContent());
         assertEquals(99L, captor.getValue().getCreatedBy());
+    }
+
+    @Test
+    void aMemoryLimitAboveWhatTheJudgeSandboxGivesIsRefused() {
+        // T2.7: the judge sandbox has 1 GiB; one run gets at most 768 MB of it.
+        DomainException refused = org.junit.jupiter.api.Assertions.assertThrows(DomainException.class,
+                () -> catalog.create(new ProblemCreateRequest("Big", Difficulty.EASY, "statement", List.of(),
+                        List.of(new TestCaseDto("1\n", "1\n", true)), 1000, 786_433, null, null, null, null, null,
+                        null, null), true));
+
+        assertEquals(ErrorCode.BAD_REQUEST, refused.errorCode());
+        assertEquals("problem.memoryLimitTooLarge",
+                com.aioj.next.common.error.UserErrorFeedback.storedKey(refused));
+        verify(problemMapper, org.mockito.Mockito.never()).insert(any(ProblemEntity.class));
     }
 
     @Test

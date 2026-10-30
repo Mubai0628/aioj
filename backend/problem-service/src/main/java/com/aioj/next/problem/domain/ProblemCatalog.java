@@ -54,6 +54,8 @@ import java.util.Set;
 public class ProblemCatalog {
     private static final int DEFAULT_TIME_LIMIT_MILLIS = 1000;
     private static final int DEFAULT_MEMORY_LIMIT_KB = 262144;
+    /** T2.7: what the judge sandbox can give one run (its 1 GiB less 256 MiB for go-judge). */
+    private static final int MAX_MEMORY_LIMIT_KB = 786432;
     private static final BigDecimal DEFAULT_TIME_LIMIT_MULTIPLIER = BigDecimal.ONE.setScale(2);
     private static final BigDecimal MIN_TIME_LIMIT_MULTIPLIER = BigDecimal.ONE;
     private static final BigDecimal MAX_TIME_LIMIT_MULTIPLIER = BigDecimal.TEN;
@@ -563,6 +565,9 @@ public class ProblemCatalog {
         problem.setTags(toJson(tags == null ? List.of() : tags));
         problem.setTimeLimitMillis(timeLimitMillis <= 0 ? DEFAULT_TIME_LIMIT_MILLIS : timeLimitMillis);
         applyTimeLimitMultipliers(problem, multipliers);
+        if (memoryLimitKb > MAX_MEMORY_LIMIT_KB) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "Problem memory limit must not exceed 768 MB");
+        }
         problem.setMemoryLimitKb(memoryLimitKb <= 0 ? DEFAULT_MEMORY_LIMIT_KB : memoryLimitKb);
     }
 

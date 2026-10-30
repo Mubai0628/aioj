@@ -190,9 +190,11 @@ services:
       ES_OUTPUT_LIMIT: ${SANDBOX_OUTPUT_LIMIT:-67108864}
       ES_COPY_OUT_LIMIT: ${SANDBOX_COPY_OUT_LIMIT:-67108864}
       ES_FILE_TIMEOUT: ${SANDBOX_FILE_TIMEOUT:-10m}
+    # T2.7: a bounded /tmp like agent-sandbox's; go-judge keeps its files in /dev/shm.
+    tmpfs:
+      - /tmp:rw,size=64m,mode=1777
     volumes:
       - testcase-cache:/aioj/cases:ro
-      - sandbox-tmp:/tmp
     networks: [judge-net]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/version >/dev/null"]
@@ -477,7 +479,6 @@ volumes:
   operation-artifacts:
   testcase-cache:
   ai-draft-artifacts:
-  sandbox-tmp:
   agent-executor-work:
 
 networks:

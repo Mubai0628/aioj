@@ -235,6 +235,8 @@ export function ProblemEditorPanel({
       next.timeLimitMultipliers = t("problems.timeLimitMultiplierInvalid");
     }
     if (Number(memoryLimitMb) < 16) next.memoryLimitKb = t("problems.memoryLimitInvalid");
+    // T2.7: the judge sandbox gives one run at most 768 MB.
+    if (Number(memoryLimitMb) > 768) next.memoryLimitKb = t("problems.memoryLimitTooLarge");
     if (!samples.length) next.testCases = t("problems.sampleRequired");
     return next;
   }
@@ -309,7 +311,7 @@ export function ProblemEditorPanel({
                   <input className={inputClass} value={timeLimitMillis} min={100} step={100} type="number" onChange={(event) => setTimeLimitMillis(Number(event.target.value))} />
                 </Field>
                 <Field label={`${t("problems.memoryLimit")} (MB)`} error={fieldErrors.memoryLimitKb} hint={t("problems.memoryLimitHelper")}>
-                  <input className={inputClass} value={memoryLimitMb} min={16} step={16} type="number" onChange={(event) => setMemoryLimitMb(Number(event.target.value))} />
+                  <input className={inputClass} value={memoryLimitMb} min={16} max={768} step={16} type="number" onChange={(event) => setMemoryLimitMb(Number(event.target.value))} />
                 </Field>
               </div>
               <Field label={t("problems.languageTimeLimitMultipliers")} error={fieldErrors.timeLimitMultipliers} hint={t("problems.languageTimeLimitMultiplierHelper")}>

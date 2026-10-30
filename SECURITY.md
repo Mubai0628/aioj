@@ -14,6 +14,8 @@
 
 为 Agent 工具执行新增的 agent-sandbox 是第二个 `privileged` 容器。它复用判题 Sandbox 镜像，令牌和限额独立，只接入 internal 网络 `agent-sandbox-net`，没有端口、业务卷和应用秘密，只由 agent-executor 调用。它的逃逸风险与判题 Sandbox 相同，维护者同样接受。改用 gVisor（`runsc`）去掉 `privileged` 的可行性尚未评估，留待有 Linux 主机时进行。
 
+2026-10-30 复核两个 Sandbox 时登记了两项暂不处理的问题：被执行的程序能新建 user namespace、能打开 AF_NETLINK 套接字（go-judge 没有自定义 seccomp 的办法，等 gVisor 评估时一起处理）；go-judge 会把认证令牌写进启动日志，沙箱容器的日志不得转发到别处。详见双语安全架构文档。
+
 AI 题目草稿产生的标程、参考解、生成器与测试包，助教代码工具运行的学生代码，以及题目页的自测运行，都走 ai-service → agent-executor → agent-sandbox，不经过 judge-worker 和判题 Sandbox；这条路径同样不是更可信的执行域。agent-executor 拒绝超过内存上限的请求（单次运行 256 MiB，编译和生成脚本 384 MiB）。模型思考、原始代码、隐藏用例和完整进程输出不得进入通用日志、审计或客户端；问答的流式事件同样只带正文增量和工具的名称、状态、耗时。
 
 ## English
@@ -27,5 +29,7 @@ Internal HTTP uses four independent random business-direction tokens and the exe
 The selected single-node production topology includes a `privileged` go-judge Sandbox. Normal submissions remain bounded by namespaces, cgroups, time, process, memory, and output controls, but those controls do not prove resistance to Sandbox, Docker, container-runtime, or Linux-kernel escape. A successful escape could yield host-root-equivalent control, expose data and secrets, alter judge results, exhaust resources, or establish persistence. The maintainer has explicitly accepted this downgrade relative to an isolated judge node.
 
 agent-sandbox, added for Agent tool execution, is a second `privileged` container. It reuses the judge Sandbox image with its own token and limits, joins only the internal `agent-sandbox-net` network, has no published port, business volume, or application secret, and is called only by agent-executor. Its escape risk is the same as the judge Sandbox's, and the maintainer accepts it on the same terms. Whether gVisor (`runsc`) can remove `privileged` has not been evaluated yet; that evaluation waits for a Linux host.
+
+The 2026-10-30 review of both Sandboxes recorded two issues left for later: executed programs can create a user namespace and open an AF_NETLINK socket (go-judge offers no custom seccomp policy; they wait for the gVisor evaluation), and go-judge writes its authentication token into its startup log, so sandbox container logs must not be forwarded elsewhere. See the bilingual security architecture document.
 
 Standard solutions, reference solutions, generators, and testcase packages produced by the AI problem-draft feature, the student code the tutor's code tools run, and the problem page's self-test runs all go through ai-service → agent-executor → agent-sandbox, never through judge-worker and the judge Sandbox; this path is not a more trusted execution domain either. agent-executor rejects requests above its memory caps (256 MiB per run, 384 MiB for compiles and generator scripts). Model reasoning, raw source, hidden cases, and complete process output must not enter general logs, audit, or clients; chat stream events likewise carry only text increments and each tool's name, status, and duration.

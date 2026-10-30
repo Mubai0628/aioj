@@ -21,7 +21,7 @@ public class JudgeWorkerProperties {
     private int maxSourceBytes = 256 * 1024;
     private int maxRunTimeLimitMillis = 30_000;
     private int maxScriptTimeLimitMillis = 180_000;
-    private int maxMemoryLimitKb = 1_048_576;
+    private int maxMemoryLimitKb = 786_432;
     private int maxProcessLimit = 80;
     private long compileTimeMultiplier = 10L;
     /** Upper bound for compiler CPU time; 0 keeps the max script time limit as the bound. */

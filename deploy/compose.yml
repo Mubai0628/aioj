@@ -365,7 +365,12 @@ services:
     build:
       context: sandbox
     privileged: true
+    # T2.7: shaped like production: read-only root, a PID cap and a bounded /tmp.
+    read_only: true
+    pids_limit: 512
     shm_size: 256m
+    tmpfs:
+      - /tmp:rw,size=64m,mode=1777
     environment:
       ES_HTTP_ADDR: ":8090"
       ES_AUTH_TOKEN: ${SANDBOX_TOKEN:-}
@@ -376,7 +381,6 @@ services:
       - "127.0.0.1:8090:8090"
     volumes:
       - testcase-cache:/aioj/cases:ro
-      - sandbox-tmp:/tmp
     networks:
       - aioj-judge
     healthcheck:
@@ -386,7 +390,8 @@ services:
       retries: 5
     restart: unless-stopped
     logging: *bounded-logging
-    mem_limit: 960m
+    # T2.7: as in production, so a 768 MB judge run still leaves 256 MiB to go-judge.
+    mem_limit: 1024m
     cpus: "1.20"
 
   # Plan T1.9: the Agent tools' own sandbox and its executor, shaped like production
@@ -505,7 +510,6 @@ volumes:
   problem-testcases:
   operation-artifacts:
   testcase-cache:
-  sandbox-tmp:
   agent-executor-work:
 
 networks:

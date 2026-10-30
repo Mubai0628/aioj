@@ -15,10 +15,6 @@ spring:
       maximum-pool-size: ${JUDGE_DB_POOL_MAX:4}
       minimum-idle: ${JUDGE_DB_POOL_MIN_IDLE:1}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:5000}
-  servlet:
-    multipart:
-      max-file-size: ${JUDGE_DRAFT_PACKAGE_MAX_UPLOAD:50MB}
-      max-request-size: ${JUDGE_DRAFT_PACKAGE_MAX_REQUEST:52MB}
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -57,7 +53,8 @@ aioj:
     max-source-bytes: ${JUDGE_MAX_SOURCE_BYTES:262144}
     max-run-time-limit-millis: ${JUDGE_MAX_RUN_TIME_LIMIT_MILLIS:30000}
     max-script-time-limit-millis: ${JUDGE_MAX_SCRIPT_TIME_LIMIT_MILLIS:180000}
-    max-memory-limit-kb: ${JUDGE_MAX_MEMORY_LIMIT_KB:1048576}
+    # T2.7: below the sandbox's 1 GiB, leaving 256 MiB for go-judge and its cached files (plan S8).
+    max-memory-limit-kb: ${JUDGE_MAX_MEMORY_LIMIT_KB:786432}
     max-process-limit: ${JUDGE_MAX_PROCESS_LIMIT:80}
     compile-time-multiplier: ${JUDGE_COMPILE_TIME_MULTIPLIER:10}
     compile-max-time-millis: ${JUDGE_COMPILE_MAX_TIME_MILLIS:0}

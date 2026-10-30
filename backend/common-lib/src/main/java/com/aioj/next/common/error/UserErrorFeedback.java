@@ -30,6 +30,7 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
             Map.entry("Student and teacher roles are mutually exclusive", "auth.roleConflict"),
             Map.entry("User not found", "user.notFound"),
             Map.entry("Problem not found", "problem.notFound"),
+            Map.entry("Problem memory limit must not exceed 768 MB", "problem.memoryLimitTooLarge"),
             Map.entry("Imported problem has been deleted", "problem.importedDeleted"),
             Map.entry("Submission not found", "submission.notFound"),
             Map.entry("Language is required", "submission.languageRequired"),

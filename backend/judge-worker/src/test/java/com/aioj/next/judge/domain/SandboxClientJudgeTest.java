@@ -209,7 +209,8 @@ class SandboxClientJudgeTest {
         long mb = 1024L * 1024L;
         // 64 MB problem: 2 x 64 MB is below the 256 MB C++ floor.
         assertThat(client.compileMemoryLimitBytes(64 * mb, 262_144L)).isEqualTo(256 * mb);
-        assertThat(client.compileMemoryLimitBytes(512 * mb, 262_144L)).isEqualTo(1024 * mb);
+        // T2.7: capped at 768 MB by default, the sandbox's 1 GiB less room for go-judge.
+        assertThat(client.compileMemoryLimitBytes(512 * mb, 262_144L)).isEqualTo(768 * mb);
         properties.setMaxMemoryLimitKb(524_288);
         assertThat(client.compileMemoryLimitBytes(512 * mb, 262_144L)).isEqualTo(512 * mb);
 
