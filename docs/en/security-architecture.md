@@ -25,6 +25,13 @@ Internal APIs use directional `X-Internal-Token` credentials: ai → problem, ju
 
 Only services that need a credential receive it; the old shared `AIOJ_INTERNAL_API_TOKEN` is no longer used for application traffic. Inbound authentication accepts current and optional `*_NEXT` values, while outbound calls use only current. Rotate by installing NEXT on the target, updating the caller, then promoting the target's current value and clearing NEXT, restarting one service at each step. Production uses independent high-entropy random values, never derivatives of a shared secret. Production Compose rejects missing required variables; empty local values fail closed. Logs contain only caller, path, and denial reason, never credentials.
 
+## Rate limits
+
+- The gateway reads `X-Forwarded-For` only when the connection comes from a trusted proxy, and only its N-th entry from the right (N trusted proxies in front of the gateway, default 1: the web nginx); entries a client wrote further left do not count. The result goes downstream as `X-Aioj-Client-Ip`, after any client-sent header of that name is dropped.
+- Per address: login/refresh/register, submissions, AI chat, code runs and problem-draft jobs each have a Redis token bucket keyed by kind and client address, IPv6 by its /64. Defaults assume a few people behind one address; a shared egress address such as a lab's can be listed as a shared network that skips the per-address limits. A Redis outage lets requests through and is counted.
+- Per user: failed logins are counted per account and address (5 in 15 minutes lock for 15 minutes) with an account-wide ceiling (50 in 15 minutes), so wrong passwords elsewhere cannot lock a student out; 30 submissions a minute; at most 2 AI answers running at once, on top of the AI quota; code-run per-minute, per-day and spacing limits; at most 3 queued or running problem-draft jobs per admin.
+- Every refusal is HTTP 429 with code 42900, `Retry-After` and an error key (the seconds also in `errorParams.retryAfterSeconds`); the page says which limit applied and roughly when to try again. Every threshold is an environment variable.
+
 ## Judge isolation
 
 problem-service publishes jobs, while judge-worker only orchestrates and calls Sandbox. Sandbox has no Docker socket, host network, business directory, database, JWT, AI, or deployment secret. Testcases are read-only; temporary workspace is isolated; CPU, memory, PID, time, output, and logs are bounded.

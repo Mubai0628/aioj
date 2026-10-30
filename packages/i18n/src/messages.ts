@@ -148,6 +148,9 @@ export const messages = {
       contestDescriptionTooLong: '比赛说明过长。',
       contestRestoreOnlyArchived: '只有已归档比赛可以恢复为草稿。',
       traceSuffix: '错误编号：{traceId}',
+      retryAfterSeconds: '约 {count} 秒后再试。',
+      retryAfterMinutes: '约 {count} 分钟后再试。',
+      retryAfterHours: '约 {count} 小时后再试。',
       request: {
         badRequest: '请求内容有误，请检查后重试。',
         validationFailed: '提交内容未通过校验，请检查具体字段。',
@@ -158,6 +161,7 @@ export const messages = {
         methodNotAllowed: '该操作方式不受支持，请刷新页面后重试。',
         payloadTooLarge: '上传内容超过大小限制，请压缩或拆分后再试。',
         tooMany: '操作过于频繁，请稍后再试。',
+        tooManyFromNetwork: '同一网络的请求过多，请稍后再试。',
         conflict: '当前操作与已有数据冲突，请刷新后确认状态。',
         timeout: '请求耗时过长，服务已超时，请稍后重试。',
         required: '缺少必填内容，请补全后重试。',
@@ -174,6 +178,7 @@ export const messages = {
       },
       auth: {
         required: '请先登录后再继续操作。',
+        loginLocked: '登录失败次数过多，请稍后再试。',
         invalidToken: '登录状态无效，请重新登录。',
         tokenRequired: '请先登录后再继续操作。',
         invalidCredentials: '账号或密码错误。',
@@ -214,6 +219,7 @@ export const messages = {
       },
       submission: {
         notFound: '提交记录不存在或已被删除。',
+        rateLimited: '提交过于频繁，请稍后再提交。',
         languageRequired: '请选择编程语言。',
         unsupportedLanguage: '暂不支持所选编程语言。',
         queryForbidden: '不能查看其他用户的提交列表。',
@@ -294,6 +300,8 @@ export const messages = {
       },
       ai: {
         quotaExceeded: 'AI 使用次数已达上限，请稍后再试。',
+        busy: 'AI 服务繁忙，请稍后再试。',
+        turnConcurrencyLimit: '你还有 AI 回答在进行中，请等它完成后再提问。',
         rollingQuotaExceeded: '近 2 小时 AI 使用次数已达 50 次，请稍后再试。',
         monthlyQuotaExceeded: '本月 AI 使用次数已达 1000 次，请下月再试或联系管理员。',
         configDisabled: 'AI 模型配置已停用，请在管理端启用或继承默认配置。',
@@ -316,6 +324,7 @@ export const messages = {
       },
       draft: {
         notFound: 'AI 草稿不存在或已被删除。',
+        jobLimit: '排队和进行中的出题作业已达上限，请等已有作业完成后再提交。',
         approveBeforeImport: '请先通过审核后再导入题库。',
         invalidImport: '草稿内容校验未通过，请修复或重新生成后再导入。',
         invalidImportedUpdate: '草稿内容校验未通过，请修复或重新生成后再导入。',
@@ -3679,6 +3688,9 @@ export const messages = {
       contestDescriptionTooLong: 'Contest description is too long.',
       contestRestoreOnlyArchived: 'Only archived contests can be restored to draft.',
       traceSuffix: 'Trace ID: {traceId}',
+      retryAfterSeconds: 'Try again in about {count} s.',
+      retryAfterMinutes: 'Try again in about {count} min.',
+      retryAfterHours: 'Try again in about {count} h.',
       request: {
         badRequest: 'The request is invalid. Check the input and try again.',
         validationFailed: 'Some fields are invalid. Check the details and try again.',
@@ -3689,6 +3701,7 @@ export const messages = {
         methodNotAllowed: 'This operation method is not supported. Refresh the page and try again.',
         payloadTooLarge: 'The uploaded content is too large. Compress or split it and try again.',
         tooMany: 'Too many requests. Please try again later.',
+        tooManyFromNetwork: 'Too many requests from your network. Please try again later.',
         conflict: 'This operation conflicts with current data. Refresh and confirm the state.',
         timeout: 'The request took too long and timed out. Please try again later.',
         required: 'Required content is missing. Fill it in and try again.',
@@ -3705,6 +3718,7 @@ export const messages = {
       },
       auth: {
         required: 'Please sign in before continuing.',
+        loginLocked: 'Too many failed sign-in attempts. Please try again later.',
         invalidToken: 'Your session is invalid. Please sign in again.',
         tokenRequired: 'Please sign in before continuing.',
         invalidCredentials: 'Incorrect account or password.',
@@ -3745,6 +3759,7 @@ export const messages = {
       },
       submission: {
         notFound: 'The submission does not exist or has been deleted.',
+        rateLimited: 'You are submitting too often. Please wait before submitting again.',
         languageRequired: 'Choose a programming language.',
         unsupportedLanguage: 'The selected programming language is not supported.',
         queryForbidden: 'You cannot view other users\' submission lists.',
@@ -3825,6 +3840,8 @@ export const messages = {
       },
       ai: {
         quotaExceeded: 'AI usage quota has been reached. Please try again later.',
+        busy: 'The AI service is busy. Please try again later.',
+        turnConcurrencyLimit: 'You already have an AI answer in progress. Wait for it to finish before asking again.',
         rollingQuotaExceeded: 'AI usage has reached 50 requests in the last 2 hours. Please try again later.',
         monthlyQuotaExceeded: 'AI usage has reached 1000 requests this month. Try next month or contact an administrator.',
         configDisabled: 'AI model configuration is disabled. Enable it or inherit the default configuration.',
@@ -3847,6 +3864,7 @@ export const messages = {
       },
       draft: {
         notFound: 'AI draft not found or deleted.',
+        jobLimit: 'You have reached the limit of queued and running draft jobs. Wait for one to finish first.',
         approveBeforeImport: 'Approve the draft before importing it into the problem library.',
         invalidImport: 'Draft validation failed. Fix it or regenerate before importing.',
         invalidImportedUpdate: 'Draft validation failed. Fix it or regenerate before importing.',

@@ -3112,7 +3112,12 @@ async function parseResponse<T>(response: Response): Promise<T> {
     const details = payload?.details && typeof payload.details === 'object' ? payload.details as ApiErrorDetails : null;
     const traceId = payload?.traceId ?? null;
     const errorKey = payload?.errorKey ?? null;
-    const errorParams = payload?.errorParams && typeof payload.errorParams === 'object' ? payload.errorParams : null;
+    const bodyParams = payload?.errorParams && typeof payload.errorParams === 'object' ? payload.errorParams : null;
+    // T2.2: every 429 says when to come back; a body without the seconds still has the header.
+    const retryAfter = response.headers?.get?.('Retry-After')?.trim() ?? '';
+    const errorParams = /^\d+$/.test(retryAfter) && !bodyParams?.retryAfterSeconds
+      ? { ...(bodyParams ?? {}), retryAfterSeconds: retryAfter }
+      : bodyParams;
     throw new ApiError(code, message, details, traceId, errorKey, errorParams);
   }
   return payload.data;

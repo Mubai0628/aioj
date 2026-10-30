@@ -133,6 +133,29 @@ export function resolveErrorMessageForLocale(
   fallback: string,
   context: ErrorResolveContext = {}
 ): string {
+  return withRetryAfter(locale, resolveBaseMessage(locale, code, fallback, context), context.errorParams);
+}
+
+/** A limit says when to come back (T2.2): seconds, or minutes and hours for the long waits. */
+function withRetryAfter(locale: Locale, message: string, params?: Record<string, string | number> | null) {
+  const raw = params?.retryAfterSeconds;
+  const seconds = typeof raw === "number" ? raw : Number(raw);
+  if (raw === undefined || raw === null || !Number.isFinite(seconds) || seconds <= 0) return message;
+  const [key, count] = seconds < 120
+    ? ["errors.retryAfterSeconds", Math.ceil(seconds)]
+    : seconds < 7200
+      ? ["errors.retryAfterMinutes", Math.ceil(seconds / 60)]
+      : ["errors.retryAfterHours", Math.ceil(seconds / 3600)];
+  const suffix = translate(locale, key as string, { count });
+  return suffix ? `${message} ${suffix}` : message;
+}
+
+function resolveBaseMessage(
+  locale: Locale,
+  code: number,
+  fallback: string,
+  context: ErrorResolveContext
+): string {
   const params = {
     ...(context.errorParams ?? {}),
     traceId: context.traceId ?? ""
