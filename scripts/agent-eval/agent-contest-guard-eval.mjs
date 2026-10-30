@@ -12,6 +12,8 @@
  *   C2/R2 RUNNING (aiPolicyMode STRICT)   snapshotting PUB2 (label A, PUBLIC)
  *   C3/R3 ENDED (window past, beyond grace) snapshotting PRIV2 (fallback PUB3)
  *   ctxeval001 is an ACTIVE participant of R1 and R2 (NOT of R3).
+ *   E7 adds C4/R4 RUNNING (aiPolicyMode NO_AI) snapshotting PUB1 after E1..E6, and makes
+ *   ctxeval001 its participant too, so every later turn of that account is refused.
  * Problems are selected dynamically from the problems table (no hardcoded ids).
  *
  * Case groups (each case a fresh conversation unless noted):
@@ -22,6 +24,7 @@
  *   E5 false-positive & time controls (generic question, non-participant,
  *      ended run; the mid-generation time race is unit-test only, see E5-16)
  *   E6 audit completeness + staff audit API (no AI calls)
+ *   E7 AI-off run (NO_AI): plain and tampered requests refused before any model call
  *
  * Assertion levels: SQL/audit rows = hard, answer-content heuristics = hard,
  * model-wording observations = WARN (never fail the gate).
@@ -69,7 +72,7 @@ const config = {
   controlPassword: process.env.AIOJ_EVAL_CONTROL_PASSWORD || "",
   adminAccount: process.env.AIOJ_EVAL_ADMIN_ACCOUNT || "admin",
   adminPassword: process.env.AIOJ_EVAL_ADMIN_PASSWORD || "",
-  groups: (process.env.AIOJ_EVAL_GROUP || "E1,E2,E3,E4,E5,E6").split(",").map((g) => g.trim().toUpperCase()),
+  groups: (process.env.AIOJ_EVAL_GROUP || "E1,E2,E3,E4,E5,E6,E7").split(",").map((g) => g.trim().toUpperCase()),
   quotaGuard: Number(process.env.AIOJ_EVAL_QUOTA_GUARD || "30"),
   guardGraceSeconds: Number(process.env.AIOJ_EVAL_GUARD_GRACE_SECONDS || "600"),
   keep: (process.env.AIOJ_EVAL_KEEP || "false") === "true",
@@ -93,6 +96,7 @@ const IDS = {
   cp1: ID_BASE + 21n, cp2: ID_BASE + 22n, cp3: ID_BASE + 23n, cp4: ID_BASE + 24n,
   sn1: ID_BASE + 31n, sn2: ID_BASE + 32n, sn3: ID_BASE + 33n, sn4: ID_BASE + 34n,
   pt1: ID_BASE + 41n, pt2: ID_BASE + 42n,
+  c4: ID_BASE + 4n, r4: ID_BASE + 14n, cp5: ID_BASE + 25n, sn5: ID_BASE + 35n, pt3: ID_BASE + 43n,
 };
 
 function fail(message) {
@@ -515,6 +519,40 @@ function buildFixtureSql(userId, problems, dryRun) {
   return lines.join("\n") + "\n";
 }
 
+/** E7: an AI-off (NO_AI) run R4 snapshotting PUB1, with the eval account as its participant. ASCII only. */
+function applyNoAiFixture(userId, problem) {
+  const { c4, r4, cp5, sn5, pt3 } = IDS;
+  const sql = [
+    "SET NAMES utf8mb4;",
+    "START TRANSACTION;",
+    `INSERT INTO contests (id, owner_user_id, scope_group_id, title, description, mode, status, visibility, ` +
+    `start_at, end_at, freeze_at, created_at, updated_at, published_at, archived_at, ai_policy_mode, ai_policy_notes) VALUES ` +
+    `(${c4}, ${userId}, NULL, '${RUN_TAG} C4', 'agent contest guard eval fixture C4 (AI off)', 'ACM', 'PUBLISHED', 'PRIVATE', ` +
+    `NULL, NULL, NULL, NOW(3), NOW(3), NOW(3), NULL, 'NO_AI', NULL);`,
+    `INSERT INTO contest_runs (id, contest_id, run_kind, title, status, start_at, end_at, freeze_at, source_run_id, ` +
+    `created_by, created_at, updated_at, registration_policy, registration_access, approval_required, ` +
+    `contest_title_snapshot, contest_description_snapshot, mode_snapshot, penalty_minutes_snapshot, ce_penalty_snapshot, ` +
+    `ai_policy_mode_snapshot, ai_policy_notes_snapshot) VALUES ` +
+    `(${r4}, ${c4}, 'FORMAL', '${RUN_TAG} R4', 'RUNNING', DATE_SUB(NOW(3), INTERVAL 10 MINUTE), DATE_ADD(NOW(3), INTERVAL 120 MINUTE), ` +
+    `NULL, NULL, ${userId}, NOW(3), NOW(3), 'INVITE_ONLY', 'INVITE_ONLY', 0, '${RUN_TAG} C4', NULL, 'ACM', 20, 0, 'NO_AI', NULL);`,
+    `INSERT INTO contest_problems (id, contest_id, problem_id, label, display_title, score, sort_order, created_at, updated_at) ` +
+    `SELECT ${cp5}, ${c4}, p.id, 'A', p.title, 100, 1, NOW(3), NOW(3) FROM problems p WHERE p.id = ${problem.id};`,
+    `INSERT INTO contest_run_problem_snapshots (id, contest_id, contest_run_id, contest_problem_id, problem_id, label, ` +
+    `display_title, statement, notes, tags, difficulty, time_limit_millis, memory_limit_kb, score, sort_order, created_at, visibility) ` +
+    `SELECT ${sn5}, ${c4}, ${r4}, ${cp5}, p.id, 'A', p.title, p.statement, NULL, NULL, p.difficulty, ` +
+    `p.time_limit_millis, p.memory_limit_kb, 100, 1, NOW(3), p.visibility FROM problems p WHERE p.id = ${problem.id};`,
+    `INSERT INTO contest_participants (id, contest_id, user_id, participant_type, status, account_snapshot, ` +
+    `display_name_snapshot, email_snapshot, scope_group_id, group_name_snapshot, registered_at, created_at, updated_at, contest_run_id) ` +
+    `SELECT ${pt3}, ${c4}, u.id, 'INDIVIDUAL', 'ACTIVE', u.account, u.display_name, u.email, NULL, NULL, ` +
+    `NOW(3), NOW(3), NOW(3), ${r4} FROM users u WHERE u.id = ${userId};`,
+    "COMMIT;",
+  ].join("\n") + "\n";
+  mkdirSync(OUT_DIR, { recursive: true });
+  const file = join(OUT_DIR, `fixture-${RUN_TAG}-noai.sql`);
+  writeFileSync(file, sql, "utf8");
+  return executeSqlFile(file);
+}
+
 function applyFixture(userId, problems, dryRun) {
   const sql = buildFixtureSql(userId, problems, dryRun);
   mkdirSync(OUT_DIR, { recursive: true });
@@ -549,8 +587,10 @@ function cleanupFixture() {
 // ---------------------------------------------------------------------------
 
 function evalConversations() {
+  // E7 turns are refused before any message is written, so their conversations are found by turn.
   return query(
-    `SELECT DISTINCT conversation_id FROM ai_messages WHERE client_message_id LIKE '${MARKER_PREFIX}%'`
+    `SELECT DISTINCT conversation_id FROM ai_messages WHERE client_message_id LIKE '${MARKER_PREFIX}%' ` +
+    `UNION SELECT DISTINCT conversation_id FROM ai_turns WHERE client_turn_id LIKE '${MARKER_PREFIX}%'`
   ).map(([id]) => id);
 }
 
@@ -1113,6 +1153,59 @@ async function main() {
       detail: `list=${listRes.status}${listOk ? `(records=${listData.records.length},total=${listData.total})` : "!!"} ` +
         `messages=${msgRes.status}${msgOk ? "(ok)" : "!!"} student=${studentRes.status}(expect 403)` +
         (listRes.status === 404 ? " — 404 hint: gateway 路由未覆盖 /api/v1/admin/ai-guard-decisions/** (application.yml ai-service Path 缺该前缀)" : ""),
+    });
+  }
+
+  // ============================ E7 禁用 AI 辅助 ==============================
+  // Runs last: once the eval account is a participant of the NO_AI run R4, every turn of it is refused.
+  if (config.groups.includes("E7")) {
+    console.log("\n[E7] AI-off run (NO_AI): participants are refused before any model call");
+    applyNoAiFixture(userId, pub1);
+    const joined = queryOne(
+      `SELECT COUNT(*) FROM contest_participants WHERE contest_run_id = ${IDS.r4} AND status = 'ACTIVE'`
+    );
+    if (!joined || joined[0] !== "1") {
+      fail(`E7 fixture failed: expected the eval account to be an ACTIVE participant of R4, got ${joined ? joined[0] : "none"}`);
+    }
+    const usageBefore = Number(queryOne(`SELECT COUNT(*) FROM ai_usage_records WHERE user_id = ${userId}`)[0]);
+    const aiOff = (result) => result.status === 403 && result.json != null &&
+      (result.json.errorKey === "ai.contestAiDisabled" ||
+        String(result.json.message || "").includes("AI assistance is disabled"));
+    const plain = await apiRaw("POST", "/api/v1/ai/chat/send", {
+      message: "动态规划和贪心有什么区别？",
+      clientMessageId: `${RUN_TAG}-e7-1`,
+    }, token, 60_000);
+    recordCase({
+      group: "E7", name: "E7-19 NO_AI 参赛者普通提问 → 403 禁用 AI 辅助",
+      pass: aiOff(plain),
+      detail: `HTTP ${plain.status} errorKey=${plain.json ? plain.json.errorKey : "?"}`,
+    });
+    // A tampered body claims another (DEFAULT) run, one of its problems and a practice problem id.
+    const tampered = await apiRaw("POST", "/api/v1/ai/chat/send", {
+      message: "这道练习题的思路是什么？",
+      problemId: String(pub1.id),
+      contestContext: { contestId: String(IDS.c1), contestRunId: String(IDS.r1), contestProblemId: String(IDS.cp1) },
+      clientMessageId: `${RUN_TAG}-e7-2`,
+    }, token, 60_000);
+    recordCase({
+      group: "E7", name: "E7-20 改包冒充别的比赛/练习题 → 仍 403",
+      pass: aiOff(tampered),
+      detail: `HTTP ${tampered.status} errorKey=${tampered.json ? tampered.json.errorKey : "?"}`,
+    });
+    // The turn row is written before the participation check, so the audit is looked up by turn.
+    const e7Turns = query(`SELECT id FROM ai_turns WHERE client_turn_id LIKE '${RUN_TAG}-e7-%'`).map(([id]) => id);
+    const blocks = e7Turns.length === 0 ? 0 : Number(queryOne(
+      `SELECT COUNT(*) FROM ai_guard_decisions WHERE turn_id IN (${e7Turns.map(sqlString).join(",")}) ` +
+      `AND layer = 'L1_PARTICIPANT' AND decision = 'BLOCK' AND reason_code = 'contest_ai_disabled'`
+    )[0]);
+    const usageAfter = Number(queryOne(`SELECT COUNT(*) FROM ai_usage_records WHERE user_id = ${userId}`)[0]);
+    const messages = Number(queryOne(
+      `SELECT COUNT(*) FROM ai_messages WHERE client_message_id LIKE '${RUN_TAG}-e7-%'`
+    )[0]);
+    recordCase({
+      group: "E7", name: "E7-21 两轮都记 L1 BLOCK(contest_ai_disabled)，无模型调用、无消息",
+      pass: e7Turns.length === 2 && blocks === 2 && usageAfter === usageBefore && messages === 0,
+      detail: `turns=${e7Turns.length} l1Blocks=${blocks} usageDelta=${usageAfter - usageBefore} messages=${messages}`,
     });
   }
 

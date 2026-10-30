@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ContestGuardMatchTextTest {
 
-    /** NO_AI includes STRICT: a second, non-participant account gets nothing about the run's problems either. */
+    /** NO_AI denies at least what STRICT denies; its own participants are refused earlier, at L1. */
     @Test
     void noAiRunsRefuseProblemQuestionsLikeStrictOnes() {
         assertThat(ContestGuardMatchText.ruleOf("PUBLIC", "NO_AI"))

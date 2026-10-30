@@ -93,9 +93,11 @@ A contest's AI policy has three levels, frozen into the run at publication:
 
 - **Default:** private problems are refused; public problems get idea-level guidance only, never complete submittable code.
 - **Strict:** any question about one of the run's problems is refused; other questions are answered.
-- **AI off:** participants of the run get no AI assistance at all while it runs, grace period included, ideas included. When the participation decision finds such a run, the turn is refused with 403 before any model call and audited at L1; the pre-return recheck applies the same rule. The run's problems count as Strict for everyone else, so a second account gets nothing about them either.
+- **AI off:** participants of the run get no AI assistance at all while it runs, grace period included, ideas included. When the participation decision finds such a run, the turn is refused with 403 before any model call and audited at L1; the pre-return recheck applies the same rule.
 
 The earlier "no interception" level is retired: blueprints moved to Default, and runs published with it keep their snapshot.
+
+Run policies bind participants only; non-participants are not constrained. A participant who asks through a second, non-participant account is therefore beyond every level, and only contest rules and the audit trail address that.
 
 The participation decision trusts only the user id in the access token and looks for an `ACTIVE` participant record in a running run. Client-supplied `problemId` or contest context supports attribution and experience but is never trusted for authorization. When problem-service is unavailable, participation cannot be confirmed and every AI turn is refused (503, retryable). Private statements, hidden tests, and other participants' source are not sent to the model for classification.
 

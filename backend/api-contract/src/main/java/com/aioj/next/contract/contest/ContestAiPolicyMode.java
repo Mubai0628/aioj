@@ -24,8 +24,9 @@ public enum ContestAiPolicyMode {
     NO_AI;
 
     /**
-     * Whether any question materially about one of the run's problems is refused, from anyone. NO_AI
-     * includes STRICT, so a second, non-participant account gets nothing about the run's problems either.
+     * Whether a participant's question materially about one of the run's problems is refused. NO_AI
+     * denies at least what STRICT denies, although its own participants are refused earlier, at L1.
+     * Run policies bind participants only: a non-participant account is outside every one of them.
      */
     public boolean refusesProblemQuestions() {
         return this == STRICT || this == NO_AI;
