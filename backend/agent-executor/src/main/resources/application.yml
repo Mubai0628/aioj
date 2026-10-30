@@ -15,7 +15,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,prometheus}
+        # A literal: this file reads only AGENT_EXECUTOR_* and AGENT_SANDBOX_* (plan §3.6 rule 3); the
+        # production Compose narrows it to health with MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE.
+        include: health,prometheus
   endpoint:
     health:
       probes:
