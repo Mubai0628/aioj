@@ -1,5 +1,6 @@
 package com.aioj.next.executor.domain;
 
+import com.aioj.next.sandbox.client.SandboxException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -17,6 +18,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -167,6 +169,23 @@ class CompileCacheTest {
         InOrder order = inOrder(sandbox);
         order.verify(sandbox).runSource(eq("cpp"), eq(SOURCE), eq("file-1"), anyString(), anyLong(), anyLong(), anyInt());
         order.verify(sandbox).deleteCachedFile("file-1");
+    }
+
+    @Test
+    void aFileTheSandboxAlreadyExpiredIsNotADeleteFailure() {
+        compiles("file-1", "file-2");
+        SandboxException gone = mock(SandboxException.class);
+        when(gone.httpStatus()).thenReturn(404);
+        doThrow(gone).when(sandbox).deleteCachedFile("file-1");
+        CompileCache cache = cache(256);
+        cache.compile("user:1", "cpp", SOURCE, 1L, 1L);
+        cache.compile("user:2", "cpp", SOURCE, 1L, 1L);
+
+        cache.close();
+
+        // T2.7: go-judge's file timeout got there first; the other files are still deleted.
+        verify(sandbox).deleteCachedFile("file-1");
+        verify(sandbox).deleteCachedFile("file-2");
     }
 
     @Test

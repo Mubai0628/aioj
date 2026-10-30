@@ -34,8 +34,13 @@ public class AgentExecutorProperties {
     /** Memory for compiling and for generator scripts, which compile the standard solution in the same run. */
     private int maxCompileMemoryLimitKb = 393_216;
     private int maxProcessLimit = 80;
-    /** A5.3: how long a scoped compile is reused, and how many are kept at most (0 turns the cache off). */
-    private int compileCacheTtlSeconds = 600;
+    /**
+     * A5.3: how long a scoped compile is reused, and how many are kept at most (0 turns the cache off).
+     * T2.7: TTL plus the one-minute sweep plus a run must stay below the sandbox's file timeout
+     * (ES_FILE_TIMEOUT, 10 minutes), or go-judge drops the executable first: the delete then gets a
+     * 404 and a late cache hit could run a file that vanishes mid-run.
+     */
+    private int compileCacheTtlSeconds = 300;
     private int compileCacheMaxEntries = 256;
     private long maxDraftPackageBytes = 50L * 1024L * 1024L;
     private long maxDraftPackageUncompressedBytes = 100L * 1024L * 1024L;

@@ -62,6 +62,8 @@ aioj:
     max-memory-limit-kb: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:262144}
     max-compile-memory-limit-kb: ${AGENT_EXECUTOR_MAX_COMPILE_MEMORY_LIMIT_KB:393216}
     max-process-limit: ${AGENT_EXECUTOR_MAX_PROCESS_LIMIT:80}
+    # T2.7: below the agent-sandbox file timeout (10m) with room for the sweep and a run.
+    compile-cache-ttl-seconds: ${AGENT_EXECUTOR_COMPILE_CACHE_TTL_SECONDS:300}
     max-draft-package-bytes: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_BYTES:52428800}
     max-draft-package-uncompressed-bytes: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_UNCOMPRESSED_BYTES:104857600}
     max-draft-package-entry-bytes: ${AGENT_EXECUTOR_MAX_DRAFT_PACKAGE_ENTRY_BYTES:8388608}

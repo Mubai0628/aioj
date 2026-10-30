@@ -250,6 +250,11 @@ public class CompileCache {
             try {
                 sandbox.deleteCachedFile(fileId);
             } catch (RuntimeException ex) {
+                if (ex instanceof SandboxException gone && Integer.valueOf(404).equals(gone.httpStatus())) {
+                    // go-judge's own file timeout got there first; nothing is left to delete (T2.7).
+                    log.debug("compile cache file had already expired in the sandbox");
+                    continue;
+                }
                 log.warn("compile cache could not delete sandbox file: {}{}", SafeErrors.describe(ex),
                         ex instanceof SandboxException refused && refused.httpStatus() != null
                                 ? " status=" + refused.httpStatus() : "");
