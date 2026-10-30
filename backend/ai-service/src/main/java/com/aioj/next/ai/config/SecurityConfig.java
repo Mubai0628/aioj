@@ -46,7 +46,7 @@ public class SecurityConfig {
                         // of an already-authenticated request must not be rejected by AuthorizationFilter.
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/v1/internal/**").hasRole("INTERNAL")
-                        .requestMatchers("/actuator/health", "/actuator/health/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/prometheus", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new InternalApiTokenFilter(internalApiProperties.getInbound(), InternalApiAccess.aiService()),
                         UsernamePasswordAuthenticationFilter.class)

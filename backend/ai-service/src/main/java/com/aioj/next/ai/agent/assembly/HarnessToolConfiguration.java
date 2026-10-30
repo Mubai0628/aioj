@@ -12,8 +12,10 @@ import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.ToolAuditService;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftWorkspaceMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import tools.jackson.databind.ObjectMapper;
@@ -40,14 +42,22 @@ public class HarnessToolConfiguration {
     @Bean(destroyMethod = "close")
     public ToolRuntime harnessToolRuntime(List<AgentTool> tools, ProblemDraftWorkspaceMapper workspaceMapper,
                                           ToolAuditService auditService, AiProperties aiProperties,
-                                          ObjectMapper objectMapper) {
-        return create(tools, workspaceMapper, auditService, aiProperties.getCapacity(), objectMapper);
+                                          ObjectMapper objectMapper, ObjectProvider<MeterRegistry> meters) {
+        return create(tools, workspaceMapper, auditService, aiProperties.getCapacity(), objectMapper,
+                meters.getIfAvailable());
     }
 
     /** The same pipeline outside Spring, for tests that run the loop end to end. */
     public static ToolRuntime create(List<AgentTool> tools, ProblemDraftWorkspaceMapper workspaceMapper,
                                      ToolAuditService auditService, AiProperties.Capacity capacity,
                                      ObjectMapper objectMapper) {
+        return create(tools, workspaceMapper, auditService, capacity, objectMapper, null);
+    }
+
+    /** @param meters null records no tool call meters */
+    public static ToolRuntime create(List<AgentTool> tools, ProblemDraftWorkspaceMapper workspaceMapper,
+                                     ToolAuditService auditService, AiProperties.Capacity capacity,
+                                     ObjectMapper objectMapper, MeterRegistry meters) {
         ToolCatalog catalog = catalog(tools);
         for (ToolRejection rejection : catalog.rejections()) {
             log.warn("Agent tool left out of the catalog: tool={} class={} reasons={}", rejection.toolName(),
@@ -61,8 +71,8 @@ public class HarnessToolConfiguration {
         });
         // Tool threads log, and call agent-executor and problem-service, under the turn's trace id.
         return ToolRuntimes.create(catalog, List.of(new WorkspaceOwnershipAuthorizer(workspaceMapper)),
-                new ToolCallAuditSink(auditService, descriptors), bulkheadLimits(capacity), objectMapper,
-                HarnessContextConfiguration.carryLoggingContext());
+                new ToolCallMetrics(new ToolCallAuditSink(auditService, descriptors), meters, descriptors),
+                bulkheadLimits(capacity), objectMapper, HarnessContextConfiguration.carryLoggingContext());
     }
 
     /** The tools as the Harness registers them; a tool that breaks the rules is in its rejections. */

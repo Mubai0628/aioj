@@ -143,6 +143,39 @@ class GoJudgeClientTest {
         assertThat(requests).containsExactly("GET /file/a%20b%2Fc Bearer t - ", "DELETE /file/a%20b%2Fc Bearer t - ");
     }
 
+    @Test
+    void theListenerHearsEveryRequestWithItsOperationAndOutcome() {
+        List<String> heard = new CopyOnWriteArrayList<>();
+        GoJudgeClient client = new GoJudgeClient(new SandboxConfig("http://127.0.0.1:" + server.getAddress().getPort()
+                + "/run", "t", Duration.ofSeconds(2), Duration.ofSeconds(5)),
+                (operation, outcome, elapsedNanos) -> heard.add(operation + ":" + outcome + ":" + (elapsedNanos >= 0)));
+
+        responseBody = "[{\"status\":\"Time Limit Exceeded\",\"exitStatus\":0,\"time\":1,\"memory\":1,\"runTime\":1}]";
+        client.run(Command.builder(List.of("./main")).build());
+        status = 500;
+        assertThatThrownBy(() -> client.run(Command.builder(List.of("./main")).build()))
+                .isInstanceOf(SandboxException.class);
+        status = 200;
+        responseBody = "zip-bytes";
+        client.downloadFile("f1", new ByteArrayOutputStream());
+        client.deleteFile("f1");
+
+        assertThat(heard).containsExactly("run:TIME_LIMIT_EXCEEDED:true", "run:FAILED:true",
+                "download_file:OK:true", "delete_file:OK:true");
+    }
+
+    @Test
+    void aListenerThatThrowsDoesNotFailTheRequest() {
+        responseBody = "[{\"status\":\"Accepted\",\"exitStatus\":0,\"time\":1,\"memory\":1,\"runTime\":1}]";
+        GoJudgeClient client = new GoJudgeClient(new SandboxConfig("http://127.0.0.1:" + server.getAddress().getPort()
+                + "/run", "t", Duration.ofSeconds(2), Duration.ofSeconds(5)),
+                (operation, outcome, elapsedNanos) -> {
+                    throw new IllegalStateException("meter registry broke");
+                });
+
+        assertThat(client.run(Command.builder(List.of("./main")).build()).accepted()).isTrue();
+    }
+
     private GoJudgeClient client(String token, Duration readTimeout) {
         return new GoJudgeClient(new SandboxConfig("http://127.0.0.1:" + server.getAddress().getPort() + "/run", token,
                 Duration.ofSeconds(2), readTimeout));

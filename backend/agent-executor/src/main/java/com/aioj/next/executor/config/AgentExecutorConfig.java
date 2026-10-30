@@ -4,6 +4,8 @@ import com.aioj.next.common.security.InternalApiTokenFilter;
 import com.aioj.next.common.web.TraceIdFilter;
 import com.aioj.next.sandbox.client.DefaultOutputComparator;
 import com.aioj.next.sandbox.client.OutputComparator;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -38,9 +40,10 @@ public class AgentExecutorConfig {
 
     /** After the token check, so a caller without the token never takes the only permit. */
     @Bean
-    FilterRegistrationBean<ExecutionConcurrencyFilter> executionConcurrencyFilter(AgentExecutorProperties properties) {
-        FilterRegistrationBean<ExecutionConcurrencyFilter> registration =
-                new FilterRegistrationBean<>(new ExecutionConcurrencyFilter(properties.getMaxConcurrentExecutions()));
+    FilterRegistrationBean<ExecutionConcurrencyFilter> executionConcurrencyFilter(AgentExecutorProperties properties,
+                                                                                  ObjectProvider<MeterRegistry> meters) {
+        FilterRegistrationBean<ExecutionConcurrencyFilter> registration = new FilterRegistrationBean<>(
+                new ExecutionConcurrencyFilter(properties.getMaxConcurrentExecutions(), meters.getIfAvailable()));
         registration.addUrlPatterns(INTERNAL_PATHS);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 20);
         return registration;

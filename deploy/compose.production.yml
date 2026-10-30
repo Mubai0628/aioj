@@ -299,6 +299,7 @@ services:
       AGENT_EXECUTOR_WORK_ROOT: /aioj/agent-work
       AGENT_EXECUTOR_MAX_CONCURRENCY: "1"
       AGENT_EXECUTOR_LOG_LEVEL: ${AGENT_EXECUTOR_LOG_LEVEL:-INFO}
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health
       # Plan T1.10: measured peaks in agent-sandbox were g++ 171-215 MiB, javac 55-143 MiB and a
       # 20-case package build 220 MiB, so runs get 256 MiB and compiles or generator scripts 384 MiB.
       AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:-262144}

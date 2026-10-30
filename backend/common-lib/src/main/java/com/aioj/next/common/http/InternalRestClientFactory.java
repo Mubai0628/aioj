@@ -4,6 +4,9 @@ import com.aioj.next.common.api.TraceIds;
 import com.aioj.next.common.resilience.CircuitBreaker;
 import com.aioj.next.common.resilience.CircuitBreaker.Outcome;
 import com.aioj.next.common.security.InternalServiceProperties;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -40,6 +43,8 @@ public class InternalRestClientFactory {
     private static final Logger log = LoggerFactory.getLogger(InternalRestClientFactory.class);
     private final InternalServiceProperties properties;
     private final Consumer<String> transactionCounter;
+    private final MeterRegistry meters;
+    private final ObservationRegistry observations;
     private final LongSupplier nanoClock;
     private final Map<String, TargetState> targets = new ConcurrentHashMap<>();
     private final Map<TransportKey, HttpClient> transports = new ConcurrentHashMap<>();
@@ -52,10 +57,28 @@ public class InternalRestClientFactory {
         this(properties, transactionCounter, System::nanoTime);
     }
 
+    /**
+     * What the services wire (T2.5): every call times into {@code http.client.requests}, and each
+     * target's breaker state, rejected calls and in-transaction calls are meters. Either may be null.
+     */
+    public InternalRestClientFactory(InternalServiceProperties properties, MeterRegistry meters,
+                                     ObservationRegistry observations) {
+        this(properties, meters == null ? target -> { }
+                        : target -> meters.counter("aioj.internal.http.transaction", "target", target).increment(),
+                meters, observations, System::nanoTime);
+    }
+
     InternalRestClientFactory(InternalServiceProperties properties, Consumer<String> transactionCounter,
                               LongSupplier nanoClock) {
+        this(properties, transactionCounter, null, null, nanoClock);
+    }
+
+    InternalRestClientFactory(InternalServiceProperties properties, Consumer<String> transactionCounter,
+                              MeterRegistry meters, ObservationRegistry observations, LongSupplier nanoClock) {
         this.properties = properties;
         this.transactionCounter = transactionCounter;
+        this.meters = meters;
+        this.observations = observations;
         this.nanoClock = nanoClock;
     }
 
@@ -86,7 +109,11 @@ public class InternalRestClientFactory {
         };
         URI origin = URI.create(baseUrl);
         TargetState state = targets.computeIfAbsent(target, this::newTarget);
-        return RestClient.builder().baseUrl(baseUrl).requestFactory(requests)
+        RestClient.Builder builder = RestClient.builder().baseUrl(baseUrl).requestFactory(requests);
+        if (observations != null) {
+            builder.observationRegistry(observations);
+        }
+        return builder
                 .requestInterceptor((request, body, execution) -> {
                     guardTransaction(target, clientId);
                     request.getHeaders().remove(TOKEN_HEADER);
@@ -101,11 +128,11 @@ public class InternalRestClientFactory {
                         request.getHeaders().set(TraceIds.HEADER, traceId);
                     }
                     if (!state.permits.tryAcquire()) {
-                        throw unavailable(target, "bulkhead_full");
+                        throw rejected(target, "bulkhead_full");
                     }
                     if (!state.breaker.tryPass()) {
                         state.permits.release();
-                        throw unavailable(target, "circuit_open");
+                        throw rejected(target, "circuit_open");
                     }
                     try {
                         ClientHttpResponse response = execute(request, body, execution, read, attemptTimeout);
@@ -186,8 +213,31 @@ public class InternalRestClientFactory {
                 || settings.getFailureRateThreshold() <= 0 || settings.getFailureRateThreshold() > 1) {
             throw new IllegalArgumentException("Invalid internal HTTP protection settings for " + target);
         }
-        return new TargetState(new CircuitBreaker(settings.getWindowSize(), settings.getFailureRateThreshold(),
+        TargetState state = new TargetState(new CircuitBreaker(settings.getWindowSize(), settings.getFailureRateThreshold(),
                 settings.getConsecutiveFailures(), positive(settings.getOpenDuration()), nanoClock), settings.getBulkheadLimit());
+        if (meters != null) {
+            Gauge.builder("aioj.internal.http.circuit.state", state, s -> circuitValue(s.breaker.state()))
+                    .description("Breaker of an internal target: 0 closed, 1 half-open, 2 open")
+                    .tag("target", target)
+                    .register(meters);
+        }
+        return state;
+    }
+
+    private static double circuitValue(CircuitBreaker.State state) {
+        return switch (state) {
+            case CLOSED -> 0;
+            case HALF_OPEN -> 1;
+            case OPEN -> 2;
+        };
+    }
+
+    /** A call turned away before it left: the target's bulkhead is full or its breaker is open. */
+    private ResourceAccessException rejected(String target, String reason) {
+        if (meters != null) {
+            meters.counter("aioj.internal.http.rejected", "target", target, "reason", reason).increment();
+        }
+        return unavailable(target, reason);
     }
 
     private static Duration positive(Duration value) {

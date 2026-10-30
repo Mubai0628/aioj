@@ -33,13 +33,23 @@ class HealthProbeSecurityTest {
     @RestController
     static class ProbeController {
         @GetMapping({"/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness",
-                "/actuator/health/agent", "/actuator/metrics", "/private"})
+                "/actuator/health/agent", "/actuator/metrics", "/actuator/prometheus", "/private"})
         Map<String, String> status() { return Map.of("status", "UP"); }
     }
     @Test
     void healthGroupsNeedNoBearerOrInternalCredential() throws Exception {
         for (String path : List.of("/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness", "/actuator/health/agent")) {
             mvc.perform(get(path)).andExpect(status().isOk());
+        }
+    }
+    /** S5: Prometheus scrapes without a credential; the endpoint is reachable on the container network only. */
+    @Test
+    void prometheusNeedsNoCredentialButAPathThatClimbsOutIsRejected() throws Exception {
+        mvc.perform(get("/actuator/prometheus")).andExpect(status().isOk());
+        // What a request like /api/v1/problems/../actuator/prometheus becomes after the gateway strips its prefix.
+        for (String climbing : List.of("/problems/../actuator/prometheus", "/problems/%2e%2e/actuator/prometheus",
+                "/problems/%2E%2E/actuator/prometheus")) {
+            mvc.perform(get(java.net.URI.create(climbing))).andExpect(status().isBadRequest());
         }
     }
     @Test

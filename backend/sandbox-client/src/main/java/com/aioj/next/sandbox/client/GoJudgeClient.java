@@ -33,46 +33,98 @@ public final class GoJudgeClient {
     private final SandboxConfig config;
     private final String baseUrl;
     private final HttpClient http;
+    private final RequestListener listener;
 
     public GoJudgeClient(SandboxConfig config) {
+        this(config, RequestListener.NONE);
+    }
+
+    /** @param listener told about every request once it ends; the services turn it into meters (T2.5) */
+    public GoJudgeClient(SandboxConfig config, RequestListener listener) {
         this.config = config;
         this.baseUrl = config.baseUrl();
         this.http = HttpClient.newBuilder().connectTimeout(config.connectTimeout()).build();
+        this.listener = listener == null ? RequestListener.NONE : listener;
     }
 
     /** Runs one command and returns its result. */
     public RunResult run(Command command) {
-        byte[] body = JSON.writeValueAsBytes(Map.of("cmd", List.of(command)));
-        HttpRequest.Builder request = request("/run")
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofByteArray(body));
-        HttpResponse<byte[]> response = send(request, "POST /run", HttpResponse.BodyHandlers.ofByteArray());
-        List<RunResult> results;
+        long started = System.nanoTime();
+        String outcome = RequestListener.FAILED;
         try {
-            results = JSON.readValue(response.body(), RUN_RESULTS);
-        } catch (JacksonException ex) {
-            throw new SandboxException("Sandbox returned an unreadable /run response", ex);
+            byte[] body = JSON.writeValueAsBytes(Map.of("cmd", List.of(command)));
+            HttpRequest.Builder request = request("/run")
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(body));
+            HttpResponse<byte[]> response = send(request, "POST /run", HttpResponse.BodyHandlers.ofByteArray());
+            List<RunResult> results;
+            try {
+                results = JSON.readValue(response.body(), RUN_RESULTS);
+            } catch (JacksonException ex) {
+                throw new SandboxException("Sandbox returned an unreadable /run response", ex);
+            }
+            if (results == null || results.isEmpty() || results.get(0) == null) {
+                throw new SandboxException("Sandbox returned empty /run response");
+            }
+            outcome = ResultCode.of(results.get(0)).name();
+            return results.get(0);
+        } finally {
+            completed("run", outcome, started);
         }
-        if (results == null || results.isEmpty() || results.get(0) == null) {
-            throw new SandboxException("Sandbox returned empty /run response");
-        }
-        return results.get(0);
     }
 
     public void deleteFile(String fileId) {
-        send(request(filePath(fileId)).DELETE(), "DELETE /file/{id}", HttpResponse.BodyHandlers.discarding());
+        long started = System.nanoTime();
+        String outcome = RequestListener.FAILED;
+        try {
+            send(request(filePath(fileId)).DELETE(), "DELETE /file/{id}", HttpResponse.BodyHandlers.discarding());
+            outcome = RequestListener.OK;
+        } finally {
+            completed("delete_file", outcome, started);
+        }
     }
 
     /** Streams a cached file into {@code output}. */
     public void downloadFile(String fileId, OutputStream output) {
-        HttpResponse<InputStream> response = send(request(filePath(fileId)).GET(), "GET /file/{id}",
-                HttpResponse.BodyHandlers.ofInputStream());
-        try (InputStream input = response.body()) {
-            input.transferTo(output);
-        } catch (IOException ex) {
-            throw new SandboxException("Failed to stream sandbox cached file", ex);
+        long started = System.nanoTime();
+        String outcome = RequestListener.FAILED;
+        try {
+            HttpResponse<InputStream> response = send(request(filePath(fileId)).GET(), "GET /file/{id}",
+                    HttpResponse.BodyHandlers.ofInputStream());
+            try (InputStream input = response.body()) {
+                input.transferTo(output);
+            } catch (IOException ex) {
+                throw new SandboxException("Failed to stream sandbox cached file", ex);
+            }
+            outcome = RequestListener.OK;
+        } finally {
+            completed("download_file", outcome, started);
         }
+    }
+
+    /** A listener that throws must never fail the sandbox call it was told about. */
+    private void completed(String operation, String outcome, long startedNanos) {
+        try {
+            listener.completed(operation, outcome, System.nanoTime() - startedNanos);
+        } catch (RuntimeException ignored) {
+            // Metrics are best effort.
+        }
+    }
+
+    /** Told about each sandbox request once it ends: what it was, how it ended and how long it took. */
+    @FunctionalInterface
+    public interface RequestListener {
+        String OK = "OK";
+        String FAILED = "FAILED";
+        RequestListener NONE = (operation, outcome, elapsedNanos) -> { };
+
+        /**
+         * @param operation {@code run}, {@code delete_file} or {@code download_file}
+         * @param outcome   the {@link ResultCode} name of a run that came back, {@link #OK} for a file
+         *                  request that succeeded, {@link #FAILED} when the request itself failed
+         */
+        void completed(String operation, String outcome, long elapsedNanos);
     }
 
     private HttpRequest.Builder request(String path) {

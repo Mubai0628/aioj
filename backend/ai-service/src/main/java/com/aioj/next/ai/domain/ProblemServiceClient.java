@@ -317,10 +317,11 @@ public class ProblemServiceClient {
             return List.of();
         }
         try {
-            StringBuilder query = new StringBuilder("/api/v1/internal/ai/problems/titles?ids=");
-            query.append(problemIds.stream().distinct().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
+            String ids = problemIds.stream().distinct().map(String::valueOf)
+                    .collect(java.util.stream.Collectors.joining(","));
+            // A template, not a built string: the client metrics tag requests by URI template.
             String response = restClient.get()
-                    .uri(query.toString())
+                    .uri("/api/v1/internal/ai/problems/titles?ids={ids}", ids)
                     .header(INTERNAL_TOKEN_HEADER, internalApiProperties.outboundToken("problem-service"))
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()

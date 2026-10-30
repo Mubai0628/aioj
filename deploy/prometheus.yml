@@ -11,3 +11,4 @@ scrape_configs:
           - problem-service:8202
           - judge-worker:8203
           - ai-service:8204
+          - agent-executor:8205

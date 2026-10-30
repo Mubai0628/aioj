@@ -1,5 +1,6 @@
 package com.aioj.next.judge.domain;
 
+import com.aioj.next.common.metrics.SandboxRequestMeter;
 import com.aioj.next.contract.judge.JudgeTaskMessage;
 import com.aioj.next.contract.contest.ContestMode;
 import com.aioj.next.contract.problem.TestcaseCheckerType;
@@ -16,10 +17,13 @@ import com.aioj.next.sandbox.client.OutputComparator;
 import com.aioj.next.sandbox.client.ResultCode;
 import com.aioj.next.sandbox.client.RunResult;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.micrometer.core.instrument.MeterRegistry;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -55,19 +59,43 @@ public class SandboxClient {
     private final SandboxExecutionClient sandboxExecutionClient;
     private final GoJudgeClient sandbox;
 
+    /** Without meters, for tests that build the client by hand. */
     public SandboxClient(JudgeWorkerProperties properties,
                          TestcasePackageCache testcaseCache,
                          SubmissionMapper submissionMapper,
                          OutputComparator outputComparator,
                          ObjectMapper objectMapper,
                          SandboxExecutionClient sandboxExecutionClient) {
+        this(properties, testcaseCache, submissionMapper, outputComparator, objectMapper, sandboxExecutionClient,
+                new SandboxRequestMeter(null));
+    }
+
+    @Autowired
+    public SandboxClient(JudgeWorkerProperties properties,
+                         TestcasePackageCache testcaseCache,
+                         SubmissionMapper submissionMapper,
+                         OutputComparator outputComparator,
+                         ObjectMapper objectMapper,
+                         SandboxExecutionClient sandboxExecutionClient,
+                         ObjectProvider<MeterRegistry> meters) {
+        this(properties, testcaseCache, submissionMapper, outputComparator, objectMapper, sandboxExecutionClient,
+                new SandboxRequestMeter(meters.getIfAvailable()));
+    }
+
+    private SandboxClient(JudgeWorkerProperties properties,
+                          TestcasePackageCache testcaseCache,
+                          SubmissionMapper submissionMapper,
+                          OutputComparator outputComparator,
+                          ObjectMapper objectMapper,
+                          SandboxExecutionClient sandboxExecutionClient,
+                          SandboxRequestMeter meter) {
         this.properties = properties;
         this.testcaseCache = testcaseCache;
         this.submissionMapper = submissionMapper;
         this.outputComparator = outputComparator;
         this.objectMapper = objectMapper;
         this.sandboxExecutionClient = sandboxExecutionClient;
-        this.sandbox = new GoJudgeClient(SandboxExecutionClient.sandboxConfig(properties));
+        this.sandbox = new GoJudgeClient(SandboxExecutionClient.sandboxConfig(properties), meter::record);
     }
 
     public JudgeResult judge(JudgeTaskMessage task) {

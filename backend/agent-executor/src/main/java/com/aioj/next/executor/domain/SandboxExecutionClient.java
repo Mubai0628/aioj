@@ -1,5 +1,6 @@
 package com.aioj.next.executor.domain;
 
+import com.aioj.next.common.metrics.SandboxRequestMeter;
 import com.aioj.next.executor.config.AgentExecutorProperties;
 import com.aioj.next.sandbox.client.Command;
 import com.aioj.next.sandbox.client.GoJudgeClient;
@@ -8,6 +9,9 @@ import com.aioj.next.sandbox.client.Limits;
 import com.aioj.next.sandbox.client.ResultCode;
 import com.aioj.next.sandbox.client.RunResult;
 import com.aioj.next.sandbox.client.SandboxConfig;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -37,9 +41,19 @@ public class SandboxExecutionClient {
     private final AgentExecutorProperties properties;
     private final GoJudgeClient sandbox;
 
+    /** Without meters, for tests that build the client by hand. */
     public SandboxExecutionClient(AgentExecutorProperties properties) {
+        this(properties, new SandboxRequestMeter(null));
+    }
+
+    @Autowired
+    public SandboxExecutionClient(AgentExecutorProperties properties, ObjectProvider<MeterRegistry> meters) {
+        this(properties, new SandboxRequestMeter(meters.getIfAvailable()));
+    }
+
+    private SandboxExecutionClient(AgentExecutorProperties properties, SandboxRequestMeter meter) {
         this.properties = properties;
-        this.sandbox = new GoJudgeClient(sandboxConfig(properties));
+        this.sandbox = new GoJudgeClient(sandboxConfig(properties), meter::record);
     }
 
     /** go-judge connection settings: the agent sandbox, never the judge sandbox. */

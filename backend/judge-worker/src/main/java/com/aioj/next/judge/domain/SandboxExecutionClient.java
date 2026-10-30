@@ -1,5 +1,6 @@
 package com.aioj.next.judge.domain;
 
+import com.aioj.next.common.metrics.SandboxRequestMeter;
 import com.aioj.next.judge.config.JudgeWorkerProperties;
 import com.aioj.next.sandbox.client.Command;
 import com.aioj.next.sandbox.client.GoJudgeClient;
@@ -7,6 +8,9 @@ import com.aioj.next.sandbox.client.LanguageProfile;
 import com.aioj.next.sandbox.client.Limits;
 import com.aioj.next.sandbox.client.RunResult;
 import com.aioj.next.sandbox.client.SandboxConfig;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -26,9 +30,19 @@ public class SandboxExecutionClient {
 
     private final GoJudgeClient sandbox;
 
+    /** Without meters, for tests that build the client by hand. */
     public SandboxExecutionClient(JudgeWorkerProperties properties) {
+        this(properties, new SandboxRequestMeter(null));
+    }
+
+    @Autowired
+    public SandboxExecutionClient(JudgeWorkerProperties properties, ObjectProvider<MeterRegistry> meters) {
+        this(properties, new SandboxRequestMeter(meters.getIfAvailable()));
+    }
+
+    private SandboxExecutionClient(JudgeWorkerProperties properties, SandboxRequestMeter meter) {
         this.properties = properties;
-        this.sandbox = new GoJudgeClient(sandboxConfig(properties));
+        this.sandbox = new GoJudgeClient(sandboxConfig(properties), meter::record);
     }
 
     /** go-judge connection settings from judge-worker's properties. */

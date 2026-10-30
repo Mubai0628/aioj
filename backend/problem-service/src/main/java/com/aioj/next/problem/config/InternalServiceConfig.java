@@ -10,8 +10,8 @@ import org.springframework.context.annotation.Configuration;
 public class InternalServiceConfig {
     @Bean
     InternalRestClientFactory internalRestClientFactory(InternalApiProperties properties,
-            org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> registries) {
-        return new InternalRestClientFactory(properties, target -> registries.ifAvailable(
-                registry -> registry.counter("aioj.internal.http.transaction", "target", target).increment()));
+            org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> registries,
+            org.springframework.beans.factory.ObjectProvider<io.micrometer.observation.ObservationRegistry> observations) {
+        return new InternalRestClientFactory(properties, registries.getIfAvailable(), observations.getIfAvailable());
     }
 }

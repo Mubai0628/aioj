@@ -3,6 +3,9 @@ package com.aioj.next.common.http;
 import com.aioj.next.common.resilience.CircuitBreaker;
 import com.aioj.next.common.security.InternalServiceProperties;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -203,6 +206,34 @@ class InternalHttpResilienceTest {
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("inside database transaction");
         assertThat(requests.get()).isEqualTo(2);
         assertThat(violations.get()).isEqualTo(2);
+    }
+
+    @Test
+    void callsBreakerStateAndRejectionsAreMetersPerTarget() throws Exception {
+        start(exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            respond(exchange, 503, "down");
+        });
+        var meters = new SimpleMeterRegistry();
+        var observations = ObservationRegistry.create();
+        observations.observationConfig().observationHandler(new DefaultMeterObservationHandler(meters));
+        var factory = new InternalRestClientFactory(properties, target -> { }, meters, observations, clock::get);
+        var client = client(factory, "metered", Duration.ofSeconds(2));
+
+        assertThat(meters.get("aioj.internal.http.circuit.state").tag("target", "target").gauge().value()).isZero();
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> client.post().uri("/bad/{id}", 42).retrieve().toBodilessEntity())
+                    .isInstanceOf(RestClientException.class);
+        }
+        assertThat(meters.get("aioj.internal.http.circuit.state").tag("target", "target").gauge().value()).isEqualTo(2.0);
+        assertThatThrownBy(() -> client.get().uri("/bad/{id}", 43).retrieve().toBodilessEntity())
+                .isInstanceOf(ResourceAccessException.class);
+
+        assertThat(meters.get("aioj.internal.http.rejected").tags("target", "target", "reason", "circuit_open")
+                .counter().count()).isEqualTo(1.0);
+        var timer = meters.get("http.client.requests").tag("uri", "/bad/{id}").timers();
+        assertThat(timer).as("the URI template, never the id, is the tag").isNotEmpty();
+        assertThat(meters.find("http.client.requests").tag("uri", "/bad/42").timers()).isEmpty();
     }
 
     @Test

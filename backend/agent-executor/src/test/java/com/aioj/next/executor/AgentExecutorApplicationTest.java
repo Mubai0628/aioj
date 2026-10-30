@@ -56,6 +56,21 @@ class AgentExecutorApplicationTest {
         assertThat(next.statusCode()).as("NEXT passes both the filter and controller").isEqualTo(400);
     }
 
+    /** S5: the executor's meters are on its port for Prometheus; no other actuator endpoint is (T2.5). */
+    @Test
+    void prometheusShowsTheExecutorMetersAndNothingElseIsExposed() throws Exception {
+        send(compile("{}").header("X-Internal-Token", "executor-test-token"));
+        HttpResponse<String> metrics = send(HttpRequest.newBuilder(uri("/actuator/prometheus")).GET());
+
+        assertThat(metrics.statusCode()).isEqualTo(200);
+        assertThat(metrics.body()).contains("aioj_executor_inflight", "aioj_executor_rejected_total",
+                "http_server_requests_seconds_count");
+        for (String hidden : java.util.List.of("/actuator/env", "/actuator/beans", "/actuator/configprops",
+                "/actuator/heapdump")) {
+            assertThat(send(HttpRequest.newBuilder(uri(hidden)).GET()).statusCode()).as(hidden).isEqualTo(404);
+        }
+    }
+
     private HttpRequest.Builder compile(String body) {
         return HttpRequest.newBuilder(uri("/api/v1/internal/sandbox/compile"))
                 .header("Content-Type", "application/json")
