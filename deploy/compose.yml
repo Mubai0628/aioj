@@ -57,6 +57,9 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-aioj}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-rabbit-me}
+      # T2.7: the memory watermark is a share of this, not of the host's memory (it was 4.7 GB
+      # against a 256 MiB container, so the broker would be OOM-killed before it throttled).
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit total_memory_available_override_value 268435456"
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"
