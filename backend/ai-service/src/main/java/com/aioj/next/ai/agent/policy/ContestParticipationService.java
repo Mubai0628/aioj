@@ -3,6 +3,7 @@ package com.aioj.next.ai.agent.policy;
 import com.aioj.next.ai.domain.ProblemServiceClient;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import tools.jackson.databind.ObjectMapper;
@@ -87,7 +88,7 @@ public class ContestParticipationService {
         } catch (RuntimeException ex) {
             int latencyMs = elapsedMs(startedNanos);
             log.warn("contest participation lookup failed, fail-closed user={} turn={} error={}",
-                    userId, turnId, ex.toString());
+                    userId, turnId, SafeErrors.describe(ex));
             recorder.record(turnId, userId, conversationId,
                     GuardLayer.L1_PARTICIPANT, GuardDecision.BLOCK,
                     REASON_LOOKUP_FAILED, markRecheck(detail(null, null, ex.getMessage()), fresh), true, latencyMs);

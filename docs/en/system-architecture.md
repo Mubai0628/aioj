@@ -28,6 +28,12 @@ The factory uses JDK HttpClient with explicit connect/read timeouts, overridable
 
 Model and problem-service checks passively observe existing circuits, not verified connectivity. A short executor readiness probe runs every 10 seconds and executes no code. The channel reads existing scheduled count snapshots only; backlog/dead-letter and staleness thresholds are configurable under `aioj.ai.health`. No health check calls a model. Unexposed MVC resources use the existing error envelope with 404 and do not echo internal resource paths.
 
+## Observability
+
+- Metrics: every service, agent-executor included, exposes `/actuator/prometheus` on its service port without credentials, reachable on the container network only; production Compose exposes health only by default. Model calls `aioj.ai.model.*`; tool calls `aioj.ai.tool.calls` (by tool, execution class, outcome); sandbox requests `aioj.sandbox.requests` (judge-worker and agent-executor, by operation and outcome); executor in-flight and busy rejections `aioj.executor.inflight`, `aioj.executor.rejected`; channel backlog `aioj.ai.channel.*`; judge duration `aioj.judge.duration`, queue wait `aioj.judge.queue.wait`, queue depth `aioj.judge.queue.depth`; internal calls `http.client.requests` (by URI template), breaker state `aioj.internal.http.circuit.state` and rejections `aioj.internal.http.rejected`. Tags come from fixed sets and never carry user, problem or conversation ids; a tool name the model made up counts as `unknown`.
+- Trace id: the gateway creates or keeps `X-Trace-Id` per request (letters, digits and `._-`, at most 64 characters; anything else is replaced), forwards it and returns it. Every service puts it in the MDC and every log line shows it; internal calls pass it to the callee, never to another origin; the judge message carries the submitting request's id and judge-worker restores it; tool executions and background pools keep the submitting thread's id.
+- Logs: INFO and above never record prompts or conversation content, code, test data, reasoning, keys or tokens; they record ids, sizes, kinds and status codes. Exceptions are logged as their type chain with structured details (HTTP status, error code, SQL state), never their messages; an unhandled exception also gets its throw location. The gateway's 5xx line names the path, not the query string. A source-scanning test rejects log calls that hand over an exception's message or a content field. DEBUG is for local troubleshooting and may include request fragments.
+
 ## Components
 
 | Component | Responsibility |

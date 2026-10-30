@@ -5,6 +5,7 @@ import com.aioj.next.ai.persistence.entity.AiPolicySnapshotEntity;
 import com.aioj.next.ai.persistence.mapper.AiPolicySnapshotMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
 import com.aioj.next.contract.contest.RunningContestParticipation;
@@ -127,7 +128,7 @@ public class PolicySnapshotService {
             } catch (RuntimeException ex) {
                 int latencyMs = elapsedMs(startedNanos);
                 log.warn("recheck contest statements lookup failed, fail-closed user={} turn={} error={}",
-                        userId, turnId, ex.toString());
+                        userId, turnId, SafeErrors.describe(ex));
                 ObjectNode detail = errorDetail(ex);
                 detail.put("recheck", true);
                 recorder.record(turnId, userId, conversationId,
@@ -232,7 +233,7 @@ public class PolicySnapshotService {
         } catch (RuntimeException ex) {
             int latencyMs = elapsedMs(startedNanos);
             log.warn("running contest statements lookup failed, fail-closed user={} turn={} error={}",
-                    userId, turnId, ex.toString());
+                    userId, turnId, SafeErrors.describe(ex));
             recorder.record(turnId, userId, conversationId,
                     GuardLayer.L2_POLICY_INJECT, GuardDecision.BLOCK,
                     REASON_STATEMENTS_FAILED, errorDetail(ex), true, latencyMs);
@@ -406,7 +407,7 @@ public class PolicySnapshotService {
             // this turn, so execution is unaffected — but the audit gap is now explicit:
             // a degraded L2 row (same decision as this turn's L2 verdict) instead of a
             // silent log line.
-            log.warn("AI policy snapshot persist failed turn={} error={}", turnId, ex.toString());
+            log.warn("AI policy snapshot persist failed turn={} error={}", turnId, SafeErrors.describe(ex));
             ObjectNode detail = objectMapper.createObjectNode();
             detail.put("snapshotId", id);
             detail.put("error", ex.toString());

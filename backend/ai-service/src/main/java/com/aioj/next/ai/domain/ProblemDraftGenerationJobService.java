@@ -10,6 +10,7 @@ import com.aioj.next.ai.persistence.mapper.ProblemDraftGenerationJobMapper;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.ai.ProblemDraftAgentTurnRequest;
@@ -274,7 +275,7 @@ public class ProblemDraftGenerationJobService {
             } catch (DomainException ex) {
                 needsAttention(jobId, null, ex.errorCode().code(), errorKey(ex.errorCode()), safeMessage(ex));
             } catch (RuntimeException ex) {
-                log.warn("Problem draft Agent job {} failed: {}", jobId, ex.toString(), ex);
+                log.warn("Problem draft Agent job {} failed: {}", jobId, SafeErrors.trace(ex));
                 needsAttention(jobId, null, ErrorCode.INTERNAL_ERROR.code(), errorKey(ErrorCode.INTERNAL_ERROR),
                         safeMessage(ex));
             }

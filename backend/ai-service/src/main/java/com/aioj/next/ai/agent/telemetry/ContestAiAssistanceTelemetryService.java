@@ -9,6 +9,7 @@ import com.aioj.next.ai.persistence.entity.AiConversationEntity;
 import com.aioj.next.ai.persistence.entity.AiTurnEntity;
 import com.aioj.next.ai.persistence.mapper.AiContestAssistanceModelUsageMapper;
 import com.aioj.next.ai.persistence.mapper.AiContestAssistanceTurnMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
@@ -110,7 +111,7 @@ public class ContestAiAssistanceTelemetryService {
             return existing == null ? TrackingContext.inactive()
                     : new TrackingContext(existing.getId(), existing.getTurnId());
         } catch (RuntimeException ex) {
-            log.error("contest assistance telemetry start failed turn={} error={}", turn.getId(), ex.toString());
+            log.error("contest assistance telemetry start failed turn={} error={}", turn.getId(), SafeErrors.describe(ex));
             return TrackingContext.inactive();
         }
     }
@@ -139,7 +140,7 @@ public class ContestAiAssistanceTelemetryService {
             // A reconnect/retry must keep exactly one usage event for this logical call.
         } catch (RuntimeException ex) {
             log.error("contest assistance token telemetry failed turn={} source={} error={}",
-                    context.turnId(), usageSource, ex.toString());
+                    context.turnId(), usageSource, SafeErrors.describe(ex));
             markTokenAccountingPartial(context);
         }
     }
@@ -154,7 +155,7 @@ public class ContestAiAssistanceTelemetryService {
                     .set("token_accounting_status", TOKEN_ACCOUNTING_PARTIAL)
                     .set("updated_at", LocalDateTime.now()));
         } catch (RuntimeException ex) {
-            log.error("contest assistance token partial marker failed turn={} error={}", context.turnId(), ex.toString());
+            log.error("contest assistance token partial marker failed turn={} error={}", context.turnId(), SafeErrors.describe(ex));
         }
     }
 
@@ -198,7 +199,7 @@ public class ContestAiAssistanceTelemetryService {
                 finishFailed(new TrackingContext(entity.getId(), entity.getTurnId()), terminalStatus);
             }
         } catch (RuntimeException ex) {
-            log.error("contest assistance terminal failure telemetry lookup failed turn={} error={}", turnId, ex.toString());
+            log.error("contest assistance terminal failure telemetry lookup failed turn={} error={}", turnId, SafeErrors.describe(ex));
         }
     }
 
@@ -323,7 +324,7 @@ public class ContestAiAssistanceTelemetryService {
                     .set("completed_at", now)
                     .set("updated_at", now));
         } catch (RuntimeException ex) {
-            log.error("contest assistance terminal telemetry failed turn={} error={}", context.turnId(), ex.toString());
+            log.error("contest assistance terminal telemetry failed turn={} error={}", context.turnId(), SafeErrors.describe(ex));
         }
     }
 }

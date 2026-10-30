@@ -30,6 +30,7 @@ import com.aioj.next.ai.model.provider.EmbeddingAdapter;
 // import com.aioj.next.ai.model.provider.KimiAdapter;
 import com.aioj.next.ai.model.provider.ModelCatalog;
 import com.aioj.next.ai.model.provider.StreamAccumulator;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.common.resilience.CircuitBreaker;
 import com.aioj.next.ai.model.resilience.CircuitBreakers;
 import com.aioj.next.ai.model.resilience.RetryPolicy;
@@ -443,7 +444,7 @@ public final class DefaultModelClient implements ModelClient, AutoCloseable {
             try {
                 listener.onFinish(record);
             } catch (RuntimeException ex) {
-                log.warn("Model call listener {} failed: {}", listener.getClass().getName(), ex.toString());
+                log.warn("Model call listener {} failed: {}", listener.getClass().getName(), SafeErrors.describe(ex));
             }
         }
     }

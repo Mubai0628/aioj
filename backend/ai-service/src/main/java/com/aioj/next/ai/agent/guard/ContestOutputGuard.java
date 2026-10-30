@@ -4,6 +4,7 @@ import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.policy.GuardDecision;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
 import com.aioj.next.ai.agent.policy.GuardLayer;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
@@ -138,7 +139,7 @@ public class ContestOutputGuard {
         } catch (RuntimeException ex) {
             // Contest domain is fail-closed (Q5): a broken guard must look like an
             // interception, not like a pass and not like a provider error.
-            log.error("L4 output guard failed closed turn={} error={}", turnId, ex.toString());
+            log.error("L4 output guard failed closed turn={} error={}", turnId, SafeErrors.describe(ex));
             int latencyMs = (int) ((System.nanoTime() - startedNanos) / 1_000_000L);
             ObjectNode detail = JsonNodeFactory.instance.objectNode()
                     .put("checksRun", "guard_error")

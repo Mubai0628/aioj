@@ -9,6 +9,7 @@ import com.aioj.next.ai.model.api.ModelClient;
 import com.aioj.next.ai.agent.runtime.ProviderUsage;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.domain.AiModelScope;
+import com.aioj.next.common.error.SafeErrors;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -99,7 +100,7 @@ public class TurnUnderstandingService {
             return parse(response.content(), ProviderUsage.from(response));
         } catch (RuntimeException ex) {
             // Fail-open: understanding is advisory; the chat turn must never break because of it.
-            log.warn("turn understanding failed, proceeding without tool floor: {}", ex.toString());
+            log.warn("turn understanding failed, proceeding without tool floor: {}", SafeErrors.describe(ex));
             return TurnUnderstanding.empty();
         }
     }
@@ -123,7 +124,7 @@ public class TurnUnderstandingService {
             Set<String> requiresTools = new LinkedHashSet<>(knownValues(node.path("requiresTools"), KNOWN_REQUIRES_TOOLS));
             return new TurnUnderstanding(dialogueAct, referenceTypes, longRangeCue, requiresTools, usage);
         } catch (Exception ex) {
-            log.warn("turn understanding output unparsable, proceeding without tool floor: {}", ex.toString());
+            log.warn("turn understanding output unparsable, proceeding without tool floor: {}", SafeErrors.describe(ex));
             return TurnUnderstanding.empty(usage);
         }
     }

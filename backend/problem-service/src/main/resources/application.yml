@@ -2,6 +2,10 @@ server:
   port: ${SERVER_PORT:8202}
 
 spring:
+  autoconfigure:
+    # JWT and internal tokens are the only logins; without this Boot prints a generated
+    # password for a form login nobody uses into the startup log (T2.5).
+    exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   application:
     name: ai-oj-problem-service
   jackson:

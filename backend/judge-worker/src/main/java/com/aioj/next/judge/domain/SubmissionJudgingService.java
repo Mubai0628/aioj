@@ -1,5 +1,6 @@
 package com.aioj.next.judge.domain;
 
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.judge.JudgeTaskMessage;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.contract.submission.JudgePhase;
@@ -191,7 +192,7 @@ public class SubmissionJudgingService {
             audit.setCreatedAt(Instant.now());
             auditLogMapper.insert(audit);
         } catch (RuntimeException ex) {
-            log.warn("Failed to write judge audit log for submission={}", submissionId, ex);
+            log.warn("Failed to write judge audit log for submission={} error={}", submissionId, SafeErrors.describe(ex));
         }
     }
 

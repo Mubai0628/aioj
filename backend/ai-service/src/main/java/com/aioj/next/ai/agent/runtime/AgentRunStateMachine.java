@@ -2,6 +2,7 @@ package com.aioj.next.ai.agent.runtime;
 
 import com.aioj.next.ai.persistence.entity.AiAgentRunEntity;
 import com.aioj.next.ai.persistence.mapper.AiAgentRunMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import tools.jackson.databind.ObjectMapper;
@@ -61,7 +62,7 @@ public class AgentRunStateMachine {
         try {
             mapper.insert(entity);
         } catch (RuntimeException ex) {
-            log.warn("AI agent run persist failed turn={} error={}", turnId, ex.toString());
+            log.warn("AI agent run persist failed turn={} error={}", turnId, SafeErrors.describe(ex));
         }
         return entity;
     }
@@ -122,7 +123,7 @@ public class AgentRunStateMachine {
         try {
             mapper.update(null, wrapper);
         } catch (RuntimeException ex) {
-            log.warn("AI agent run update failed run={} error={}", runId, ex.toString());
+            log.warn("AI agent run update failed run={} error={}", runId, SafeErrors.describe(ex));
         }
     }
 }

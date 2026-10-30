@@ -56,6 +56,35 @@ class AgentExecutorApplicationTest {
         assertThat(next.statusCode()).as("NEXT passes both the filter and controller").isEqualTo(400);
     }
 
+    /** S5 log redaction (T2.5): a compile that fails because the sandbox is gone leaves no source code in the log. */
+    @Test
+    void aFailedCompileDoesNotPutTheSourceInTheLog() throws Exception {
+        var root = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        root.addAppender(appender);
+        HttpResponse<String> response;
+        try {
+            String source = "int main(){ int canaryExecutorCode9f = 0; /* CANARY-HIDDEN-EXPECTED-4d */ }";
+            response = send(compile("{\"language\":\"cpp\",\"sourceCode\":\"" + source
+                    + "\",\"timeLimitMillis\":1000,\"memoryLimitKb\":262144}")
+                    .header("X-Internal-Token", "executor-test-token"));
+        } finally {
+            root.detachAppender(appender);
+            appender.stop();
+        }
+
+        assertThat(response.statusCode()).as("the sandbox is not running in this test").isGreaterThanOrEqualTo(500);
+        StringBuilder text = new StringBuilder();
+        for (var event : appender.list) {
+            text.append(event.getFormattedMessage()).append('\n');
+            if (event.getThrowableProxy() != null) {
+                text.append(ch.qos.logback.classic.spi.ThrowableProxyUtil.asString(event.getThrowableProxy()));
+            }
+        }
+        assertThat(text.toString()).doesNotContain("canaryExecutorCode9f", "CANARY-HIDDEN-EXPECTED");
+    }
+
     /** S5: the executor's meters are on its port for Prometheus; no other actuator endpoint is (T2.5). */
     @Test
     void prometheusShowsTheExecutorMetersAndNothingElseIsExposed() throws Exception {

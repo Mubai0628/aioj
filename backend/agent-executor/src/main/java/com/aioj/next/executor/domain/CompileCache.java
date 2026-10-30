@@ -1,5 +1,6 @@
 package com.aioj.next.executor.domain;
 
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.executor.config.AgentExecutorProperties;
 import com.aioj.next.sandbox.client.LanguageProfile;
 import io.micrometer.core.instrument.Counter;
@@ -248,7 +249,7 @@ public class CompileCache {
             try {
                 sandbox.deleteCachedFile(fileId);
             } catch (RuntimeException ex) {
-                log.warn("compile cache could not delete sandbox file: {}", ex.toString());
+                log.warn("compile cache could not delete sandbox file: {}", SafeErrors.describe(ex));
             }
         }
     }

@@ -10,6 +10,7 @@ import com.aioj.next.ai.persistence.mapper.AiLearningWeaknessMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
 import com.aioj.next.ai.persistence.mapper.AiProfileSignalMapper;
 import com.aioj.next.ai.persistence.mapper.AiUserMemoryMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -169,7 +170,7 @@ public class LegacyMemoryMigrationService {
             report.recordKeyConflict(new LegacyMemoryMigrationReport.Entry(
                     memory.getId(), memory.getUserId(),
                     LegacyMemoryMigrationReport.Action.KEY_CONFLICT,
-                    category + " legacy_" + memory.getId() + ": " + ex.getMessage()));
+                    category + " legacy_" + memory.getId() + ": " + SafeErrors.describe(ex)));
         }
     }
 

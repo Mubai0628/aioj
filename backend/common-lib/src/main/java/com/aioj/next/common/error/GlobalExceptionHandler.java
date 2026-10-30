@@ -42,8 +42,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<ApiResponse<Void>> handleDomain(DomainException ex) {
-        log.warn("DomainException code={} msg={}", ex.errorCode().code(), ex.getMessage());
         UserErrorFeedback feedback = UserErrorFeedback.forDomain(ex.errorCode(), ex.getMessage(), serviceName);
+        // The key names the case; the message itself can quote what the user sent (T2.5).
+        log.warn("DomainException code={} key={}", ex.errorCode().code(), feedback.key());
         return ResponseEntity.status(toStatus(ex.errorCode()))
                 .body(ApiResponse.failWithError(
                         ex.errorCode().code(),
@@ -213,7 +214,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnknown(Exception ex) {
-        log.error("Unhandled exception traceId={}", TraceIds.current(), ex);
+        // Where it was thrown, without the messages, which can quote request content (T2.5).
+        log.error("Unhandled exception traceId={} {}", TraceIds.current(), SafeErrors.trace(ex));
         UserErrorFeedback feedback = UserErrorFeedback.forCode(ErrorCode.INTERNAL_ERROR, serviceName);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                 ApiResponse.failWithError(

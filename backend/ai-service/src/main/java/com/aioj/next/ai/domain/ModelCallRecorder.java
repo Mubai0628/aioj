@@ -4,6 +4,7 @@ import com.aioj.next.ai.model.api.ModelCallListener;
 import com.aioj.next.ai.model.api.ModelCallRecord;
 import com.aioj.next.ai.persistence.entity.AiModelCallEntity;
 import com.aioj.next.ai.persistence.mapper.AiModelCallMapper;
+import com.aioj.next.common.error.SafeErrors;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +55,7 @@ public class ModelCallRecorder implements ModelCallListener {
             ownTransaction.executeWithoutResult(status -> mapper.insert(entity));
         } catch (RuntimeException ex) {
             log.warn("Model call observation failed: scope={} feature={} error={}", record.scope(), record.feature(),
-                    ex.toString());
+                    SafeErrors.describe(ex));
         }
     }
 

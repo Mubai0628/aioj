@@ -20,6 +20,7 @@ import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
 import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import tools.jackson.databind.JsonNode;
@@ -211,12 +212,12 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
                 break;
             }
             if (!item.isObject()) {
-                log.debug("skip non-object memoryCandidate entry: {}", item);
+                log.debug("skip non-object memoryCandidate entry: type={}", item.getNodeType());
                 continue;
             }
             String text = item.path("text").asString("");
             if (text.isBlank()) {
-                log.debug("skip memoryCandidate without text: {}", item);
+                log.debug("skip memoryCandidate without text: fields={}", item.size());
                 continue;
             }
             JsonNode confidence = item.path("confidence");
@@ -242,12 +243,12 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
                 break;
             }
             if (!item.isObject()) {
-                log.debug("skip non-object profileSignal entry: {}", item);
+                log.debug("skip non-object profileSignal entry: type={}", item.getNodeType());
                 continue;
             }
             String signal = item.path("signal").asString("");
             if (signal.isBlank()) {
-                log.debug("skip profileSignal without signal: {}", item);
+                log.debug("skip profileSignal without signal: fields={}", item.size());
                 continue;
             }
             JsonNode score = item.path("score");
@@ -431,7 +432,7 @@ public class TurnDigestCuratorHandler implements AgentAsyncJobHandler {
                     .build());
         } catch (Exception ex) {
             // Enqueue failure never fails the curate job; the KEYWORD lane keeps working.
-            log.warn("embed job enqueue failed digest={} error={}", ready.getId(), ex.toString());
+            log.warn("embed job enqueue failed digest={} error={}", ready.getId(), SafeErrors.describe(ex));
         }
     }
 

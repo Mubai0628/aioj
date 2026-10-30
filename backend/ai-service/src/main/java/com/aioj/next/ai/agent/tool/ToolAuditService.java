@@ -5,6 +5,7 @@ import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.ai.agent.context.DataClassification;
 import com.aioj.next.ai.persistence.entity.AiToolCallEntity;
 import com.aioj.next.ai.persistence.mapper.AiToolCallMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -60,7 +61,7 @@ public class ToolAuditService {
             return new AuditHandle(entity.getId());
         } catch (RuntimeException ex) {
             log.warn("AI tool call pre-audit failed turn={} tool={} error={}",
-                    context.turnId(), toolName, ex.toString());
+                    context.turnId(), toolName, SafeErrors.describe(ex));
             return null;
         }
     }
@@ -85,7 +86,7 @@ public class ToolAuditService {
             entity.setCompletedAt(LocalDateTime.now());
             mapper.updateById(entity);
         } catch (RuntimeException ex) {
-            log.warn("AI tool call completion audit failed id={} error={}", handle.id(), ex.toString());
+            log.warn("AI tool call completion audit failed id={} error={}", handle.id(), SafeErrors.describe(ex));
         }
     }
 
@@ -109,7 +110,7 @@ public class ToolAuditService {
             entity.setCompletedAt(entity.getCreatedAt());
             mapper.insert(entity);
         } catch (RuntimeException ex) {
-            log.warn("AI tool call audit failed turn={} tool={} error={}", context.turnId(), toolName, ex.toString());
+            log.warn("AI tool call audit failed turn={} tool={} error={}", context.turnId(), toolName, SafeErrors.describe(ex));
         }
     }
 

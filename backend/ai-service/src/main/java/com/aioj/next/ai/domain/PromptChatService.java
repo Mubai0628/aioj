@@ -5,6 +5,7 @@ import com.aioj.next.ai.domain.clarification.ClarificationSchemaRepairer;
 import com.aioj.next.ai.domain.context.AiIntentAnalysis;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AiChatRequest;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -198,7 +199,7 @@ public class PromptChatService {
             return parseExtractedMemories(objectMapper.readTree(extractJson(result.content())));
         } catch (Exception ex) {
             AiFailureMetrics.incrementMemoryExtractionFailure();
-            log.error("extractMemories failed; returning no memory signals for this turn", ex);
+            log.error("extractMemories failed; returning no memory signals for this turn {}", SafeErrors.trace(ex));
             return List.of();
         }
     }

@@ -28,6 +28,12 @@ RabbitMQ -> judge-worker -> go-judge Sandbox
 
 模型和 problem-service 项只观察现有熔断状态，不代表已验证连通；执行器每 10 秒以短超时探测 readiness，不执行代码。数据通道只读现有定时统计快照，积压/死信和快照过期阈值可通过 `aioj.ai.health` 配置。所有健康项都不发模型请求。未暴露的 MVC 资源用现有错误包装返回 404，不回显内部资源路径。
 
+## 可观测性
+
+- 指标：各服务（含 agent-executor）在业务端口暴露 `/actuator/prometheus`，不需要凭据，只在容器网络内可达；生产 Compose 默认只暴露 health。模型调用 `aioj.ai.model.*`；工具调用 `aioj.ai.tool.calls`（按工具、执行类别、结果）；沙箱请求 `aioj.sandbox.requests`（judge-worker 和 agent-executor，按操作和结果）；执行器在途和因忙拒绝 `aioj.executor.inflight`、`aioj.executor.rejected`；通道积压 `aioj.ai.channel.*`；判题耗时 `aioj.judge.duration`、排队等待 `aioj.judge.queue.wait`、队列深度 `aioj.judge.queue.depth`；内部调用 `http.client.requests`（按 URI 模板）、熔断状态 `aioj.internal.http.circuit.state` 和拒绝次数 `aioj.internal.http.rejected`。标签只用固定集合，不带用户、题目、会话等 id；模型编造的工具名记为 `unknown`。
+- traceId：网关为每个请求生成或沿用 `X-Trace-Id`（只接受字母、数字和 `._-`，最长 64 位，否则重新生成），转发给下游并写回响应。各服务把它放进 MDC，每行日志都带上；内部调用把它带给被调方，不发给外部地址；判题消息携带提交请求的 traceId，judge-worker 消费时恢复；工具执行和后台线程池沿用提交线程的 traceId。
+- 日志：INFO 及以上不记录 prompt 和对话内容、代码、测试数据、思考链、密钥和令牌，只记 id、长度、类别和状态码。异常只记类型链和结构化信息（HTTP 状态、错误码、SQL 状态），不记消息；未处理的异常另记调用位置。网关的 5xx 日志只记路径，不记查询串。一个扫描源码的测试拦截把异常消息或内容字段交给日志的写法。DEBUG 只用于本地排障，可能带请求片段。
+
 ## 组件
 
 | 组件 | 职责 |

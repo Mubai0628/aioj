@@ -6,6 +6,7 @@ import com.aioj.next.ai.persistence.entity.AiProfileSignalEntity;
 import com.aioj.next.ai.persistence.mapper.AiLearningProfileEvidenceMapper;
 import com.aioj.next.ai.persistence.mapper.AiLearningProfileMapper;
 import com.aioj.next.ai.persistence.mapper.AiProfileSignalMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import tools.jackson.databind.JsonNode;
@@ -232,7 +233,7 @@ public class ProfileAggregationService {
                     return text;
                 }
             } catch (Exception ex) {
-                log.debug("profile signal payload not parseable id={} error={}", signal.getId(), ex.toString());
+                log.debug("profile signal payload not parseable id={} error={}", signal.getId(), SafeErrors.describe(ex));
             }
         }
         return signal.getSignalType() == null ? "profile signal" : signal.getSignalType().toLowerCase(Locale.ROOT);

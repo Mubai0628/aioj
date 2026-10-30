@@ -4,6 +4,7 @@ import com.aioj.next.ai.model.api.CallOptions;
 import com.aioj.next.ai.model.api.EmbeddingRequest;
 import com.aioj.next.ai.model.api.EmbeddingResponse;
 import com.aioj.next.ai.model.api.ModelClient;
+import com.aioj.next.common.error.SafeErrors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -42,7 +43,7 @@ public class TextEmbeddings {
             return vector.isEmpty() ? Optional.empty() : Optional.of(vector);
         } catch (RuntimeException ex) {
             AiFailureMetrics.incrementEmbeddingFailure();
-            log.error("embedding request failed; continuing without dense vector: {}", ex.toString());
+            log.error("embedding request failed; continuing without dense vector: {}", SafeErrors.describe(ex));
             return Optional.empty();
         }
     }

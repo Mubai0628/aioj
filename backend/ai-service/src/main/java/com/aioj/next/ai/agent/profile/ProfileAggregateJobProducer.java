@@ -4,6 +4,7 @@ import com.aioj.next.agent.harness.channel.api.EventPublisher;
 import com.aioj.next.agent.harness.channel.api.EventSubject;
 import com.aioj.next.agent.harness.channel.api.HarnessEvent;
 import com.aioj.next.ai.agent.channel.ChannelEventTypes;
+import com.aioj.next.common.error.SafeErrors;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +48,7 @@ public class ProfileAggregateJobProducer {
                     .payload(objectMapper.valueToTree(payload))
                     .build());
         } catch (Exception ex) {
-            log.warn("profile aggregate job enqueue failed userId={} error={}", userId, ex.toString());
+            log.warn("profile aggregate job enqueue failed userId={} error={}", userId, SafeErrors.describe(ex));
         }
     }
 }

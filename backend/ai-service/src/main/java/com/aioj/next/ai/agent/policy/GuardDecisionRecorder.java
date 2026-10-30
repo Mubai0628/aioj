@@ -2,6 +2,7 @@ package com.aioj.next.ai.agent.policy;
 
 import com.aioj.next.ai.persistence.entity.AiGuardDecisionEntity;
 import com.aioj.next.ai.persistence.mapper.AiGuardDecisionMapper;
+import com.aioj.next.common.error.SafeErrors;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -62,7 +63,7 @@ public class GuardDecisionRecorder {
             mapper.insert(entity);
         } catch (Exception ex) {
             log.error("guard decision audit write failed turn={} layer={} decision={} error={}",
-                    turnId, layer, decision, ex.toString());
+                    turnId, layer, decision, SafeErrors.describe(ex));
         }
     }
 

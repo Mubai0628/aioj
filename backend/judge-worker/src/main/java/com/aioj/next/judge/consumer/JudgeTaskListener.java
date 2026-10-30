@@ -1,6 +1,7 @@
 package com.aioj.next.judge.consumer;
 
 import com.aioj.next.common.api.TraceIds;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.judge.JudgeTaskMessage;
 import com.aioj.next.contract.submission.SubmissionStatus;
 import com.aioj.next.judge.config.JudgeQueueConfig;
@@ -90,14 +91,14 @@ public class JudgeTaskListener {
         } catch (NonRetryableJudgeTaskException ex) {
             Long submissionId = task == null ? null : task.submissionId();
             log.warn("Rejecting non-retryable judge task submission={} queueWaitMs={} judgeWallMs={}: {}",
-                    submissionId, queueWaitMs, elapsedMillis(startedNanos), ex.getMessage());
+                    submissionId, queueWaitMs, elapsedMillis(startedNanos), SafeErrors.describe(ex));
             judgingService.markSystemError(submissionId, ex.getMessage());
             metrics.taskFailed(ex, started);
             channel.basicNack(deliveryTag, false, false);
         } catch (Exception ex) {
             Long submissionId = task == null ? null : task.submissionId();
-            log.error("Judge failed for submission={} queueWaitMs={} judgeWallMs={}; sending to DLQ",
-                    submissionId, queueWaitMs, elapsedMillis(startedNanos), ex);
+            log.error("Judge failed for submission={} queueWaitMs={} judgeWallMs={}; sending to DLQ {}",
+                    submissionId, queueWaitMs, elapsedMillis(startedNanos), SafeErrors.trace(ex));
             metrics.taskFailed(ex, started);
             channel.basicNack(deliveryTag, false, false);
         }

@@ -8,6 +8,7 @@ import com.aioj.next.ai.persistence.entity.AiMessageEntity;
 import com.aioj.next.ai.persistence.mapper.AiAgentRunMapper;
 import com.aioj.next.ai.persistence.mapper.AiContextManifestMapper;
 import com.aioj.next.ai.persistence.mapper.AiMessageMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AiConversationContextDebugResponse;
 import com.aioj.next.contract.ai.AiConversationContextDebugResponse.ContextBudgetReport;
 import com.aioj.next.contract.ai.AiConversationContextDebugResponse.ContextBuildReport;
@@ -221,7 +222,7 @@ public class ContextDebugService {
         try {
             return objectMapper.readTree(json);
         } catch (RuntimeException ex) {
-            log.warn("Context manifest JSON could not be read: {}", ex.toString());
+            log.warn("Context manifest JSON could not be read: {}", SafeErrors.describe(ex));
             return null;
         }
     }

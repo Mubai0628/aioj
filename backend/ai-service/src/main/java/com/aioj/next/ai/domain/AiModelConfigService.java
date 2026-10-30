@@ -6,6 +6,7 @@ import com.aioj.next.ai.persistence.entity.AiModelConfigEntity;
 import com.aioj.next.ai.persistence.mapper.AiModelConfigMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AiModelCallSettings;
 import com.aioj.next.contract.ai.AiModelConfigResponse;
 import com.aioj.next.contract.ai.AiModelConfigTestRequest;
@@ -351,7 +352,7 @@ public class AiModelConfigService implements AiModelConfigResolver {
                 }
             }
         } catch (RuntimeException ex) {
-            log.warn("Could not check the AI model configs for retired providers: {}", ex.toString());
+            log.warn("Could not check the AI model configs for retired providers: {}", SafeErrors.describe(ex));
         }
     }
 

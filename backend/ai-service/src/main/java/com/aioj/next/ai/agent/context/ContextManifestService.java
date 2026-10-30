@@ -2,6 +2,7 @@ package com.aioj.next.ai.agent.context;
 
 import com.aioj.next.ai.persistence.entity.AiContextManifestEntity;
 import com.aioj.next.ai.persistence.mapper.AiContextManifestMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -58,7 +59,7 @@ public class ContextManifestService {
             entity.setCreatedAt(LocalDateTime.now());
             mapper.insert(entity);
         } catch (Exception ex) {
-            log.warn("AI context manifest persist failed turn={} callSeq={} error={}", turnId, callSeq, ex.toString());
+            log.warn("AI context manifest persist failed turn={} callSeq={} error={}", turnId, callSeq, SafeErrors.describe(ex));
         }
     }
 

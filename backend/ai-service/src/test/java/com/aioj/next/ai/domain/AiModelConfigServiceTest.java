@@ -303,7 +303,8 @@ class AiModelConfigServiceTest {
         assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage).containsExactly(
                 "AI model config PROBLEM_DRAFT is still enabled on provider moonshot, which was retired on 2026-10-29; "
                         + "the scope falls back to the default text configuration",
-                "Could not check the AI model configs for retired providers: java.lang.IllegalStateException: database down");
+                // T2.5: the exception's type, not its message.
+                "Could not check the AI model configs for retired providers: IllegalStateException");
     }
 
     @Test

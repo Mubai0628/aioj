@@ -20,6 +20,7 @@ import com.aioj.next.ai.persistence.entity.ProblemDraftWorkspaceEntity;
 import com.aioj.next.ai.persistence.mapper.AiAgentRunMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.aioj.next.contract.ai.ProblemDraftAgentTurnRequest;
 import com.aioj.next.contract.ai.ProblemDraftRegenerateRequest;
@@ -370,7 +371,7 @@ public class ProblemDraftAgentCoordinator {
                     "NEEDS_ATTENTION", safeSummary);
         } catch (RuntimeException persistenceFailure) {
             log.warn("Problem draft Agent failure state persist failed workspace={} turn={} error={}",
-                    workspace.getId(), turn.getId(), persistenceFailure.toString());
+                    workspace.getId(), turn.getId(), SafeErrors.describe(persistenceFailure));
         }
     }
 

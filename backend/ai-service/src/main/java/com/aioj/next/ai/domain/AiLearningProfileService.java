@@ -11,6 +11,7 @@ import com.aioj.next.ai.persistence.mapper.AiLearningProfileMapper;
 import com.aioj.next.ai.persistence.mapper.AiSubmissionAnalysisMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
 import com.aioj.next.contract.ai.AiLearningProfileEvidenceResponse;
@@ -565,7 +566,7 @@ public class AiLearningProfileService {
             }
         } catch (Exception ex) {
             log.warn("judged submission profile signal sidecar failed userId={} submissionId={} error={}",
-                    userId, context.submissionId(), ex.toString());
+                    userId, context.submissionId(), SafeErrors.describe(ex));
         }
     }
 

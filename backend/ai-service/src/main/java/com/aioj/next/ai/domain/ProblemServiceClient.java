@@ -1,5 +1,6 @@
 package com.aioj.next.ai.domain;
 
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.common.http.InternalRestClientFactory;
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.config.InternalApiProperties;
@@ -648,11 +649,11 @@ public class ProblemServiceClient {
         } catch (Exception ex) {
             if (cached != null) {
                 log.warn("Contest guard fetch failed; serving cached value endpoint={} user={} error={}",
-                        endpoint, userId, ex.toString());
+                        endpoint, userId, SafeErrors.describe(ex));
                 return cached.value();
             }
             log.error("Contest guard fetch failed with no cache; {} endpoint={} user={} error={}",
-                    strict ? "failing closed" : "degrading to empty", endpoint, userId, ex.toString());
+                    strict ? "failing closed" : "degrading to empty", endpoint, userId, SafeErrors.describe(ex));
             recordGuardDegraded(endpoint, ex, userId);
             if (strict) {
                 throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE,
@@ -684,7 +685,7 @@ public class ProblemServiceClient {
             );
         } catch (RuntimeException auditFailure) {
             log.warn("Contest guard degraded audit failed endpoint={} user={} error={}",
-                    endpoint, userId, auditFailure.toString());
+                    endpoint, userId, SafeErrors.describe(auditFailure));
         }
     }
 

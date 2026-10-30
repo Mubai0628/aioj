@@ -13,6 +13,7 @@ import com.aioj.next.ai.persistence.mapper.AiConversationMapper;
 import com.aioj.next.ai.persistence.mapper.AiMessageMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AdminContestAiAssistanceSummary;
 import com.aioj.next.contract.ai.AdminContestAiConversationSummary;
 import com.aioj.next.contract.ai.AdminContestAiMessageResponse;
@@ -330,7 +331,7 @@ public class ContestAiAssistanceStatisticsService {
             }
         } catch (RuntimeException ex) {
             // The ledger remains safe and useful even if a display-name lookup is unavailable.
-            log.warn("contest assistance participant profile lookup failed contest={} error={}", contestId, ex.toString());
+            log.warn("contest assistance participant profile lookup failed contest={} error={}", contestId, SafeErrors.describe(ex));
         }
         return result;
     }
@@ -365,7 +366,7 @@ public class ContestAiAssistanceStatisticsService {
                 }
             }
         } catch (RuntimeException ex) {
-            log.warn("contest assistance problem title lookup failed error={}", ex.toString());
+            log.warn("contest assistance problem title lookup failed error={}", SafeErrors.describe(ex));
         }
         return result;
     }
@@ -404,7 +405,7 @@ public class ContestAiAssistanceStatisticsService {
                 }
             }
         } catch (RuntimeException ex) {
-            log.warn("contest assistance window lookup failed contest={} error={}", contestId, ex.toString());
+            log.warn("contest assistance window lookup failed contest={} error={}", contestId, SafeErrors.describe(ex));
         }
         return new WindowScope(contestRunId, windows);
     }

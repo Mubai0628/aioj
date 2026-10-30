@@ -1,5 +1,6 @@
 package com.aioj.next.ai.agent.digest;
 
+import com.aioj.next.common.error.SafeErrors;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -240,7 +241,7 @@ public class StubDigestFactory {
         try {
             return objectMapper.writeValueAsString(structured);
         } catch (Exception ex) {
-            log.warn("stub digest serialization failed; falling back to minimal json error={}", ex.toString());
+            log.warn("stub digest serialization failed; falling back to minimal json error={}", SafeErrors.describe(ex));
             return "{\"schemaVersion\":" + SCHEMA_VERSION + ",\"serializationError\":true}";
         }
     }

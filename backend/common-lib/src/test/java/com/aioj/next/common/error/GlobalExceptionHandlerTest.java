@@ -170,6 +170,33 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.message").value(not(stringContainsInOrder("teacher-only secret"))));
     }
 
+    /** S5 (T2.5): the handler logs where a failure came from, never what the request or the exception said. */
+    @Test
+    void logs_keep_the_failures_location_but_none_of_its_messages() throws Exception {
+        var root = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        root.addAppender(appender);
+        try {
+            mockMvc.perform(get("/test/domain-with-input")).andExpect(status().isBadRequest());
+            mockMvc.perform(get("/test/boom-with-cause")).andExpect(status().isInternalServerError());
+        } finally {
+            root.detachAppender(appender);
+            appender.stop();
+        }
+        StringBuilder text = new StringBuilder();
+        for (var event : appender.list) {
+            text.append(event.getFormattedMessage()).append('\n');
+            if (event.getThrowableProxy() != null) {
+                text.append(ch.qos.logback.classic.spi.ThrowableProxyUtil.asString(event.getThrowableProxy()));
+            }
+        }
+        org.assertj.core.api.Assertions.assertThat(text.toString())
+                .doesNotContain("CANARY-INPUT-77", "CANARY-CAUSE-41", "CANARY-OUTER-90")
+                .contains("DomainException code=40000 key=", "Unhandled exception", "Caused by: IllegalArgumentException")
+                .contains("TestController.boomWithCause");
+    }
+
     @Test
     void unknown_exception_does_not_leak_message() throws Exception {
         mockMvc.perform(get("/test/boom"))
@@ -243,6 +270,17 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/boom")
         public String boom() {
             throw new RuntimeException("secret leak attempt");
+        }
+
+        @GetMapping("/test/domain-with-input")
+        public String domainWithInput() {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "Problem 'CANARY-INPUT-77' was not found");
+        }
+
+        @GetMapping("/test/boom-with-cause")
+        public String boomWithCause() {
+            throw new IllegalStateException("wrapping CANARY-OUTER-90",
+                    new IllegalArgumentException("parse failed near CANARY-CAUSE-41"));
         }
 
         @GetMapping(value = "/test/async-response-closed", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

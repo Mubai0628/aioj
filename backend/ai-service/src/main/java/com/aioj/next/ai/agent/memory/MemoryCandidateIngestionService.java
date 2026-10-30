@@ -6,6 +6,7 @@ import com.aioj.next.ai.domain.memory.AiMemoryMergeService;
 import com.aioj.next.ai.domain.memory.MemoryQualityGate;
 import com.aioj.next.ai.persistence.entity.AiMemoryCandidateEntity;
 import com.aioj.next.ai.persistence.mapper.AiMemoryCandidateMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AiMemoryCandidateActionRequest;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.slf4j.Logger;
@@ -287,7 +288,7 @@ public class MemoryCandidateIngestionService {
             return null;
         } catch (Exception ex) {
             log.warn("active-candidate dedupe lookup failed, proceeding without it userId={} error={}",
-                    userId, ex.toString());
+                    userId, SafeErrors.describe(ex));
             return null;
         }
     }

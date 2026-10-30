@@ -22,6 +22,7 @@ import com.aioj.next.ai.agent.guard.ContestOutputGuard;
 import com.aioj.next.ai.agent.guard.GuardVerdict;
 import com.aioj.next.ai.agent.guard.ProblemFingerprintMatcher;
 import com.aioj.next.ai.agent.telemetry.ContestAiAssistanceTelemetryService;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import tools.jackson.databind.node.JsonNodeFactory;
@@ -221,7 +222,7 @@ public class TurnCoordinator {
             int latencyMs = (int) ((System.nanoTime() - startedNanos) / 1_000_000L);
             log.warn("bootstrap policy context failed, fail-closed user={} turn={} contributor={} reason={} error={}",
                     userId, turnId, ex.contributor(), ex.reason(),
-                    ex.getCause() == null ? null : ex.getCause().toString());
+                    SafeErrors.describe(ex.getCause()));
             ObjectNode detail = JsonNodeFactory.instance.objectNode()
                     .put("contributor", ex.contributor())
                     .put("reason", ex.reason());
@@ -258,7 +259,7 @@ public class TurnCoordinator {
                 try {
                     telemetryContext = telemetryService.begin(turn, conversation, participation.attributed());
                 } catch (RuntimeException ex) {
-                    log.warn("contest assistance start observation failed turn={} error={}", turn.getId(), ex.toString());
+                    log.warn("contest assistance start observation failed turn={} error={}", turn.getId(), SafeErrors.describe(ex));
                 }
             }
             PolicySnapshotService.PolicySnapshot snapshot =
@@ -670,7 +671,7 @@ public class TurnCoordinator {
                 contestAssistanceTelemetryService.recordUsage(telemetryContext, usageKey, usageSource, usage);
             } catch (RuntimeException ex) {
                 log.warn("contest assistance token observation failed turn={} source={} error={}",
-                        telemetryContext == null ? null : telemetryContext.turnId(), usageSource, ex.toString());
+                        telemetryContext == null ? null : telemetryContext.turnId(), usageSource, SafeErrors.describe(ex));
             }
         }
     }
@@ -683,7 +684,7 @@ public class TurnCoordinator {
                 contestAssistanceTelemetryService.markTokenAccountingPartial(telemetryContext);
             } catch (RuntimeException ex) {
                 log.warn("contest assistance partial-token observation failed turn={} error={}",
-                        telemetryContext == null ? null : telemetryContext.turnId(), ex.toString());
+                        telemetryContext == null ? null : telemetryContext.turnId(), SafeErrors.describe(ex));
             }
         }
     }
@@ -726,7 +727,7 @@ public class TurnCoordinator {
                                 messageVerdict, runtimeVerdict));
             } catch (RuntimeException ex) {
                 log.warn("contest assistance completion observation failed turn={} error={}",
-                        telemetryContext == null ? null : telemetryContext.turnId(), ex.toString());
+                        telemetryContext == null ? null : telemetryContext.turnId(), SafeErrors.describe(ex));
             }
         }
     }
@@ -740,7 +741,7 @@ public class TurnCoordinator {
                 contestAssistanceTelemetryService.finishFailed(telemetryContext, terminalStatus);
             } catch (RuntimeException ex) {
                 log.warn("contest assistance failure observation failed turn={} error={}",
-                        telemetryContext == null ? null : telemetryContext.turnId(), ex.toString());
+                        telemetryContext == null ? null : telemetryContext.turnId(), SafeErrors.describe(ex));
             }
         }
     }
@@ -756,7 +757,7 @@ public class TurnCoordinator {
             }
         } catch (RuntimeException ex) {
             log.warn("AI turn timeout cleanup failed user={} turn={} assistantMessage={} error={}",
-                    userId, turnId, assistantMessageId, ex.toString());
+                    userId, turnId, assistantMessageId, SafeErrors.describe(ex));
         }
     }
 

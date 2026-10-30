@@ -4,6 +4,7 @@ import com.aioj.next.ai.persistence.entity.AiMemoryCandidateEntity;
 import com.aioj.next.ai.persistence.entity.AiMemoryClaimEntity;
 import com.aioj.next.ai.persistence.mapper.AiMemoryCandidateMapper;
 import com.aioj.next.ai.persistence.mapper.AiMemoryClaimMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,7 +92,7 @@ public class MemoryDistrustPolicy {
             return count != null && count > 0;
         } catch (Exception ex) {
             // Fail-safe: on lookup failure treat the key as distrusted (never auto-activate).
-            log.warn("memory distrust claim lookup failed userId={} key={} error={}", userId, key, ex.toString());
+            log.warn("memory distrust claim lookup failed userId={} key={} error={}", userId, key, SafeErrors.describe(ex));
             return true;
         }
     }
@@ -135,7 +136,7 @@ public class MemoryDistrustPolicy {
         } catch (Exception ex) {
             // Fail-safe: on lookup failure treat the key as distrusted (never auto-activate).
             log.warn("memory distrust candidate lookup failed userId={} category={} error={}",
-                    userId, category, ex.toString());
+                    userId, category, SafeErrors.describe(ex));
             return true;
         }
     }

@@ -6,6 +6,7 @@ import com.aioj.next.agent.harness.channel.api.HarnessEvent;
 import com.aioj.next.ai.agent.channel.ChannelEventTypes;
 import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
+import com.aioj.next.common.error.SafeErrors;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,7 +74,7 @@ public class TurnDigestService {
                     .payload(objectMapper.readTree(curatePayload(input)))
                     .build());
         } catch (Exception ex) {
-            log.warn("turn digest recording failed turn={} error={}", input.turnId(), ex.toString());
+            log.warn("turn digest recording failed turn={} error={}", input.turnId(), SafeErrors.describe(ex));
         }
     }
 

@@ -1,5 +1,6 @@
 package com.aioj.next.judge.domain;
 
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.common.metrics.SandboxRequestMeter;
 import com.aioj.next.contract.judge.JudgeTaskMessage;
 import com.aioj.next.contract.contest.ContestMode;
@@ -247,19 +248,19 @@ public class SandboxClient {
                     try {
                         sandboxExecutionClient.deleteCachedFile(compiledFileId);
                     } catch (RuntimeException ex) {
-                        log.warn("Failed to cleanup sandbox fileId={}: {}", compiledFileId, ex.getMessage());
+                        log.warn("Failed to cleanup sandbox fileId={}: {}", compiledFileId, SafeErrors.describe(ex));
                     }
                 }
                 if (checkerFileId != null) {
                     try {
                         sandboxExecutionClient.deleteCachedFile(checkerFileId);
                     } catch (RuntimeException ex) {
-                        log.warn("Failed to cleanup checker sandbox fileId={}: {}", checkerFileId, ex.getMessage());
+                        log.warn("Failed to cleanup checker sandbox fileId={}: {}", checkerFileId, SafeErrors.describe(ex));
                     }
                 }
             }
         } catch (RuntimeException | IOException ex) {
-            log.warn("Sandbox execution failed for submission={}", task.submissionId(), ex);
+            log.warn("Sandbox execution failed for submission={} {}", task.submissionId(), SafeErrors.trace(ex));
             return JudgeResult.systemError("Sandbox execution failed: " + safeMessage(ex));
         }
     }

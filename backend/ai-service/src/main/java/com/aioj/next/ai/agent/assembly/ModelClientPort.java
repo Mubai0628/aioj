@@ -20,6 +20,7 @@ import com.aioj.next.ai.model.api.ModelResponse;
 import com.aioj.next.ai.model.api.ProviderCapabilities;
 import com.aioj.next.ai.model.api.ToolChoice;
 import com.aioj.next.ai.model.api.ToolSpec;
+import com.aioj.next.common.error.SafeErrors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -192,7 +193,7 @@ public final class ModelClientPort implements ModelPort {
             responseObserver.accept(response);
         } catch (RuntimeException ex) {
             // Usage observation must never change the run.
-            log.warn("model response observer failed scope={} error={}", scope, ex.toString());
+            log.warn("model response observer failed scope={} error={}", scope, SafeErrors.describe(ex));
         }
     }
 

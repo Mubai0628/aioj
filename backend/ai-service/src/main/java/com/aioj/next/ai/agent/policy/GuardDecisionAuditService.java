@@ -12,6 +12,7 @@ import com.aioj.next.ai.domain.AiTurnService;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.common.security.SecuritySupport;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import tools.jackson.databind.JsonNode;
@@ -195,7 +196,7 @@ public class GuardDecisionAuditService {
         try {
             return objectMapper.readTree(json);
         } catch (Exception ex) {
-            log.warn("guard decision audit row contains unparseable JSON: {}", ex.toString());
+            log.warn("guard decision audit row contains unparseable JSON: {}", SafeErrors.describe(ex));
             return null;
         }
     }
@@ -246,7 +247,7 @@ public class GuardDecisionAuditService {
             );
         } catch (RuntimeException ex) {
             // Viewing must not fail because audit persistence is unavailable.
-            log.warn("Guard turn messages view audit failed turn={} error={}", turn.getId(), ex.toString());
+            log.warn("Guard turn messages view audit failed turn={} error={}", turn.getId(), SafeErrors.describe(ex));
         }
     }
 

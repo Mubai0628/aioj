@@ -7,6 +7,7 @@ import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.config.HarnessDbQuota;
 import com.aioj.next.ai.persistence.entity.AiAsyncJobEntity;
 import com.aioj.next.common.api.TraceIds;
+import com.aioj.next.common.error.SafeErrors;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
@@ -209,7 +210,7 @@ public class AgentAsyncJobWorker {
             jobService.complete(job);
         } catch (AgentAsyncJobPermanentFailure ex) {
             log.warn("agent async job failed permanently: jobId={} type={} error={}", job.getId(), job.getJobType(),
-                    ex.getMessage());
+                    SafeErrors.describe(ex));
             countFailure(job);
             jobService.failFinal(job, ex.getMessage());
         } catch (TimeoutException ex) {
@@ -221,7 +222,7 @@ public class AgentAsyncJobWorker {
             // Shutting down: the job keeps its lease until it runs out, then is claimed again.
             Thread.currentThread().interrupt();
         } catch (Exception ex) {
-            log.warn("agent async job failed: jobId={} type={} error={}", job.getId(), job.getJobType(), ex.toString());
+            log.warn("agent async job failed: jobId={} type={} error={}", job.getId(), job.getJobType(), SafeErrors.describe(ex));
             countFailure(job);
             jobService.fail(job, ex, properties.getAgentJobs().getBackoffBaseSeconds());
         }

@@ -4,6 +4,7 @@ import com.aioj.next.ai.domain.AiModelConfigService;
 import com.aioj.next.ai.domain.AiModelEffectiveConfig;
 import com.aioj.next.ai.domain.AiModelScope;
 import com.aioj.next.ai.model.api.EndpointTuning;
+import com.aioj.next.common.error.SafeErrors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -54,7 +55,7 @@ public class AgentModelConfigLogger implements ApplicationRunner {
                     orDefault(tuning.maxRetries()), orDefault(tuning.thinkingFallback()),
                     orDefault(tuning.streaming()));
         } catch (RuntimeException ex) {
-            log.warn("AgentCore model config scope={} could not be resolved at startup: {}", scope, ex.getMessage());
+            log.warn("AgentCore model config scope={} could not be resolved at startup: {}", scope, SafeErrors.describe(ex));
         }
     }
 

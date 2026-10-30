@@ -13,6 +13,7 @@ import com.aioj.next.ai.domain.AiConversationService;
 import com.aioj.next.ai.model.api.ChatMessage;
 import com.aioj.next.ai.persistence.entity.AiTurnDigestEntity;
 import com.aioj.next.ai.persistence.mapper.AiTurnDigestMapper;
+import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.aioj.next.contract.ai.AiChatRequest;
 import org.slf4j.Logger;
@@ -399,7 +400,7 @@ public class TutorContextContributors {
                 }
             }
         } catch (Exception ex) {
-            log.debug("skip unparsable structured digest turn={} error={}", digest.getTurnId(), ex.toString());
+            log.debug("skip unparsable structured digest turn={} error={}", digest.getTurnId(), SafeErrors.describe(ex));
         }
     }
 

@@ -8,6 +8,7 @@ import com.aioj.next.ai.model.api.ModelResponse;
 import com.aioj.next.ai.model.api.ModelClient;
 import com.aioj.next.ai.agent.runtime.ProviderUsage;
 import com.aioj.next.ai.domain.AiModelScope;
+import com.aioj.next.common.error.SafeErrors;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -115,7 +116,7 @@ public class ContestAssistanceIntentJudge {
                     CallOptions.of("contest.intent-judge"));
             return parse(response.content(), candidates, ProviderUsage.from(response));
         } catch (RuntimeException ex) {
-            log.warn("contest assistance intent judgement unavailable: {}", ex.toString());
+            log.warn("contest assistance intent judgement unavailable: {}", SafeErrors.describe(ex));
             return Judgement.unavailable();
         }
     }
@@ -136,7 +137,7 @@ public class ContestAssistanceIntentJudge {
             }
             return new Judgement(InterceptType.NONE, Status.COMPLETED, usage);
         } catch (Exception ex) {
-            log.warn("contest assistance intent judgement output was invalid: {}", ex.toString());
+            log.warn("contest assistance intent judgement output was invalid: {}", SafeErrors.describe(ex));
             return new Judgement(InterceptType.UNAVAILABLE, Status.UNAVAILABLE, usage);
         }
     }
