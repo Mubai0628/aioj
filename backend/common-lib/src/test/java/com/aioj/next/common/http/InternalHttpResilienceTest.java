@@ -18,6 +18,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -159,6 +160,30 @@ class InternalHttpResilienceTest {
         assertThat(pending.get(2, TimeUnit.SECONDS)).isEqualTo("ok");
         assertThat(factory.snapshots().get("target").circuit()).isEqualTo(CircuitBreaker.State.CLOSED);
         assertThat(factory.snapshots().get("target").inUse()).isZero();
+    }
+
+    @Test
+    void aBusyTargetsRetryAfter503NeverOpensTheCircuitButAPlain503Does() throws Exception {
+        var retryAfter = new AtomicBoolean(true);
+        start(exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            if (retryAfter.get()) { exchange.getResponseHeaders().add("Retry-After", "1"); }
+            respond(exchange, 503, "busy");
+        });
+        var factory = factory();
+        var client = client(factory, "busy", Duration.ofSeconds(2));
+        for (int i = 0; i < 25; i++) {
+            assertThatThrownBy(() -> client.post().uri("/run").body("payload").retrieve().toBodilessEntity())
+                    .isInstanceOf(RestClientException.class);
+        }
+        assertThat(factory.snapshots().get("target").circuit()).isEqualTo(CircuitBreaker.State.CLOSED);
+        assertThat(factory.snapshots().get("target").inUse()).isZero();
+        retryAfter.set(false);
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> client.post().uri("/run").body("payload").retrieve().toBodilessEntity())
+                    .isInstanceOf(RestClientException.class);
+        }
+        assertThat(factory.snapshots().get("target").circuit()).isEqualTo(CircuitBreaker.State.OPEN);
     }
 
     @Test

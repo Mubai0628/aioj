@@ -102,8 +102,7 @@ public class InternalRestClientFactory {
                     }
                     try {
                         ClientHttpResponse response = execute(request, body, execution, read, attemptTimeout);
-                        boolean unhealthy = response.getStatusCode().is5xxServerError();
-                        return new ProtectedResponse(response, state, unhealthy);
+                        return new ProtectedResponse(response, state, outcome(response));
                     } catch (IOException | RuntimeException ex) {
                         state.breaker.record(Thread.currentThread().isInterrupted() ? Outcome.NEUTRAL : Outcome.FAILURE);
                         state.permits.release();
@@ -150,6 +149,19 @@ public class InternalRestClientFactory {
         } finally {
             attemptTimeout.remove();
         }
+    }
+
+    /**
+     * A 5xx counts against the target's health, except a 503 with Retry-After: that is a target at
+     * capacity turning work away on purpose (agent-executor when busy), and it says nothing about health.
+     */
+    private static Outcome outcome(ClientHttpResponse response) throws IOException {
+        HttpStatusCode status = response.getStatusCode();
+        if (!status.is5xxServerError()) {
+            return Outcome.SUCCESS;
+        }
+        return status.value() == 503 && response.getHeaders().containsHeader(HttpHeaders.RETRY_AFTER)
+                ? Outcome.NEUTRAL : Outcome.FAILURE;
     }
 
     private void guardTransaction(String target, String clientId) {
@@ -210,12 +222,12 @@ public class InternalRestClientFactory {
         private final ClientHttpResponse delegate;
         private final TargetState state;
         private final AtomicBoolean closed = new AtomicBoolean();
-        private boolean failed;
+        private Outcome outcome;
         private InputStream body;
-        private ProtectedResponse(ClientHttpResponse delegate, TargetState state, boolean failed) {
+        private ProtectedResponse(ClientHttpResponse delegate, TargetState state, Outcome outcome) {
             this.delegate = delegate;
             this.state = state;
-            this.failed = failed;
+            this.outcome = outcome;
         }
         @Override
         public HttpStatusCode getStatusCode() throws IOException { return delegate.getStatusCode(); }
@@ -230,14 +242,14 @@ public class InternalRestClientFactory {
                     body = new FilterInputStream(delegate.getBody()) {
                         @Override
                         public int read() throws IOException {
-                            try { return super.read(); } catch (IOException ex) { failed = true; throw ex; }
+                            try { return super.read(); } catch (IOException ex) { outcome = Outcome.FAILURE; throw ex; }
                         }
                         @Override
                         public int read(byte[] bytes, int offset, int length) throws IOException {
-                            try { return super.read(bytes, offset, length); } catch (IOException ex) { failed = true; throw ex; }
+                            try { return super.read(bytes, offset, length); } catch (IOException ex) { outcome = Outcome.FAILURE; throw ex; }
                         }
                     };
-                } catch (IOException ex) { failed = true; throw ex; }
+                } catch (IOException ex) { outcome = Outcome.FAILURE; throw ex; }
             }
             return body;
         }
@@ -247,8 +259,7 @@ public class InternalRestClientFactory {
                 try {
                     delegate.close();
                 } finally {
-                    state.breaker.record(Thread.currentThread().isInterrupted() ? Outcome.NEUTRAL
-                            : failed ? Outcome.FAILURE : Outcome.SUCCESS);
+                    state.breaker.record(Thread.currentThread().isInterrupted() ? Outcome.NEUTRAL : outcome);
                     state.permits.release();
                 }
             }

@@ -12,7 +12,8 @@ import java.util.concurrent.Semaphore;
 /**
  * At most {@code permits} execution requests at a time (plan §3.6 rule 5:
  * concurrency 1). A request that finds no free permit gets 503 at once
- * instead of queueing behind a long package run.
+ * instead of queueing behind a long package run. The 503 carries Retry-After,
+ * which tells ai-service's circuit breaker that the executor is busy, not down.
  */
 public class ExecutionConcurrencyFilter extends OncePerRequestFilter {
     private final Semaphore permits;
@@ -25,6 +26,7 @@ public class ExecutionConcurrencyFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         if (!permits.tryAcquire()) {
+            response.setHeader("Retry-After", "1");
             response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "agent executor is busy");
             return;
         }

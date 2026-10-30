@@ -42,7 +42,6 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,8 +86,8 @@ public class ProblemServiceClient {
                 auditWriter,
                 properties.getProblemServiceGuardCacheTtlMs(),
                 clients.create("problem-service", stripTrailingSlash(properties.getProblemServiceUri()), "problem-context",
-                        java.time.Duration.ofMillis(Math.max(1L, properties.getProblemServiceConnectTimeoutMs())),
-                        java.time.Duration.ofMillis(Math.max(1L, properties.getProblemServiceReadTimeoutMs()))));
+                        Duration.ofMillis(Math.max(1L, properties.getProblemServiceConnectTimeoutMs())),
+                        Duration.ofMillis(Math.max(1L, properties.getProblemServiceReadTimeoutMs()))));
     }
 
     ProblemServiceClient(ObjectMapper objectMapper, InternalApiProperties internalApiProperties,
@@ -98,13 +97,6 @@ public class ProblemServiceClient {
         this.internalApiProperties = internalApiProperties;
         this.auditWriter = auditWriter;
         this.guardCacheTtlMs = Math.max(0L, guardCacheTtlMs);
-    }
-
-    private static SimpleClientHttpRequestFactory guardRequestFactory(AiProperties properties) {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofMillis(Math.max(500, properties.getProblemServiceConnectTimeoutMs())));
-        factory.setReadTimeout(Duration.ofMillis(Math.max(500, properties.getProblemServiceReadTimeoutMs())));
-        return factory;
     }
 
     public AiProblemContextResponse aiProblemContext(AiProblemContextRequest request) {

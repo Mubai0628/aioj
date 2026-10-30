@@ -45,6 +45,7 @@ class ExecutionConcurrencyFilterTest {
         release.countDown();
 
         assertThat(second.getStatus()).isEqualTo(503);
+        assertThat(second.getHeader("Retry-After")).as("busy, not down").isEqualTo("1");
         assertThat(first.get(5, TimeUnit.SECONDS).getStatus()).isEqualTo(200);
         MockHttpServletResponse third = new MockHttpServletResponse();
         filter.doFilter(new MockHttpServletRequest("POST", "/api/v1/internal/sandbox/run-one"), third,
