@@ -31,6 +31,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -92,10 +93,26 @@ class GuardDecisionAuditServiceTest {
         assertThat(result.pageSize()).isEqualTo(50L);
         GuardDecisionAuditItem item = result.records().get(0);
         assertThat(item.id()).isEqualTo(String.valueOf(entity.getId()));
-        assertThat(item.contestRunId()).isEqualTo(7701L);
+        assertThat(item.contestRunId()).isEqualTo("7701");
         assertThat(item.matchedProblemRefs().isArray()).isTrue();
         assertThat(item.matchedProblemRefs().get(0).get("contestRunId").asLong()).isEqualTo(7701L);
         assertThat(item.detail().get("similarity").asDouble()).isEqualTo(0.91);
+    }
+
+    @Test
+    void snowflakeIdsLeaveAsStringsEvenInsideTheStoredJson() {
+        AiGuardDecisionEntity entity = row(1990011223344556677L, "L4_OUTPUT", "REFUSE");
+        entity.setUserId(1990011223344556600L);
+        entity.setMatchedProblemRefs("[{\"problemId\":1990011223344556601,\"contestRunId\":1990011223344556677}]");
+        entity.setDetailJson("{\"candidates\":[1990011223344556601,1990011223344556602],\"similarity\":0.91}");
+        when(guardDecisionMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(entity));
+
+        String json = OBJECT_MAPPER.writeValueAsString(service.list(null, null, null, null, null, null, null, 1, 20));
+
+        // Plan S6: a browser would read a bare 19-digit number with its last digits wrong.
+        assertThat(json).doesNotContainPattern(Pattern.compile("[:\\[,]\\s*-?\\d{16,}"));
+        assertThat(json).contains("\"userId\":\"1990011223344556600\"", "\"contestRunId\":\"1990011223344556677\"",
+                "\"candidates\":[\"1990011223344556601\",\"1990011223344556602\"]", "\"similarity\":0.91");
     }
 
     @Test
@@ -169,7 +186,7 @@ class GuardDecisionAuditServiceTest {
 
         assertThat(response.turnId()).isEqualTo("t-1");
         assertThat(response.conversationId()).isEqualTo("c-1");
-        assertThat(response.userId()).isEqualTo(7L);
+        assertThat(response.userId()).isEqualTo("7");
         assertThat(response.status()).isEqualTo("COMPLETED");
         assertThat(response.userMessage().id()).isEqualTo("1001");
         assertThat(response.userMessage().content()).isEqualTo("这题怎么做");

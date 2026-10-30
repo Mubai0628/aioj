@@ -19,8 +19,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -77,6 +79,26 @@ class OperationAuditServiceTest {
         assertEquals("AI 题目草稿生成完成", result.records().get(0).actionDisplayName());
         assertEquals("AI 题目草稿改写失败", result.records().get(1).actionDisplayName());
         assertNotEquals("未识别审计操作", result.records().get(2).actionDisplayName());
+    }
+
+    @Test
+    void snowflakeIdsLeaveAsStringsEvenInsideTheSummary() {
+        OperationAuditEventEntity event = event("SUBMISSION_CODE_ACCESS");
+        event.setId(2070348621785022501L);
+        event.setActorUserId(2070348621785022502L);
+        event.setResourceId(2070348621785022503L);
+        event.setContestRunId(2070348621785022504L);
+        event.setSummaryJson("{\"auditLogId\":2070348621785022500,\"submissionIds\":[2070348621785022505,7]}");
+        when(auditEventMapper.selectPage(any(), any())).thenReturn(page(List.of(event)));
+
+        var result = service.list(1, 20, null, null, null, null, null);
+        String json = new ObjectMapper().writeValueAsString(result);
+
+        // Plan S6: the admin page parses summaryJson with a plain JSON.parse.
+        assertEquals("{\"auditLogId\":\"2070348621785022500\",\"submissionIds\":[\"2070348621785022505\",7]}",
+                result.records().get(0).summaryJson());
+        assertFalse(Pattern.compile("[:\\[,]\\s*-?\\d{16,}").matcher(json).find(), json);
+        assertEquals("2070348621785022502", result.records().get(0).actorUserId());
     }
 
     private Page<OperationAuditEventEntity> page(List<OperationAuditEventEntity> records) {

@@ -3092,8 +3092,15 @@ function queryString(params: Record<string, unknown> = {}) {
   return text ? `?${text}` : '';
 }
 
+// A browser reads a JSON number as a double, so a 19-digit snowflake id would lose its last digits. Before
+// parsing, ids under "id", "...Id" and "...By" keys and the numbers in "...Ids" arrays become strings (S6).
+const LARGE_ID_FIELD = /("(?:[A-Za-z0-9_]*Id|id|[A-Za-z0-9_]*By)"\s*:\s*)(-?\d{16,})/g;
+const LARGE_ID_ARRAY = /("[A-Za-z0-9_]*Ids"\s*:\s*\[)([\s\d,-]*)\]/g;
+
 function preserveLargeIntegerIds(text: string) {
-  return text.replace(/("(?:(?:[A-Za-z0-9_]*Id)|id|deletedBy)"\s*:\s*)(-?\d{16,})/g, '$1"$2"');
+  return text
+    .replace(LARGE_ID_FIELD, '$1"$2"')
+    .replace(LARGE_ID_ARRAY, (_match, head: string, items: string) => `${head}${items.replace(/-?\d{16,}/g, '"$&"')}]`);
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {

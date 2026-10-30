@@ -1,5 +1,6 @@
 package com.aioj.next.problem.domain;
 
+import com.aioj.next.common.api.JsonLongIds;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.api.TraceIds;
 import com.aioj.next.common.error.DomainException;
@@ -137,11 +138,11 @@ public class OperationAuditService {
     }
 
     private OperationAuditEventResponse toResponse(OperationAuditEventEntity event) {
-        return new OperationAuditEventResponse(event.getId(), event.getActorUserId(), event.getAction(),
-                displayName(event.getAction()),
-                event.getResourceType(), event.getResourceId(), event.getContestId(), event.getContestRunId(),
-                event.getTargetUserId(), event.getStatus(), event.getTraceId(), event.getSummaryJson(),
-                event.getCreatedAt());
+        return new OperationAuditEventResponse(JsonLongIds.text(event.getId()), JsonLongIds.text(event.getActorUserId()),
+                event.getAction(), displayName(event.getAction()), event.getResourceType(),
+                JsonLongIds.text(event.getResourceId()), JsonLongIds.text(event.getContestId()),
+                JsonLongIds.text(event.getContestRunId()), JsonLongIds.text(event.getTargetUserId()), event.getStatus(),
+                event.getTraceId(), JsonLongIds.stringifyText(event.getSummaryJson(), objectMapper), event.getCreatedAt());
     }
 
     private String displayName(String action) {

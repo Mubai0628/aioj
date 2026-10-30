@@ -1,5 +1,6 @@
 package com.aioj.next.problem.domain;
 
+import com.aioj.next.common.api.JsonLongIds;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
@@ -366,11 +367,13 @@ public class ContestFairnessAlertService {
         Map<String, Object> evidence = evidence(alert.getEvidenceJson());
         ContestParticipantEntity primary = participants.get(alert.getPrimaryParticipantId());
         ContestParticipantEntity secondary = participants.get(alert.getSecondaryParticipantId());
-        return new FairnessAlertResponse(alert.getId(), alert.getContestId(), alert.getContestRunId(),
-                alert.getAlertType(), alert.getSeverity(), alert.getStatus(), alert.getPrimaryParticipantId(),
-                alert.getSecondaryParticipantId(), alert.getPlagiarismPairId(), display(primary), display(secondary),
-                title(alert.getAlertType()), summary(alert, evidence), evidence, alert.getTeacherNote(),
-                alert.getReviewedBy(), alert.getReviewedAt(), alert.getCreatedAt(), alert.getUpdatedAt());
+        return new FairnessAlertResponse(JsonLongIds.text(alert.getId()), JsonLongIds.text(alert.getContestId()),
+                JsonLongIds.text(alert.getContestRunId()), alert.getAlertType(), alert.getSeverity(), alert.getStatus(),
+                JsonLongIds.text(alert.getPrimaryParticipantId()), JsonLongIds.text(alert.getSecondaryParticipantId()),
+                JsonLongIds.text(alert.getPlagiarismPairId()), display(primary), display(secondary),
+                title(alert.getAlertType()), summary(alert, evidence), JsonLongIds.stringifyMap(evidence),
+                alert.getTeacherNote(), JsonLongIds.text(alert.getReviewedBy()), alert.getReviewedAt(),
+                alert.getCreatedAt(), alert.getUpdatedAt());
     }
 
     private String title(FairnessAlertType type) {

@@ -17,6 +17,7 @@ import com.aioj.next.ai.persistence.mapper.AiToolCallMapper;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftMapper;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftTestcaseArtifactMapper;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftWorkspaceMapper;
+import com.aioj.next.common.api.JsonLongIds;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
@@ -621,7 +622,8 @@ public class ProblemDraftWorkspaceService {
         return toolCallMapper.selectList(query).stream().map(call -> new ProblemDraftToolCallResponse(
                 call.getId(), call.getAgentRunId(), call.getCallSeq(), call.getToolName(), call.getStatus(),
                 call.getResultClassification(), safeSummaryText(call.getSafeSummaryJson()), call.getResourceRefType(),
-                call.getResourceRefId(), readMap(call.getResourceMetricsJson()), call.getLatencyMs(), call.getErrorCode(),
+                call.getResourceRefId(), JsonLongIds.stringifyMap(readMap(call.getResourceMetricsJson())),
+                call.getLatencyMs(), call.getErrorCode(),
                 toInstant(call.getStartedAt() == null ? call.getCreatedAt() : call.getStartedAt()),
                 toInstant(call.getCompletedAt())
         )).toList();

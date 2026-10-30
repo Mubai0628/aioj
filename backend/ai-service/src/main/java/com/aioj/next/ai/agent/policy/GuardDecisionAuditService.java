@@ -9,6 +9,7 @@ import com.aioj.next.ai.persistence.entity.AiTurnEntity;
 import com.aioj.next.ai.persistence.mapper.AiGuardDecisionMapper;
 import com.aioj.next.ai.persistence.mapper.AiMessageMapper;
 import com.aioj.next.ai.domain.AiTurnService;
+import com.aioj.next.common.api.JsonLongIds;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
@@ -111,7 +112,7 @@ public class GuardDecisionAuditService {
         return new GuardTurnMessagesResponse(
                 turn.getId(),
                 turn.getConversationId(),
-                turnUserId,
+                JsonLongIds.text(turnUserId),
                 turn.getStatus(),
                 toInstant(turn.getCreatedAt()),
                 toTurnMessage(userMessage),
@@ -151,9 +152,9 @@ public class GuardDecisionAuditService {
         return new GuardDecisionAuditItem(
                 String.valueOf(entity.getId()),
                 entity.getTurnId(),
-                entity.getUserId(),
+                JsonLongIds.text(entity.getUserId()),
                 entity.getConversationId(),
-                entity.getContestRunId(),
+                JsonLongIds.text(entity.getContestRunId()),
                 entity.getLayer(),
                 entity.getDecision(),
                 entity.getReasonCode(),
@@ -194,7 +195,7 @@ public class GuardDecisionAuditService {
             return null;
         }
         try {
-            return objectMapper.readTree(json);
+            return JsonLongIds.stringifyNode(objectMapper.readTree(json));
         } catch (Exception ex) {
             log.warn("guard decision audit row contains unparseable JSON: {}", SafeErrors.describe(ex));
             return null;

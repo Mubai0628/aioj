@@ -52,7 +52,7 @@ class AiGuardAuditControllerTest {
     @Test
     void listPassesFiltersAndReturnsPage() throws Exception {
         GuardDecisionAuditItem item = new GuardDecisionAuditItem(
-                "990011223344556677", "t-1", 7L, "c-1", 7701L,
+                "990011223344556677", "t-1", "7", "c-1", "7701",
                 "L4_OUTPUT", "REFUSE", "private_contest_problem",
                 new ObjectMapper().readTree("[{\"problemId\":1001,\"contestRunId\":7701}]"),
                 new ObjectMapper().readTree("{\"similarity\":0.91}"),
@@ -77,7 +77,7 @@ class AiGuardAuditControllerTest {
                 .andExpect(jsonPath("$.data.page").value(2))
                 .andExpect(jsonPath("$.data.pageSize").value(50))
                 .andExpect(jsonPath("$.data.records[0].id").value("990011223344556677"))
-                .andExpect(jsonPath("$.data.records[0].contestRunId").value(7701))
+                .andExpect(jsonPath("$.data.records[0].contestRunId").value("7701"))
                 .andExpect(jsonPath("$.data.records[0].matchedProblemRefs[0].contestRunId").value(7701))
                 .andExpect(jsonPath("$.data.records[0].detail.similarity").value(0.91));
 
@@ -110,7 +110,7 @@ class AiGuardAuditControllerTest {
     @Test
     void turnMessagesReturnsTurnAndMessages() throws Exception {
         GuardTurnMessagesResponse response = new GuardTurnMessagesResponse(
-                "t-1", "c-1", 7L, "COMPLETED", Instant.parse("2026-08-08T10:00:00Z"),
+                "t-1", "c-1", "7", "COMPLETED", Instant.parse("2026-08-08T10:00:00Z"),
                 new GuardTurnMessagesResponse.GuardTurnMessage(
                         "1001", "user", "这题怎么做", null, Instant.parse("2026-08-08T10:00:00Z")),
                 new GuardTurnMessagesResponse.GuardTurnMessage(
@@ -120,7 +120,7 @@ class AiGuardAuditControllerTest {
         mockMvc.perform(get("/admin/ai-guard-decisions/turns/t-1/messages"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.turnId").value("t-1"))
-                .andExpect(jsonPath("$.data.userId").value(7))
+                .andExpect(jsonPath("$.data.userId").value("7"))
                 .andExpect(jsonPath("$.data.userMessage.id").value("1001"))
                 .andExpect(jsonPath("$.data.userMessage.content").value("这题怎么做"))
                 .andExpect(jsonPath("$.data.assistantMessage.model").value("deepseek-chat"));

@@ -6,15 +6,15 @@ import java.time.Instant;
 
 /**
  * One row of the staff guard-decision audit feed (design doc §5.6, P3-7).
- * {@code id} is a snowflake and is exposed as a string; matchedProblemRefs/detail
- * are parsed JSON, never string-wrapped JSON.
+ * Ids are snowflakes and are exposed as strings (plan S6); matchedProblemRefs/detail
+ * are parsed JSON, never string-wrapped JSON, with their 16+ digit integers as strings.
  */
 public record GuardDecisionAuditItem(
         String id,
         String turnId,
-        Long userId,
+        String userId,
         String conversationId,
-        Long contestRunId,
+        String contestRunId,
         String layer,
         String decision,
         String reasonCode,
