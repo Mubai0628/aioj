@@ -72,10 +72,10 @@ public class JudgeTaskListener {
                         .ifPresent(testcasePackage -> log.info("Prepared testcase package submission={} package={} cases={}",
                                 task.submissionId(), testcasePackage.packageId(), testcasePackage.cases().size()));
             } catch (TestcasePackageUnavailableException ex) {
-                String messageText = "Testcase package unavailable: " + ex.getMessage();
-                log.warn("submission={} problem={} {} queueWaitMs={} judgeWallMs={}",
-                        task.submissionId(), task.problemId(), messageText, queueWaitMs, elapsedMillis(startedNanos));
-                judgingService.finish(task, JudgeResult.systemError(messageText));
+                log.warn("submission={} problem={} testcase package unavailable queueWaitMs={} judgeWallMs={}: {}",
+                        task.submissionId(), task.problemId(), queueWaitMs, elapsedMillis(startedNanos),
+                        SafeErrors.describe(ex));
+                judgingService.finish(task, JudgeResult.systemError(SandboxClient.TESTCASE_UNAVAILABLE));
                 metrics.taskFinished(SubmissionStatus.SYSTEM_ERROR, elapsedMillis(startedNanos));
                 channel.basicAck(deliveryTag, false);
                 return;
@@ -92,7 +92,7 @@ public class JudgeTaskListener {
             Long submissionId = task == null ? null : task.submissionId();
             log.warn("Rejecting non-retryable judge task submission={} queueWaitMs={} judgeWallMs={}: {}",
                     submissionId, queueWaitMs, elapsedMillis(startedNanos), SafeErrors.describe(ex));
-            judgingService.markSystemError(submissionId, ex.getMessage());
+            judgingService.markSystemError(submissionId, SandboxClient.SYSTEM_ERROR_KEY);
             metrics.taskFailed(ex, started);
             channel.basicNack(deliveryTag, false, false);
         } catch (Exception ex) {

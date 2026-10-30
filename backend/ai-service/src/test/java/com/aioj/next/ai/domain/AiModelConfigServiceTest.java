@@ -470,9 +470,8 @@ class AiModelConfigServiceTest {
         ), 9L);
 
         assertThat(response.success()).isFalse();
-        assertThat(response.errorMessage()).contains("***");
-        assertThat(response.errorMessage()).doesNotContain("temp-secret-key");
-        assertThat(response.errorMessage()).doesNotContain("lqO5");
+        // Plan S7: the category only; the provider's words (and the key they echo) stay out.
+        assertThat(response.errorMessage()).isEqualTo("ai.keyInvalid");
         verify(fixture.quotaService).record(9L, "deepseek", "deepseek-v4-pro", 0, 0, false);
     }
 

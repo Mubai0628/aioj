@@ -8,6 +8,7 @@ import com.aioj.next.ai.domain.response.AiAssistantResponseNormalizer;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.aioj.next.contract.ai.AiChatRequest;
 import com.aioj.next.contract.ai.AiConversationCreateRequest;
@@ -348,7 +349,7 @@ public class AiConversationService {
         ensureMessageOwner(message, userId);
         LocalDateTime now = LocalDateTime.now();
         message.setStatus(MESSAGE_STATUS_FAILED);
-        message.setErrorMessage(truncate(errorMessage == null || errorMessage.isBlank() ? "AI provider call failed" : errorMessage, 500));
+        message.setErrorMessage(truncate(errorMessage == null || errorMessage.isBlank() ? "ai.providerFailed" : errorMessage, 500));
         message.setUpdatedAt(now);
         message.setCompletedAt(now);
         messageMapper.updateById(message);
@@ -517,7 +518,8 @@ public class AiConversationService {
                 responseNormalizer.normalizeVisibleContent(message.getRole(), message.getContent()),
                 message.getModel(),
                 normalizeStatus(message.getStatus()),
-                message.getErrorMessage(),
+                // Plan S7: an error key; older rows stored free text, which is not handed out.
+                UserErrorFeedback.storedKey(message.getErrorMessage(), "ai.providerFailed"),
                 createdAt.atZone(ZONE).toInstant(),
                 completedAt == null ? null : completedAt.atZone(ZONE).toInstant()
         );

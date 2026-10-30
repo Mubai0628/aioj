@@ -12,6 +12,10 @@ import com.aioj.next.ai.persistence.mapper.ProblemDraftMapper;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftTestcaseArtifactMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
+import com.aioj.next.common.error.UserErrorFeedback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.aioj.next.contract.ai.ProblemDraftImportReadiness;
 import com.aioj.next.contract.ai.ProblemDraftImportRequest;
 import com.aioj.next.contract.ai.ProblemDraftImportResponse;
@@ -46,6 +50,7 @@ import java.util.Objects;
  */
 @Service
 public class ProblemDraftImportService {
+    private static final Logger log = LoggerFactory.getLogger(ProblemDraftImportService.class);
     public static final String MODE_AGENT_VERIFIED = "AGENT_VERIFIED";
     public static final String MODE_MANUAL_UNVERIFIED = "MANUAL_UNVERIFIED";
     private static final ZoneId ZONE = ZoneId.systemDefault();
@@ -95,11 +100,11 @@ public class ProblemDraftImportService {
             resume(saga, context, authorization);
             return response(requireSaga(saga.getId()), context.readiness());
         } catch (DomainException ex) {
-            recordFailure(saga.getId(), ex.errorCode().name(), safeMessage(ex.getMessage()));
+            recordFailure(saga.getId(), ex.errorCode().name(), UserErrorFeedback.storedKey(ex));
             throw ex;
         } catch (RuntimeException ex) {
-            recordFailure(saga.getId(), ErrorCode.INTERNAL_ERROR.name(),
-                    "AI problem draft import was interrupted and can be retried with the same idempotency key");
+            log.warn("AI problem draft import {} was interrupted: {}", saga.getId(), SafeErrors.describe(ex));
+            recordFailure(saga.getId(), ErrorCode.INTERNAL_ERROR.name(), "draft.importInterrupted");
             throw new DomainException(ErrorCode.INTERNAL_ERROR,
                     "AI problem draft import was interrupted; retry with the same idempotency key");
         }
@@ -334,7 +339,9 @@ public class ProblemDraftImportService {
                                                 ProblemDraftImportReadiness readiness) {
         return new ProblemDraftImportResponse(saga.getId(), saga.getWorkspaceId(), saga.getDraftId(),
                 saga.getArtifactId(), saga.getState(), saga.getImportMode(), saga.getProblemId(),
-                saga.getTestcasePackageId(), readiness, saga.getLastErrorCode(), saga.getLastErrorMessage(),
+                saga.getTestcasePackageId(), readiness, saga.getLastErrorCode(),
+                // Plan S7: an error key; older rows kept the failure's text, which is not handed out.
+                UserErrorFeedback.storedKey(saga.getLastErrorMessage(), "draft.importFailed"),
                 instant(saga.getCreatedAt()), instant(saga.getUpdatedAt()), instant(saga.getCompletedAt()));
     }
 

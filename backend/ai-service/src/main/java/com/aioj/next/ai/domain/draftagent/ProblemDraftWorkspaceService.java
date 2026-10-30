@@ -21,6 +21,7 @@ import com.aioj.next.common.api.JsonLongIds;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.ai.AiConversationCreateRequest;
@@ -753,7 +754,8 @@ public class ProblemDraftWorkspaceService {
                 artifact.getId(), valueOr(artifact.getSource(), "AGENT_GENERATED"), artifact.getStatus(),
                 valueOr(artifact.getFormatStatus(), "READY"), valueOr(artifact.getExecutionStatus(), "NOT_RUN"),
                 artifact.getVerificationMode(), artifact.getVerificationFingerprint(), stale, artifact.getCaseCount(),
-                artifact.getFileSizeBytes(), artifact.getSha256(), artifact.getFailureSummary(), artifact.getAgentRunId(),
+                artifact.getFileSizeBytes(), artifact.getSha256(),
+                UserErrorFeedback.storedKey(artifact.getFailureSummary(), "testcase.processFailed"), artifact.getAgentRunId(),
                 toInstant(artifact.getGeneratedAt()), toInstant(artifact.getValidatedAt()),
                 artifact.getImportedProblemId(), artifact.getProblemTestcasePackageId());
     }

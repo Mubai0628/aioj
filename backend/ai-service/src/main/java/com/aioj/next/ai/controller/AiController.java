@@ -22,6 +22,8 @@ import com.aioj.next.common.api.ApiResponse;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.ai.AiChatMessageResponse;
 import com.aioj.next.contract.ai.AiChatRequest;
@@ -807,7 +809,8 @@ public class AiController {
         if (ex instanceof DomainException domainException) {
             return domainException;
         }
-        return new DomainException(ErrorCode.INTERNAL_ERROR, "AI provider call failed: " + ex.getMessage());
+        log.warn("AI provider call failed: {}", SafeErrors.describe(ex));
+        return new DomainException(ErrorCode.INTERNAL_ERROR, "AI provider call failed");
     }
 
     private void writeTurnProgress(OutputStream output, TurnEventBuffer events) throws IOException {
@@ -860,50 +863,39 @@ public class AiController {
     }
 
     private void sendStreamError(OutputStream output, Exception ex) {
-        try {
-            writeSseEvent(output, "error", ex.getMessage() == null ? "AI provider call failed" : ex.getMessage());
-            writeSseEvent(output, "done", "[DONE]");
-        } catch (IOException ignored) {
-            // Client already left; the response stream can be closed quietly.
-        }
+        log.warn("Chat stream failed: {}", SafeErrors.describe(ex));
+        writeStreamError(output, ex, "ai.providerFailed", null);
     }
 
     private void sendDraftStreamError(OutputStream output, Exception ex, Long userId, long startedAt) {
-        DomainException failure = ex instanceof DomainException domainException
-                ? domainException
-                : new DomainException(ErrorCode.INTERNAL_ERROR, "Problem draft generation failed");
         long elapsedMillis = Math.max(0L, System.currentTimeMillis() - startedAt);
-        String message = safeStreamErrorMessage(failure.getMessage());
-        log.warn("Problem draft stream failed userId={} elapsedMillis={} errorType={} message={}",
-                userId, elapsedMillis, ex.getClass().getSimpleName(), message);
+        log.warn("Problem draft stream failed userId={} elapsedMillis={} error={}",
+                userId, elapsedMillis, SafeErrors.describe(ex));
+        writeStreamError(output, ex, "system.internal", elapsedMillis);
+    }
+
+    /**
+     * Plan S7: a stream's error event names the failure by its error key with the key's default text,
+     * {code, errorKey, message}, and never carries the failure's own text.
+     */
+    private void writeStreamError(OutputStream output, Exception ex, String fallbackKey, Long elapsedMillis) {
+        String key = UserErrorFeedback.storedKey(ex);
+        if ("system.internal".equals(key)) {
+            key = fallbackKey;
+        }
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("code", failure.errorCode().code());
-        payload.put("message", message);
-        payload.put("errorKey", streamErrorKey(failure.errorCode()));
-        payload.put("elapsedMillis", elapsedMillis);
+        payload.put("code", ex instanceof DomainException domain ? domain.errorCode().code() : ErrorCode.INTERNAL_ERROR.code());
+        payload.put("errorKey", key);
+        payload.put("message", UserErrorFeedback.ofKey(key).message());
+        if (elapsedMillis != null) {
+            payload.put("elapsedMillis", elapsedMillis);
+        }
         try {
             writeSseEvent(output, "error", objectMapper.writeValueAsString(payload));
             writeSseEvent(output, "done", "[DONE]");
         } catch (IOException ignored) {
             // Client already left; the response stream can be closed quietly.
         }
-    }
-
-    private String streamErrorKey(ErrorCode errorCode) {
-        return switch (errorCode) {
-            case TOO_MANY_REQUESTS -> "request.tooMany";
-            case SERVICE_UNAVAILABLE -> "service.unavailable";
-            default -> "system.internal";
-        };
-    }
-
-    private String safeStreamErrorMessage(String message) {
-        String normalized = message == null || message.isBlank()
-                ? "Problem draft generation failed"
-                : message.strip();
-        normalized = normalized.replaceAll("(?i)(api[-_ ]?key|token|secret|password)\\s*[:=]\\s*\\S+", "$1=***");
-        normalized = normalized.replaceAll("sk-[A-Za-z0-9_-]{8,}", "sk-***");
-        return normalized.length() <= 800 ? normalized : normalized.substring(0, 800);
     }
 
     private void writeSseEvent(OutputStream output, String event, String data) throws IOException {

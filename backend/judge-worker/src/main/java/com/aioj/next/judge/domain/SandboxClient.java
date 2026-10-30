@@ -51,6 +51,11 @@ public class SandboxClient {
     private static final long DEFAULT_TIME_LIMIT_MILLIS = 1000L;
     private static final long DEFAULT_MEMORY_LIMIT_KB = 262144L;
     private static final String SANDBOX_ACCEPTED = "Accepted";
+    /** Plan S7: a system error reaches the student as one of these keys, never as the failure's text. */
+    public static final String SYSTEM_ERROR_KEY = "judge.systemError";
+    public static final String SANDBOX_UNAVAILABLE = "judge.sandboxUnavailable";
+    public static final String TESTCASE_UNAVAILABLE = "judge.testcaseUnavailable";
+    public static final String CHECKER_UNAVAILABLE = "judge.checkerUnavailable";
 
     private final JudgeWorkerProperties properties;
     private final TestcasePackageCache testcaseCache;
@@ -117,11 +122,13 @@ public class SandboxClient {
         try {
             SubmissionEntity submission = submissionMapper.selectById(task.submissionId());
             if (submission == null) {
-                return JudgeResult.systemError("Submission not found: " + task.submissionId());
+                log.warn("Judge task for a missing submission={}", task.submissionId());
+                return JudgeResult.systemError(SYSTEM_ERROR_KEY);
             }
             String sourceCode = submission.getCode();
             if (!StringUtils.hasText(sourceCode)) {
-                return JudgeResult.systemError("Submission source code is empty");
+                log.warn("Judge task with empty source submission={}", task.submissionId());
+                return JudgeResult.systemError(SYSTEM_ERROR_KEY);
             }
             if (sourceCode.getBytes(StandardCharsets.UTF_8).length > positiveOrDefault(
                     properties.getMaxSourceBytes(), 256 * 1024)) {
@@ -132,11 +139,13 @@ public class SandboxClient {
 
             Optional<PreparedTestcasePackage> preparedPackage = testcaseCache.prepareActivePackage(task.problemId());
             if (preparedPackage.isEmpty()) {
-                return JudgeResult.systemError("No active testcase package");
+                log.warn("No active testcase package for problem={} submission={}", task.problemId(), task.submissionId());
+                return JudgeResult.systemError(TESTCASE_UNAVAILABLE);
             }
             PreparedTestcasePackage testcasePackage = preparedPackage.get();
             if (testcasePackage.cases().isEmpty()) {
-                return JudgeResult.systemError("No testcase available");
+                log.warn("Empty testcase package for problem={} submission={}", task.problemId(), task.submissionId());
+                return JudgeResult.systemError(TESTCASE_UNAVAILABLE);
             }
 
             // Every submission keeps the results of the cases it ran. IOI scores all
@@ -182,18 +191,21 @@ public class SandboxClient {
                     CompileOutcome checkerCompile = compileChecker(testcasePackage, compileCpuLimitNs,
                             checkerCompileMemoryBytes);
                     if (checkerCompile.failed()) {
-                        // A broken checker is the problem setter's fault, never the student's verdict.
+                        // A broken checker is the problem setter's fault, never the student's verdict. Its
+                        // compile output is the setter's source, so the student sees only the key (plan S7).
+                        log.warn("Custom checker did not compile for submission={} problem={} status={}",
+                                task.submissionId(), task.problemId(), checkerCompile.sandboxStatus());
                         if (scoreAllCases) {
                             List<JudgeCaseResult> caseResults = compileFailureCaseResults(testcasePackage, checkerCompile,
-                                    SubmissionStatus.SYSTEM_ERROR, checkerCompile.message(), JudgePhase.CHECKER,
+                                    SubmissionStatus.SYSTEM_ERROR, CHECKER_UNAVAILABLE, JudgePhase.CHECKER,
                                     equalWeight);
-                            return new JudgeResult(SubmissionStatus.SYSTEM_ERROR, checkerCompile.message(),
+                            return new JudgeResult(SubmissionStatus.SYSTEM_ERROR, CHECKER_UNAVAILABLE,
                                     checkerCompile.timeMillis(), checkerCompile.memoryKb(), Instant.now(),
-                                    null, checkerCompile.stderr(), checkerCompile.exitStatus(), checkerCompile.runTimeMillis(),
+                                    null, null, checkerCompile.exitStatus(), checkerCompile.runTimeMillis(),
                                     BigDecimal.ZERO, sumMaxScore(caseResults), caseResults)
                                     .withDiagnostics(JudgePhase.CHECKER, checkerCompile.sandboxStatus(), caseTotal);
                         }
-                        return JudgeResult.systemError(checkerCompile.message())
+                        return JudgeResult.systemError(CHECKER_UNAVAILABLE)
                                 .withDiagnostics(JudgePhase.CHECKER, checkerCompile.sandboxStatus(), caseTotal);
                     }
                     checkerFileId = checkerCompile.fileId();
@@ -261,7 +273,7 @@ public class SandboxClient {
             }
         } catch (RuntimeException | IOException ex) {
             log.warn("Sandbox execution failed for submission={} {}", task.submissionId(), SafeErrors.trace(ex));
-            return JudgeResult.systemError("Sandbox execution failed: " + safeMessage(ex));
+            return JudgeResult.systemError(SANDBOX_UNAVAILABLE);
         }
     }
 
@@ -429,26 +441,28 @@ public class SandboxClient {
         SubmissionStatus sandboxStatus = mapStatus(result);
         String checkerStdout = result.file("stdout");
         String checkerStderr = result.file("stderr");
+        // Plan S7: a broken checker reads as the key; its stderr and output are the setter's and stay
+        // out of what the student sees (the case keeps the program's own stderr).
         if (sandboxStatus != SubmissionStatus.ACCEPTED) {
-            return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR,
-                    "Custom checker execution failed: " + firstText(result.error(), checkerStderr, result.status()),
-                    programTimeMs, programMemoryKb, actualOutput, firstText(programStderr, checkerStderr),
+            log.warn("Custom checker failed on case={} status={}", testcase.id(), result.reportedStatus());
+            return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR, CHECKER_UNAVAILABLE,
+                    programTimeMs, programMemoryKb, actualOutput, programStderr,
                     programExitStatus, programRunTimeMs, BigDecimal.ZERO, JudgePhase.CHECKER, result.reportedStatus());
         }
         CheckerJsonResult checkerResult;
         try {
             checkerResult = objectMapper.readValue(nullToEmpty(checkerStdout), CheckerJsonResult.class);
         } catch (JacksonException ex) {
-            return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR,
-                    "Custom checker returned invalid JSON: " + safeMessage(ex),
-                    programTimeMs, programMemoryKb, actualOutput, firstText(programStderr, checkerStderr),
+            log.warn("Custom checker returned invalid JSON on case={}: {}", testcase.id(), SafeErrors.describe(ex));
+            return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR, CHECKER_UNAVAILABLE,
+                    programTimeMs, programMemoryKb, actualOutput, programStderr,
                     programExitStatus, programRunTimeMs, BigDecimal.ZERO, JudgePhase.CHECKER, result.reportedStatus());
         }
         String checkerStatus = checkerResult.status();
         if (!"ACCEPTED".equals(checkerStatus) && !"WRONG_ANSWER".equals(checkerStatus)) {
-            return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR,
-                    "Custom checker returned unsupported status: " + firstText(checkerStatus),
-                    programTimeMs, programMemoryKb, actualOutput, firstText(programStderr, checkerStderr),
+            log.warn("Custom checker returned an unsupported status on case={}", testcase.id());
+            return new CaseRunOutcome(SubmissionStatus.SYSTEM_ERROR, CHECKER_UNAVAILABLE,
+                    programTimeMs, programMemoryKb, actualOutput, programStderr,
                     programExitStatus, programRunTimeMs, BigDecimal.ZERO, JudgePhase.CHECKER, result.reportedStatus());
         }
         BigDecimal score = clampScore(checkerResult.score(), maxScore);
@@ -597,9 +611,6 @@ public class SandboxClient {
         return "Sandbox execution failed";
     }
 
-    private static String safeMessage(Exception ex) {
-        return StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : ex.getClass().getSimpleName();
-    }
 
     record CompileOutcome(boolean failed,
                           String fileId,

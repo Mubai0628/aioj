@@ -202,8 +202,10 @@ class AiProblemDraftStreamControllerTest {
         String body = completed.getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertThat(body).contains("event: error");
         assertThat(body).contains("\"code\":42900");
-        assertThat(body).contains("\"message\":\"AI service is busy; please try again later\"");
-        assertThat(body).contains("\"errorKey\":\"request.tooMany\"");
+        // Plan S7: the key and its default text, never the exception's own words.
+        assertThat(body).contains("\"errorKey\":\"ai.busy\"");
+        assertThat(body).contains("\"message\":\"" + com.aioj.next.common.error.UserErrorFeedback.ofKey("ai.busy").message() + "\"");
+        assertThat(body).doesNotContain("AI service is busy");
         assertThat(body).contains("\"elapsedMillis\":");
         assertThat(body).contains("event: done");
     }

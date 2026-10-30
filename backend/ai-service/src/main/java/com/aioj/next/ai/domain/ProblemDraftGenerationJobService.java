@@ -12,6 +12,7 @@ import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.common.error.RateLimitedException;
 import com.aioj.next.common.error.SafeErrors;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.ai.ProblemDraftAgentTurnRequest;
@@ -274,15 +275,15 @@ public class ProblemDraftGenerationJobService {
                 if (outcome.succeeded()) {
                     complete(jobId, outcome);
                 } else {
-                    needsAttention(jobId, outcome, null, null,
-                            "Agent stopped before every finalization gate passed");
+                    needsAttention(jobId, outcome, null, null, "draft.agentStoppedBeforeGates");
                 }
             } catch (DomainException ex) {
-                needsAttention(jobId, null, ex.errorCode().code(), errorKey(ex.errorCode()), safeMessage(ex));
+                log.warn("Problem draft Agent job {} needs attention: {}", jobId, SafeErrors.describe(ex));
+                needsAttention(jobId, null, ex.errorCode().code(), errorKey(ex.errorCode()), UserErrorFeedback.storedKey(ex));
             } catch (RuntimeException ex) {
                 log.warn("Problem draft Agent job {} failed: {}", jobId, SafeErrors.trace(ex));
                 needsAttention(jobId, null, ErrorCode.INTERNAL_ERROR.code(), errorKey(ErrorCode.INTERNAL_ERROR),
-                        safeMessage(ex));
+                        UserErrorFeedback.storedKey(ex));
             }
         } finally {
             inFlightJobs.remove(jobId);
@@ -423,8 +424,7 @@ public class ProblemDraftGenerationJobService {
             update.setProgressMessage("Problem draft Agent needs attention; working state was preserved");
             update.setErrorCode(errorCode);
             update.setErrorKey(truncate(errorKey, 128));
-            update.setErrorMessage(truncate(valueOr(errorMessage,
-                    "Continue optimization from the preserved workspace state"), ERROR_MESSAGE_MAX));
+            update.setErrorMessage(truncate(valueOr(errorMessage, "draft.agentNeedsAttention"), ERROR_MESSAGE_MAX));
             update.setCompletedAt(now);
             update.setUpdatedAt(now);
             int updated = jobMapper.update(update, terminalWrapper(jobId));
@@ -553,7 +553,9 @@ public class ProblemDraftGenerationJobService {
                 job.getId(), job.getCreatorUserId(), jobType(job), job.getSourceDraftId(), job.getStatus(),
                 job.getStage(), job.getTopicSnapshot(), valueOr(job.getProgressCurrent(), 0),
                 valueOr(job.getProgressTotal(), PROGRESS_TOTAL), job.getProgressMessage(), job.getDraftId(),
-                job.getErrorCode(), job.getErrorKey(), job.getErrorMessage(), toInstant(job.getStartedAt()),
+                job.getErrorCode(), job.getErrorKey(),
+                // Plan S7: an error key; older rows kept the failure's text, which is not handed out.
+                UserErrorFeedback.storedKey(job.getErrorMessage(), "draft.agentNeedsAttention"), toInstant(job.getStartedAt()),
                 toInstant(job.getCompletedAt()), toInstant(job.getCreatedAt()), toInstant(job.getUpdatedAt()),
                 job.getWorkspaceId(), job.getAgentRunId(), valueOr(job.getStateVersion(), 0L),
                 job.getRequestedCfRating(), riskService.fromCode(job.getReviewRisk()), job.getAgentMode(),
@@ -589,14 +591,6 @@ public class ProblemDraftGenerationJobService {
             case SERVICE_UNAVAILABLE -> "service.unavailable";
             default -> "system.internal";
         };
-    }
-
-    private String safeMessage(RuntimeException ex) {
-        String message = ex.getMessage();
-        if (message == null || message.isBlank()) {
-            return "Problem draft Agent turn failed; the working state was preserved";
-        }
-        return message.replaceAll("(?i)(api[-_ ]?key|authorization|token|password)=?\\S+", "$1=***");
     }
 
     private Instant toInstant(LocalDateTime time) {

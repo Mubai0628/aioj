@@ -14,6 +14,7 @@ import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -106,16 +107,24 @@ class BridgedToolTest {
     }
 
     @Test
-    void aDomainFailureReachesTheModelAsBefore() {
+    void aDomainFailureReachesTheModelAsItsCodeAndTheTextOfItsKey() {
         BridgedTool tool = new BridgedTool(fake("context.search_exact", true, (context, input) -> {
             throw new DomainException(ErrorCode.NOT_FOUND, "Problem not found");
         }));
+        BridgedTool leaky = new BridgedTool(fake("context.search_exact", true, (context, input) -> {
+            throw new DomainException(ErrorCode.INTERNAL_ERROR,
+                    "AI problem context failed: I/O error on GET request for \"http://problem-service:8082/canary-41d2\"");
+        }));
 
         ToolResult result = tool.execute(context(), JSON.createObjectNode());
+        ToolResult internal = leaky.execute(context(), JSON.createObjectNode());
 
         assertThat(result.status()).isEqualTo(ToolStatus.EXECUTION_ERROR);
         assertThat(result.errorCode()).isEqualTo("DOMAIN_NOT_FOUND");
-        assertThat(result.errorMessage()).isEqualTo("Problem not found");
+        assertThat(result.errorMessage()).isEqualTo(UserErrorFeedback.ofKey("problem.notFound").message());
+        // Plan S7: what the model reads it may repeat to the student.
+        assertThat(internal.errorMessage()).isEqualTo(UserErrorFeedback.ofKey("system.internal").message())
+                .doesNotContain("problem-service", "canary-41d2", "I/O error");
     }
 
     static ToolExecutionContext context() {

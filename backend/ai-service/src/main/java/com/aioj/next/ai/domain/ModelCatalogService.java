@@ -61,7 +61,7 @@ public class ModelCatalogService {
             return response(scope, normalizedProvider, baseUrl, key, "SUCCESS", null, models);
         } catch (ModelException ex) {
             String status = ex.kind() == ModelErrorKind.CAPABILITY_UNSUPPORTED ? "UNSUPPORTED" : "FAILED";
-            return response(scope, normalizedProvider, baseUrl, key, status, ex.getMessage(), List.of());
+            return response(scope, normalizedProvider, baseUrl, key, status, ModelFailureKeys.of(ex), List.of());
         }
     }
 

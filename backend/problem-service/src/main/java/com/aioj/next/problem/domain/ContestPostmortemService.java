@@ -3,6 +3,7 @@ package com.aioj.next.problem.domain;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.ai.ContestPostmortemAnalysisRequest;
@@ -201,7 +202,7 @@ public class ContestPostmortemService {
             Instant now = Instant.now();
             report.setStatus(ContestPostmortemReportStatus.COMPLETED);
             report.setAiStatus(ContestPostmortemAiStatus.FAILED);
-            report.setErrorMessage(summarize(ex.getMessage(), 480));
+            report.setErrorMessage(UserErrorFeedback.storedKey(ex));
             report.setCompletedAt(now);
             report.setUpdatedAt(now);
             reportMapper.updateById(report);
@@ -503,7 +504,7 @@ public class ContestPostmortemService {
         return new ContestPostmortemReportResponse(report.getId(), report.getContestId(), report.getContestRunId(),
                 report.getStatus(), report.getAiStatus(), report.getGeneratedBy(), report.getStatisticsJson(),
                 report.getAiMarkdown(), report.getAiProvider(), report.getAiModel(), value(report.getPromptTokens()),
-                value(report.getCompletionTokens()), report.getErrorMessage(), report.getCreatedAt(), report.getUpdatedAt(),
+                value(report.getCompletionTokens()), UserErrorFeedback.storedKey(report.getErrorMessage(), "ai.providerFailed"), report.getCreatedAt(), report.getUpdatedAt(),
                 report.getCompletedAt());
     }
 

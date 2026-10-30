@@ -139,7 +139,7 @@ public class DraftSandboxClient implements SandboxExecutor {
             complexityReport = auditComplexity(draft, options, hiddenResult);
             crossCheckReport = verifyReferenceCheck(draft, compile, options);
         } catch (RestClientException | IllegalStateException ex) {
-            errors.add(error("SANDBOX_UNAVAILABLE", "sandbox verification failed: " + firstText(ex.getMessage(), ex.getClass().getSimpleName()), null));
+            errors.add(error("SANDBOX_UNAVAILABLE", "sandbox verification failed: " + ExecutorFailures.describe(ex), null));
         } finally {
             deleteCompiledFile(compile);
         }
@@ -204,12 +204,11 @@ public class DraftSandboxClient implements SandboxExecutor {
         try {
             result = executeCode(request.language(), request.source(), request.stdin(), (int) cpuMillis,
                     (int) memoryKb, limits.maxOutputBytes());
-        } catch (HttpClientErrorException ex) {
-            return new ExecutionFeedback(ExecutionFeedback.Status.REJECTED, "",
-                    firstText(ex.getResponseBodyAsString(), ex.getMessage()), "", 0L, 0L, false);
+        } catch (HttpClientErrorException | ExecutorFailures.Refusal ex) {
+            return new ExecutionFeedback(ExecutionFeedback.Status.REJECTED, "", ExecutorFailures.describe(ex),
+                    "", 0L, 0L, false);
         } catch (RestClientException | IllegalStateException ex) {
-            return new ExecutionFeedback(ExecutionFeedback.Status.UNAVAILABLE, "",
-                    "agent-executor unavailable: " + firstText(ex.getMessage(), ex.getClass().getSimpleName()),
+            return new ExecutionFeedback(ExecutionFeedback.Status.UNAVAILABLE, "", ExecutorFailures.describe(ex),
                     "", 0L, 0L, false);
         }
         ExecutionFeedback.Status status = feedbackStatus(result.status());
@@ -614,7 +613,8 @@ public class DraftSandboxClient implements SandboxExecutor {
                 .retrieve()
                 .body(type);
         if (response == null || response.code() != 0 || response.data() == null) {
-            throw new IllegalStateException(response == null ? "empty internal sandbox response" : response.message());
+            throw new ExecutorFailures.Refusal(response == null ? 0 : response.code(),
+                    response == null ? null : response.errorKey());
         }
         return response.data();
     }

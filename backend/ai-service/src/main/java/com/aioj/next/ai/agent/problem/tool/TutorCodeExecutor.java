@@ -5,6 +5,7 @@ import com.aioj.next.agent.harness.sandbox.api.ExecutionFeedback;
 import com.aioj.next.agent.harness.sandbox.api.ExecutionFeedback.Status;
 import com.aioj.next.agent.harness.sandbox.api.ExecutionFeedbacks;
 import com.aioj.next.ai.config.AiProperties;
+import com.aioj.next.ai.domain.problem.ExecutorFailures;
 import com.aioj.next.common.api.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
@@ -176,15 +177,13 @@ public class TutorCodeExecutor {
                 ExecutionFeedbacks.diagnostics(compileOutput), ExecutionFeedbacks.stderrSummary(stderr), null);
     }
 
+    /** Plan S7: the model hears the status and the executor's error key, never a response body or client text. */
     private static ExecutionFeedback refused(HttpClientErrorException ex) {
-        return new ExecutionFeedback(Status.REJECTED, "", firstText(ex.getResponseBodyAsString(), ex.getMessage()),
-                "", 0L, 0L, false);
+        return new ExecutionFeedback(Status.REJECTED, "", ExecutorFailures.describe(ex), "", 0L, 0L, false);
     }
 
     private static ExecutionFeedback unavailable(Exception ex) {
-        return new ExecutionFeedback(Status.UNAVAILABLE, "",
-                "agent-executor unavailable: " + firstText(ex.getMessage(), ex.getClass().getSimpleName()), "", 0L, 0L,
-                false);
+        return new ExecutionFeedback(Status.UNAVAILABLE, "", ExecutorFailures.describe(ex), "", 0L, 0L, false);
     }
 
     private static String firstText(String first, String second) {

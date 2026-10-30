@@ -86,16 +86,19 @@ class DraftSandboxClientTest {
         server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/compile"))
                 .andRespond(withServerError());
         server.expect(once(), requestTo("http://executor/api/v1/internal/sandbox/compile"))
-                .andRespond(withBadRequest().body("{\"code\":400,\"message\":\"Sandbox language is not enabled\"}")
+                .andRespond(withBadRequest().body("{\"code\":40000,\"message\":\"Sandbox language is not enabled\","
+                                + "\"errorKey\":\"request.unsupported\"}")
                         .contentType(MediaType.APPLICATION_JSON));
 
         ExecutionFeedback unavailable = client.execute(request);
         ExecutionFeedback rejected = client.execute(request);
 
+        // Plan S7: the status and the executor's error key, not its response body or the client's text.
         assertThat(unavailable.status()).isEqualTo(ExecutionFeedback.Status.UNAVAILABLE);
-        assertThat(unavailable.stderr()).startsWith("agent-executor unavailable: ");
+        assertThat(unavailable.stderr()).isEqualTo(ExecutorFailures.UNAVAILABLE);
         assertThat(rejected.status()).isEqualTo(ExecutionFeedback.Status.REJECTED);
-        assertThat(rejected.stderr()).contains("Sandbox language is not enabled");
+        assertThat(rejected.stderr()).isEqualTo("The code executor refused this run (HTTP 400, request.unsupported)")
+                .doesNotContain("Sandbox language is not enabled");
         server.verify();
     }
 

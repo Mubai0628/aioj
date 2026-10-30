@@ -120,13 +120,14 @@ class SubmissionFetchAllowedViewToolTest {
     @Test
     void stillJudgingSubmissionIsATemporaryFailureNotADenial() throws Exception {
         when(problemServiceClient.aiSubmissionContext(any(AiSubmissionContextRequest.class)))
-                .thenThrow(new DomainException(ErrorCode.BAD_REQUEST, "Submission is still being judged"));
+                .thenThrow(new DomainException(ErrorCode.BAD_REQUEST, "AI submission context failed: canary-77aa"));
 
         ToolResult<Object> result = tool.execute(context(null), input("{\"submissionId\":5004}"));
 
         assertThat(result.status()).isEqualTo(ToolStatus.EXECUTION_ERROR);
         assertThat(result.errorCode()).isEqualTo("SUBMISSION_NOT_READY");
-        assertThat(result.errorMessage()).contains("judged");
+        // Plan S7: a fixed sentence for the model, nothing from the client's failure.
+        assertThat(result.errorMessage()).contains("still be judging").doesNotContain("canary-77aa");
     }
 
     @Test

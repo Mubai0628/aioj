@@ -266,6 +266,11 @@ export const messages = {
         packageSizeMismatch: '测试包大小与上传初始化信息不一致，请重新上传。',
         totalChunksMismatch: '测试包分片数量与文件大小不匹配，请重新选择文件上传。',
         uploadExpired: '测试包上传会话已过期，请重新上传。',
+        uploadInterrupted: '测试包上传中断，请重新上传。',
+        officialPackageMissing: '草稿的官方测试包缺失，请重新运行验证。',
+        officialPackageMismatch: '下载的官方测试包与验证结果不一致，请重新运行验证。',
+        officialPackageDownloadFailed: '官方测试包下载失败，请稍后重新运行验证。',
+        officialPackageStoreFailed: '官方测试包保存失败，请稍后重新运行验证。',
         uploadNotAccepting: '当前测试包上传状态不接受继续上传，请刷新后重试。',
         downloadReadyOnly: '只有处理完成且可用的测试包可以下载。',
         activateReadyOnly: '只有处理完成且可用的测试包可以启用。',
@@ -338,7 +343,10 @@ export const messages = {
         restoreArchivedOnly: '只有已归档的草稿可以恢复。',
         archivedLocked: '已归档的草稿不能修改，请先恢复。',
         serializeFailed: '草稿内容保存失败，请稍后重试。',
-        importFailed: '草稿导入题库失败，请检查题目内容后重试。'
+        importFailed: '草稿导入题库失败，请检查题目内容后重试。',
+        importInterrupted: '草稿导入中断，可用同一个幂等键重试。',
+        agentNeedsAttention: '出题 Agent 需要处理，工作区状态已保留，可以继续优化。',
+        agentStoppedBeforeGates: '出题 Agent 在全部定稿检查通过前停止，工作区状态已保留。'
       },
       operation: {
         failed: '异步任务执行失败，请查看任务详情或稍后重试。',
@@ -356,7 +364,8 @@ export const messages = {
       judge: {
         systemError: '判题服务执行异常，请稍后重试；如果多次出现，请联系老师检查测试包或判题服务。',
         testcaseUnavailable: '判题所需测试包暂不可用，请联系老师检查测试包是否已上传并启用。',
-        sandboxUnavailable: '代码沙箱暂不可用，请稍后重试或联系管理员。'
+        sandboxUnavailable: '代码沙箱暂不可用，请稍后重试或联系管理员。',
+        checkerUnavailable: '这道题的自定义检查器暂时无法使用，请联系老师检查测试包。'
       },
       client: {
         unexpected: '页面处理数据时出现异常，请刷新页面后重试。',
@@ -3806,6 +3815,11 @@ export const messages = {
         packageSizeMismatch: 'The testcase package size does not match the upload session. Upload again.',
         totalChunksMismatch: 'The testcase chunk count does not match the file size. Select the file again.',
         uploadExpired: 'The testcase upload session has expired. Upload again.',
+        uploadInterrupted: 'The testcase upload was interrupted. Upload the package again.',
+        officialPackageMissing: "The draft's official testcase package is missing. Run verification again.",
+        officialPackageMismatch: 'The downloaded official package does not match its verification. Run verification again.',
+        officialPackageDownloadFailed: 'The official testcase package could not be downloaded. Run verification again later.',
+        officialPackageStoreFailed: 'The official testcase package could not be saved. Run verification again later.',
         uploadNotAccepting: 'This testcase upload session is not accepting chunks. Refresh and retry.',
         downloadReadyOnly: 'Only processed READY testcase packages can be downloaded.',
         activateReadyOnly: 'Only processed READY testcase packages can be activated.',
@@ -3878,7 +3892,10 @@ export const messages = {
         restoreArchivedOnly: 'Only archived drafts can be restored.',
         archivedLocked: 'Archived drafts cannot be modified. Restore first.',
         serializeFailed: 'Failed to save draft content. Please try again later.',
-        importFailed: 'Failed to import draft into the problem library. Check the problem content.'
+        importFailed: 'Failed to import draft into the problem library. Check the problem content.',
+        importInterrupted: 'The draft import was interrupted; retry with the same idempotency key.',
+        agentNeedsAttention: 'The problem draft Agent needs attention; the workspace state was kept for another turn.',
+        agentStoppedBeforeGates: 'The problem draft Agent stopped before every finalization check passed; the workspace state was kept.'
       },
       operation: {
         failed: 'The async job failed. Open job details or try again later.',
@@ -3896,7 +3913,8 @@ export const messages = {
       judge: {
         systemError: 'The judge service failed. Try again later; if it repeats, ask a teacher to check testcase packages or judge services.',
         testcaseUnavailable: 'The required testcase package is unavailable. Ask a teacher to check upload and activation.',
-        sandboxUnavailable: 'The code sandbox is temporarily unavailable. Try again later or contact an administrator.'
+        sandboxUnavailable: 'The code sandbox is temporarily unavailable. Try again later or contact an administrator.',
+        checkerUnavailable: "This problem's custom checker is not working right now. Ask a teacher to check the testcase package."
       },
       client: {
         unexpected: 'The page failed while processing data. Refresh and try again.',

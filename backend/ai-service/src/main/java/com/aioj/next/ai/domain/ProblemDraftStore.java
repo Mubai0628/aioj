@@ -5,6 +5,7 @@ import com.aioj.next.ai.persistence.entity.ProblemDraftTestcaseArtifactEntity;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftMapper;
 import com.aioj.next.ai.domain.problem.ComplexityReport;
 import com.aioj.next.ai.domain.problem.DraftSandboxClient;
+import com.aioj.next.ai.domain.problem.ExecutorFailures;
 import com.aioj.next.ai.domain.problem.CrossCheckReport;
 import com.aioj.next.ai.domain.problem.DraftExecutionReport;
 import com.aioj.next.ai.domain.problem.ProblemDraftStaticValidator;
@@ -19,6 +20,7 @@ import com.aioj.next.ai.domain.draftagent.ProblemDraftReviewRiskService;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.ai.ProblemDraftApprovalRequest;
 import com.aioj.next.contract.ai.ProblemDraftRefineRequest;
@@ -726,7 +728,8 @@ public class ProblemDraftStore {
                 nonBlank(artifact.getFormatStatus(), "READY"),
                 nonBlank(artifact.getExecutionStatus(), "NOT_RUN"), artifact.getVerificationMode(),
                 artifact.getVerificationFingerprint(), stale, artifact.getCaseCount(),
-                artifact.getFileSizeBytes(), artifact.getSha256(), artifact.getFailureSummary(),
+                artifact.getFileSizeBytes(), artifact.getSha256(),
+                UserErrorFeedback.storedKey(artifact.getFailureSummary(), "testcase.processFailed"),
                 artifact.getAgentRunId(), toInstant(artifact.getGeneratedAt()), toInstant(artifact.getValidatedAt()),
                 artifact.getImportedProblemId(), artifact.getProblemTestcasePackageId()
         );
@@ -843,7 +846,7 @@ public class ProblemDraftStore {
             } catch (RuntimeException ex) {
                 sandboxReport = new VerificationReport(VERIFICATION_FAILED, List.of(new VerificationError(
                         "SANDBOX_UNAVAILABLE",
-                        "sandbox verification failed: " + nonBlank(ex.getMessage(), ex.getClass().getSimpleName()),
+                        "sandbox verification failed: " + ExecutorFailures.describe(ex),
                         null
                 )), List.of());
             }

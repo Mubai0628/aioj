@@ -4,6 +4,7 @@ import com.aioj.next.ai.domain.ProblemServiceClient;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.common.error.SafeErrors;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import tools.jackson.databind.ObjectMapper;
@@ -91,7 +92,9 @@ public class ContestParticipationService {
                     userId, turnId, SafeErrors.describe(ex));
             recorder.record(turnId, userId, conversationId,
                     GuardLayer.L1_PARTICIPANT, GuardDecision.BLOCK,
-                    REASON_LOOKUP_FAILED, markRecheck(detail(null, null, ex.getMessage()), fresh), true, latencyMs);
+                    // Plan S7: the audit detail keeps the error key; the staff audit page shows it.
+                    REASON_LOOKUP_FAILED, markRecheck(detail(null, null, UserErrorFeedback.storedKey(ex)), fresh), true,
+                    latencyMs);
             throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE,
                     "比赛状态确认暂时不可用，请稍后重试");
         }

@@ -148,7 +148,8 @@ class ModelCatalogServiceTest {
                 "https://api.deepseek.com/chat/completions", KEY);
 
         assertThat(response.fetchStatus()).isEqualTo("FAILED");
-        assertThat(response.errorMessage()).isEqualTo("AI provider deepseek rejected the API key (HTTP 401)");
+        // Plan S7: the category as an error key; the provider's own words stay in the log.
+        assertThat(response.errorMessage()).isEqualTo("ai.keyInvalid");
         assertThat(response.models()).isEmpty();
     }
 }

@@ -49,7 +49,7 @@ public class PlagiarismAnalysisService {
         } catch (RuntimeException ex) {
             aiQuotaService.record(actorUserId, promptChat.providerName(), promptChat.model(), 0, 0, false);
             return new PlagiarismAnalysisResponse(null, promptChat.providerName(), promptChat.model(),
-                    0, 0, false, summarize(ex.getMessage(), 300));
+                    0, 0, false, ModelFailureKeys.of(ex));
         }
     }
 

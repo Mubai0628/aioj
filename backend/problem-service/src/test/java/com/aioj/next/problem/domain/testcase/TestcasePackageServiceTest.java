@@ -194,7 +194,8 @@ class TestcasePackageServiceTest {
         var response = service.failUpload(10L, "upload-1", new TestcaseUploadFailRequest("client failed"));
 
         assertEquals(TestcasePackageStatus.FAILED, response.status());
-        assertEquals("client failed", response.errorMessage());
+        // Plan S7: stored and returned as the key.
+        assertEquals("testcase.uploadInterrupted", response.errorMessage());
         verify(sessionMapper).update(any(TestcaseUploadSessionEntity.class), any());
         verify(packageMapper).update(any(TestcasePackageEntity.class), any());
         verify(storageService).deleteTempUpload("upload-1");
@@ -210,7 +211,8 @@ class TestcasePackageServiceTest {
         var response = service.failUpload(10L, "upload-1", new TestcaseUploadFailRequest("client failed"));
 
         assertEquals(TestcasePackageStatus.FAILED, response.status());
-        assertEquals("already failed", response.errorMessage());
+        // An older row's free text is not handed out; it reads as the key it classifies to.
+        assertEquals("testcase.processFailed", response.errorMessage());
         verify(sessionMapper, never()).update(any(TestcaseUploadSessionEntity.class), any());
         verify(packageMapper, never()).update(any(TestcasePackageEntity.class), any());
         verify(storageService, never()).deleteTempUpload(any());

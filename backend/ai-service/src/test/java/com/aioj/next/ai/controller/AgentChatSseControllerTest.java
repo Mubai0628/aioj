@@ -165,13 +165,16 @@ class AgentChatSseControllerTest {
     @Test
     void streamEmitsErrorEventWhenTurnFails() throws Exception {
         CompletableFuture<AgentChatFacade.TurnResult> failed = new CompletableFuture<>();
-        failed.completeExceptionally(new DomainException(ErrorCode.SERVICE_UNAVAILABLE, "AI provider call failed"));
+        failed.completeExceptionally(new DomainException(ErrorCode.SERVICE_UNAVAILABLE,
+                "AI provider call failed: I/O error on POST request for \"http://provider.internal/canary-19be\""));
         when(agentChatFacade.start(eq(USER_ID), any(AiChatRequest.class)))
                 .thenReturn(handle("turn-2", failed));
 
         String body = performStream("client-10");
         assertThat(body).contains("event: error");
-        assertThat(body).contains("AI provider call failed");
+        // Plan S7: {code, errorKey, message} with the key's default text; never the failure's own words.
+        assertThat(body).contains("\"code\":50300", "\"errorKey\":\"ai.providerFailed\"");
+        assertThat(body).doesNotContain("canary-19be", "provider.internal", "I/O error");
     }
 
     @Test

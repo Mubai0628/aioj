@@ -52,6 +52,7 @@ class SandboxClientJudgeTest {
     private volatile String compileStatus = "Accepted";
     private volatile String checkerCompileStatus = "Accepted";
     private volatile String checkerRunStatus = "Accepted";
+    private volatile String checkerStderr = "";
     private HttpServer server;
 
     @TempDir
@@ -158,6 +159,7 @@ class SandboxClientJudgeTest {
     void brokenCustomCheckerIsASystemErrorNotTheStudentsCompileError() throws IOException {
         usePackage(TestcaseCheckerType.CUSTOM, testcase(1, "a", null, false));
         checkerCompileStatus = "Nonzero Exit Status";
+        checkerStderr = "checker.cpp:7: error: canary-checker-ab12";
 
         JudgeResult result = client().judge(task(null));
 
@@ -165,12 +167,17 @@ class SandboxClientJudgeTest {
         assertThat(result.phase()).isEqualTo(JudgePhase.CHECKER);
         assertThat(result.sandboxStatus()).isEqualTo("Nonzero Exit Status");
         assertThat(programInputs).isEmpty();
+        // Plan S7: the checker's compile output is the setter's source; the student sees the key only.
+        assertThat(result.message()).isEqualTo(SandboxClient.CHECKER_UNAVAILABLE);
+        assertThat(result.stderr()).isNull();
+        assertThat(result.caseResults()).allSatisfy(testcase -> assertThat(testcase.message()).doesNotContain("canary"));
     }
 
     @Test
     void customCheckerThatTimesOutFailsTheCaseAsSystemError() throws IOException {
         usePackage(TestcaseCheckerType.CUSTOM, testcase(1, "a", null, false));
         checkerRunStatus = "Time Limit Exceeded";
+        checkerStderr = "canary-checker-cd34 at line 9";
 
         JudgeResult result = client().judge(task(null));
 
@@ -179,7 +186,9 @@ class SandboxClientJudgeTest {
         assertThat(result.caseResults()).singleElement().satisfies(testcase -> {
             assertThat(testcase.status()).isEqualTo(SubmissionStatus.SYSTEM_ERROR);
             assertThat(testcase.sandboxStatus()).isEqualTo("Time Limit Exceeded");
+            assertThat(testcase.message()).isEqualTo(SandboxClient.CHECKER_UNAVAILABLE);
         });
+        assertThat(String.valueOf(result.message()) + result.stderr()).doesNotContain("canary-checker-cd34");
     }
 
     @Test
@@ -247,10 +256,10 @@ class SandboxClientJudgeTest {
             result = sandboxResult(compileStatus, "", "Accepted".equals(compileStatus) ? Map.of("main", "exe-1") : null);
         } else if (args.contains("checker.cpp")) {
             result = sandboxResult(checkerCompileStatus, "",
-                    "Accepted".equals(checkerCompileStatus) ? Map.of("checker", "chk-1") : null);
+                    "Accepted".equals(checkerCompileStatus) ? Map.of("checker", "chk-1") : null, checkerStderr);
         } else if (!args.isEmpty() && "./checker".equals(args.get(0))) {
             String verdict = "{\"status\":\"ACCEPTED\",\"score\":" + args.get(4) + "}";
-            result = sandboxResult(checkerRunStatus, "Accepted".equals(checkerRunStatus) ? verdict : "", null);
+            result = sandboxResult(checkerRunStatus, "Accepted".equals(checkerRunStatus) ? verdict : "", null, checkerStderr);
         } else {
             String stdin = command.path("files").path(0).path("content").asString("");
             programInputs.add(stdin);
@@ -268,13 +277,18 @@ class SandboxClientJudgeTest {
     }
 
     private static Map<String, Object> sandboxResult(String status, String stdout, Map<String, String> fileIds) {
+        return sandboxResult(status, stdout, fileIds, "");
+    }
+
+    private static Map<String, Object> sandboxResult(String status, String stdout, Map<String, String> fileIds,
+                                                     String stderr) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", status);
         result.put("exitStatus", "Accepted".equals(status) ? 0 : 1);
         result.put("time", 3_000_000L);
         result.put("memory", 1_048_576L);
         result.put("runTime", 3_000_000L);
-        result.put("files", Map.of("stdout", stdout, "stderr", ""));
+        result.put("files", Map.of("stdout", stdout, "stderr", stderr));
         if (fileIds != null) {
             result.put("fileIds", fileIds);
         }

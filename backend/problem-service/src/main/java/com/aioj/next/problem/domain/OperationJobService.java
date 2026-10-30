@@ -4,6 +4,10 @@ import com.aioj.next.common.api.MdcContext;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
+import com.aioj.next.common.error.UserErrorFeedback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.common.security.SecuritySupport;
@@ -64,6 +68,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class OperationJobService {
+    private static final Logger log = LoggerFactory.getLogger(OperationJobService.class);
     private static final String RESOURCE_CONTEST = "CONTEST";
     private static final String RESOURCE_CONTEST_RUN = "CONTEST_RUN";
     private static final String RESOURCE_PLAGIARISM_JOB = "PLAGIARISM_JOB";
@@ -434,7 +439,9 @@ public class OperationJobService {
             notifyStudentPostmortemTerminal(job, payload, UserNotificationType.STUDENT_POSTMORTEM_JOB_COMPLETED);
         } catch (Exception ex) {
             Instant failedAt = Instant.now();
-            String errorMessage = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+            // Plan S7: an error key; the failure itself goes to the log.
+            log.warn("Operation job {} failed: {}", job.getId(), SafeErrors.describe(ex));
+            String errorMessage = UserErrorFeedback.storedKey(ex);
             job.setStatus(OperationJobStatus.FAILED);
             job.setErrorMessage(trim(errorMessage, 1000));
             job.setProgressMessage("Failed");
@@ -661,7 +668,7 @@ public class OperationJobService {
     private OperationJobResponse toResponse(OperationJobEntity job) {
         return new OperationJobResponse(job.getId(), job.getJobType(), job.getStatus(), job.getResourceType(),
                 job.getResourceId(), job.getContestId(), job.getContestRunId(), job.getRequestedBy(),
-                job.getErrorMessage(), job.getAttemptCount(), job.getMaxAttempts(),
+                UserErrorFeedback.storedKey(job.getErrorMessage(), "operation.failed"), job.getAttemptCount(), job.getMaxAttempts(),
                 job.getProgressCurrent(), job.getProgressTotal(), job.getProgressMessage(), job.getResultJson(),
                 toArtifactResponse(artifactForJob(job.getId())), job.getStartedAt(), job.getCompletedAt(),
                 job.getCreatedAt(), job.getUpdatedAt());

@@ -177,11 +177,11 @@ public class AiModelConfigService implements AiModelConfigResolver {
         try {
             if (!config.enabled()) {
                 aiQuotaService.record(userId, config.provider(), config.model(), 0, 0, false);
-                return failure(config, elapsedMillis(start), 0, 0, "AI model configuration is disabled");
+                return failure(config, elapsedMillis(start), 0, 0, "ai.configDisabled");
             }
             if (!config.hasApiKey()) {
                 aiQuotaService.record(userId, config.provider(), config.model(), 0, 0, false);
-                return failure(config, elapsedMillis(start), 0, 0, "AI API key is not configured");
+                return failure(config, elapsedMillis(start), 0, 0, "ai.keyMissing");
             }
             boolean strictJsonTest = scope != AiModelScope.EMBEDDING && config.jsonOutputEnabled();
             String prompt = request == null || request.prompt() == null || request.prompt().isBlank()
@@ -213,7 +213,7 @@ public class AiModelConfigService implements AiModelConfigResolver {
         } catch (RuntimeException ex) {
             long elapsed = elapsedMillis(start);
             aiQuotaService.record(userId, config.provider(), config.model(), 0, 0, false);
-            return failure(config, elapsed, 0, 0, sanitizeError(ex.getMessage(), config.apiKey()));
+            return failure(config, elapsed, 0, 0, ModelFailureKeys.of(ex));
         }
     }
 
@@ -626,17 +626,6 @@ public class AiModelConfigService implements AiModelConfigResolver {
         }
         String normalized = value.trim();
         return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength);
-    }
-
-    private String sanitizeError(String message, String apiKey) {
-        String sanitized = message == null || message.isBlank() ? "AI provider test failed" : message;
-        if (apiKey != null && !apiKey.isBlank()) {
-            sanitized = sanitized.replace(apiKey, "***");
-        }
-        sanitized = sanitized.replaceAll("(?i)(api[_-]?key|token|secret|password)\\s*(?:=|:|是|为)\\s*[^\\s,;，。]+", "$1=***");
-        sanitized = sanitized.replaceAll("(?i)(your\\s+api\\s+key\\s*:\\s*)\\*+[^\\s\\\"',;，。}]+", "$1***");
-        sanitized = sanitized.replaceAll("(?i)(api\\s+key\\s*:\\s*)\\*+[^\\s\\\"',;，。}]+", "$1***");
-        return preview(sanitized, 300);
     }
 
     private record CacheEntry(AiModelEffectiveConfig config, long expiresAtMillis) {

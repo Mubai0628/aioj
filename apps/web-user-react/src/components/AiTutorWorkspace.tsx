@@ -21,7 +21,7 @@ import { SelectedContextChip } from "./ai/SelectedContextChip";
 import { mergeChatMessages } from "../lib/chatMessageMerge";
 import { withSelectionIntent, type BuiltSelectionContext } from "../lib/selectionContextBuilder";
 import { useAiSelectionContext } from "../hooks/useAiSelectionContext";
-import { readableStoredError } from "../lib/readableError";
+import { readableStoredError, readableStreamError } from "../lib/readableError";
 
 type AiSource = "ai_tutor" | "problem_detail" | "submission_analysis";
 
@@ -729,7 +729,7 @@ export function AiTutorWorkspace({
           }
         }
         if (event === "error") {
-          setError(data || t("ai.streamError"));
+          setError(readableStreamError(data, locale, t("ai.streamError")));
           updateLocalMatch(conversationId, { id: assistantId, clientMessageId: `${clientMessageId}:assistant` }, { status: "error" });
         }
         if (event === "done") {

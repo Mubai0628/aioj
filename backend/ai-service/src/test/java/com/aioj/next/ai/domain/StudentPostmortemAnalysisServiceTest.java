@@ -59,7 +59,8 @@ class StudentPostmortemAnalysisServiceTest {
         assertThat(response.markdown()).isNull();
         assertThat(response.weaknessCandidates()).isNotEmpty();
         assertThat(response.practiceSuggestions()).isNotEmpty();
-        assertThat(response.errorMessage()).contains("upstream unavailable");
+        // Plan S7: an error key; the provider failure's own words stay in the log.
+        assertThat(response.errorMessage()).isEqualTo("ai.providerFailed");
         verify(quotaService).record(eq(7L), eq("mock"), eq("mock-model"), eq(0L), eq(0L), eq(false));
     }
 

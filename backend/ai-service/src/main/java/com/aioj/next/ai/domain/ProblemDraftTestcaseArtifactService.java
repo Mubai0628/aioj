@@ -8,6 +8,7 @@ import com.aioj.next.ai.persistence.entity.ProblemDraftTestcaseArtifactEntity;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftTestcaseArtifactMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
@@ -115,10 +116,10 @@ public class ProblemDraftTestcaseArtifactService {
             supersedeOlder(draftId, entity.getId());
             return entity;
         } catch (DomainException ex) {
-            markFailed(entity, ex.getMessage());
+            markFailed(entity, UserErrorFeedback.storedKey(ex));
             throw ex;
         } catch (Exception ex) {
-            markFailed(entity, "Official testcase package could not be persisted");
+            markFailed(entity, "testcase.officialPackageStoreFailed");
             throw new DomainException(ErrorCode.INTERNAL_ERROR,
                     "Failed to persist official testcase package artifact");
         } finally {

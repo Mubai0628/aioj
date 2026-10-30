@@ -85,6 +85,12 @@ Whether gVisor (`runsc`) can host go-judge and so remove `privileged` has not be
 - Contest AI guard records, operation audit, and judge audit are not cleaned up. A pass logs only counts per category; every period and the switch are environment variables.
 - Audit APIs return ids as strings, and integers of 16 or more digits inside their records become strings too, so a browser never drops the last digits of a snowflake id.
 
+## Error messages
+
+- An error a page receives is an error key, the key's text, and safe parameters (the user's own input, numbers, status codes), plus the traceId; exception text and the answers of downstream services and model providers go only to the log, which itself records only types and status codes. Stored errors are error keys, and older records are turned into keys when read.
+- When a tool fails, the model sees a category and the tool's own fixed explanation, never exception text or the executor's response body.
+- A judge system error tells the student only what kind of cause it was; a custom checker's compile output and stderr never reach the submission record.
+
 ## Secrets and delivery
 
 The four direction variables are `AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM`, `AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM`, `AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI`, and `AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE`, with optional target-only `_NEXT` values. The executor uses `AGENT_EXECUTOR_INTERNAL_TOKEN` and inbound-only `_NEXT`. Generate each production value independently with an operating-system CSPRNG (at least 32 bytes) and deliver it directly to restricted secret storage. Restart one service at a time in this order: target NEXT → caller current → target promotes current and clears NEXT; never switch both ends simultaneously.

@@ -1,5 +1,5 @@
 import { ApiError, type SubmissionStatus } from "@aioj/api-client";
-import { resolveStoredErrorMessageForLocale, translate, type Locale } from "@aioj/i18n/vanilla";
+import { resolveApiErrorMessageForLocale, resolveStoredErrorMessageForLocale, translate, type Locale } from "@aioj/i18n/vanilla";
 
 type StoredErrorSource = "ai" | "judge" | "operation" | "testcase";
 
@@ -23,6 +23,22 @@ export function readableStoredError(
     return fallback;
   }
   return resolveStoredErrorMessageForLocale(locale, value, source);
+}
+
+/** A chat stream's error event: {code, errorKey, message} (T2.6, plan S7); anything else reads as the fallback. */
+export function readableStreamError(data: string | null | undefined, locale: Locale, fallback: string) {
+  try {
+    const parsed = JSON.parse(data ?? "") as { code?: unknown; errorKey?: unknown; message?: unknown };
+    if (parsed && typeof parsed.errorKey === "string") {
+      const code = typeof parsed.code === "number" ? parsed.code : 50000;
+      return resolveApiErrorMessageForLocale(code, typeof parsed.message === "string" ? parsed.message : "", locale, {
+        errorKey: parsed.errorKey
+      });
+    }
+  } catch {
+    // Not the structured event; never show raw stream text.
+  }
+  return fallback;
 }
 
 export function readableJudgeMessage(

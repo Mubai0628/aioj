@@ -107,8 +107,9 @@ public class SubmissionFetchAllowedViewTool implements AgentTool {
                 return ProblemToolSupport.unifiedDenial();
             }
             if (ex.errorCode() == ErrorCode.BAD_REQUEST) {
+                // Plan S7: a fixed sentence; the problem-service client's text stays out of the model's view.
                 return ToolResult.failure(null, ToolStatus.EXECUTION_ERROR, "SUBMISSION_NOT_READY",
-                        ex.getMessage() == null ? "submission is not available yet" : ex.getMessage());
+                        "the submission is not ready yet; it may still be judging");
             }
             return ToolResult.failure(null, ToolStatus.EXECUTION_ERROR, "SUBMISSION_CONTEXT_FAILED",
                     "submission context lookup failed");

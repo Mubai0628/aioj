@@ -3,8 +3,12 @@ package com.aioj.next.common.error;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 public record UserErrorFeedback(String key, String message, Map<String, String> params) {
+
+    private static final Pattern KEY_SHAPE = Pattern.compile("[a-z][A-Za-z0-9]*(\\.[A-Za-z0-9]+)+");
+    private static final int MAX_PARAM_LENGTH = 120;
 
     private static final Map<String, String> EXACT_KEYS = Map.ofEntries(
             Map.entry("Refresh token required", "auth.tokenRequired"),
@@ -78,6 +82,7 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
             Map.entry("Processing testcase package cannot be archived or deleted", "testcase.processingCannotArchive"),
             Map.entry("Testcase package not found", "testcase.notFound"),
             Map.entry("Testcase upload session not found", "testcase.uploadNotFound"),
+            Map.entry("Testcase upload was interrupted. Please upload the package again.", "testcase.uploadInterrupted"),
             Map.entry("Invalid testcase zip package", "testcase.invalidZip"),
             Map.entry("Failed to read testcase zip package", "testcase.readFailed"),
             Map.entry("Testcase package has too many entries", "testcase.tooManyEntries"),
@@ -94,6 +99,14 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
             Map.entry("Subtask score must not be negative", "testcase.subtaskScoreInvalid"),
             Map.entry("Testcase package zip not found", "testcase.zipMissing"),
             Map.entry("Failed to process testcase package", "testcase.processFailed"),
+            // T2.6: the draft's official package, stored by its key (plan S7).
+            Map.entry("Official testcase package file id is missing", "testcase.officialPackageMissing"),
+            Map.entry("Official testcase package size mismatch after download", "testcase.officialPackageMismatch"),
+            Map.entry("Official testcase package SHA-256 mismatch after download", "testcase.officialPackageMismatch"),
+            Map.entry("Failed to download official testcase package from agent-executor", "testcase.officialPackageDownloadFailed"),
+            Map.entry("Official testcase package download returned empty body", "testcase.officialPackageDownloadFailed"),
+            Map.entry("Failed to store official testcase package download", "testcase.officialPackageStoreFailed"),
+            Map.entry("Failed to persist official testcase package artifact", "testcase.officialPackageStoreFailed"),
             Map.entry("AI quota exceeded", "ai.quotaExceeded"),
             Map.entry("AI assistance is not available for this contest problem", "ai.contestProblemAssistDisabled"),
             Map.entry("AI assistance is disabled for participants during this contest", "ai.contestAiDisabled"),
@@ -174,6 +187,53 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
         return new UserErrorFeedback(key, defaultMessage(key), params);
     }
 
+    /**
+     * Plan S7: what a stored error column holds, an error key and never a failure's message. A domain
+     * failure gets the key its own wording classifies to; a timeout anywhere in the chain is a timeout;
+     * anything else is an internal error. The failure itself belongs in the log, through {@link SafeErrors}.
+     */
+    public static String storedKey(Throwable failure) {
+        if (failure instanceof DomainException domain) {
+            String raw = domain.getMessage() == null || domain.getMessage().isBlank()
+                    ? domain.errorCode().message() : domain.getMessage().trim();
+            return classify(raw, domain.errorCode());
+        }
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof java.util.concurrent.TimeoutException
+                    || current instanceof java.net.SocketTimeoutException
+                    || current instanceof java.net.http.HttpTimeoutException) {
+                return "request.timeout";
+            }
+        }
+        return "system.internal";
+    }
+
+    /**
+     * A stored error as the key a client may see: a value stored as a key stays; older free text is
+     * classified and never handed out, falling back to the source's own key when it says nothing specific.
+     */
+    public static String storedKey(String stored, String sourceKey) {
+        if (stored == null || stored.isBlank()) {
+            return null;
+        }
+        String value = stored.trim();
+        if (isKey(value)) {
+            return value;
+        }
+        String key = classify(value, ErrorCode.INTERNAL_ERROR);
+        return "system.internal".equals(key) && sourceKey != null ? sourceKey : key;
+    }
+
+    /** The key with its default text, for a channel that has only a key to say (a stream's error event). */
+    public static UserErrorFeedback ofKey(String key) {
+        return new UserErrorFeedback(key, defaultMessage(key), Map.of());
+    }
+
+    /** An error key such as {@code judge.systemError}: lower-case first segment, dotted, letters and digits only. */
+    public static boolean isKey(String value) {
+        return value != null && KEY_SHAPE.matcher(value).matches();
+    }
+
     public static UserErrorFeedback validation(String serviceName) {
         return fromKey("request.validationFailed", defaultMessage("request.validationFailed"), serviceName);
     }
@@ -197,6 +257,8 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
     }
 
     private static String classify(String raw, ErrorCode code) {
+        // A stored error key travelling on as a message (plan S7) stays itself.
+        if (isKey(raw)) return raw;
         String exact = EXACT_KEYS.get(raw);
         if (exact != null) return exact;
         String lower = raw.toLowerCase(Locale.ROOT);
@@ -331,11 +393,12 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
         addSuffix(raw, "Unsupported testcase checker protocol:", "protocol", params);
     }
 
+    /** The user's own input, so it may be shown; at most 120 characters and no control characters (plan S7). */
     private static void addSuffix(String raw, String prefix, String name, Map<String, String> params) {
         if (raw.startsWith(prefix)) {
-            String value = raw.substring(prefix.length()).trim();
+            String value = raw.substring(prefix.length()).replaceAll("\\p{Cntrl}", " ").trim();
             if (!value.isBlank()) {
-                params.put(name, value);
+                params.put(name, value.length() <= MAX_PARAM_LENGTH ? value : value.substring(0, MAX_PARAM_LENGTH));
             }
         }
     }

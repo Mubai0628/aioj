@@ -9,6 +9,7 @@ import com.aioj.next.agent.harness.tool.api.ToolStatus;
 import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.common.error.DomainException;
+import com.aioj.next.common.error.UserErrorFeedback;
 import tools.jackson.databind.JsonNode;
 
 
@@ -22,7 +23,8 @@ import tools.jackson.databind.JsonNode;
  *   <li>its result with a {@link com.aioj.next.ai.agent.context.DataClassification} and a
  *       trust level, which become the Harness data label and trust;</li>
  *   <li>a {@link DomainException} becomes the same {@code DOMAIN_<code>} failure the old
- *       broker returned, message included.</li>
+ *       broker returned, with the default text of its error key instead of its message
+ *       (plan S7: what the model reads it may repeat to the student).</li>
  * </ul>
  */
 public final class BridgedTool implements com.aioj.next.agent.harness.tool.api.AgentTool {
@@ -55,7 +57,7 @@ public final class BridgedTool implements com.aioj.next.agent.harness.tool.api.A
             result = tool.execute(legacyContext(context), input);
         } catch (DomainException domain) {
             return ToolResult.failure(ToolStatus.EXECUTION_ERROR, "DOMAIN_" + domain.errorCode().name(),
-                    domain.getMessage());
+                    UserErrorFeedback.ofKey(UserErrorFeedback.storedKey(domain)).message());
         }
         return result == null ? null : harnessResult(result);
     }

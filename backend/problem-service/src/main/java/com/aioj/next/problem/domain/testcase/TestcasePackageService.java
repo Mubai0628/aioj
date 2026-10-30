@@ -2,6 +2,7 @@ package com.aioj.next.problem.domain.testcase;
 
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.problem.TestcasePackageCaseResponse;
 import com.aioj.next.contract.problem.TestcasePackageCheckerResponse;
@@ -210,7 +211,7 @@ public class TestcasePackageService {
             storageService.deleteTempUpload(uploadId);
             return toResponse(requirePackage(session.getPackageId()));
         } catch (RuntimeException ex) {
-            markFailed(session, userMessage(ex));
+            markFailed(session, storedFailure(ex));
             if (ex instanceof DomainException domainException) {
                 throw domainException;
             }
@@ -241,7 +242,8 @@ public class TestcasePackageService {
                 ? 0.0D
                 : (double) uploadedChunks.size() / session.getTotalChunks();
         return new TestcaseUploadStatusResponse(session.getId(), session.getStatus(), uploadedChunks,
-                session.getTotalChunks(), progress, session.getPackageId(), session.getErrorMessage());
+                session.getTotalChunks(), progress, session.getPackageId(),
+                UserErrorFeedback.storedKey(session.getErrorMessage(), "testcase.processFailed"));
     }
 
     public List<TestcasePackageResponse> list(Long problemId) {
@@ -1073,7 +1075,8 @@ public class TestcasePackageService {
                 testcasePackage.getSha256(), testcasePackage.getStatus(), Boolean.TRUE.equals(testcasePackage.getActive()),
                 testcasePackage.getCaseCount(), testcasePackage.getSampleCount(), testcasePackage.getStorageProvider(),
                 testcasePackage.getCreatedAt(), testcasePackage.getActivatedAt(), testcasePackage.getArchivedAt(),
-                testcasePackage.getDeletedAt(), testcasePackage.getDeletedBy(), testcasePackage.getErrorMessage(),
+                testcasePackage.getDeletedAt(), testcasePackage.getDeletedBy(),
+                UserErrorFeedback.storedKey(testcasePackage.getErrorMessage(), "testcase.processFailed"),
                 toCheckerResponse(testcasePackage), subtasks, cases);
     }
 
@@ -1198,20 +1201,20 @@ public class TestcasePackageService {
             throw new DomainException(ErrorCode.CONFLICT, "Testcase upload is not accepting chunks");
         }
         if (session.getExpiresAt() != null && Instant.now().isAfter(session.getExpiresAt())) {
-            markFailed(session, "Testcase upload session expired");
+            markFailed(session, "testcase.uploadExpired");
             throw new DomainException(ErrorCode.BAD_REQUEST, "Testcase upload session expired");
         }
     }
 
-    private String userMessage(Throwable ex) {
-        return StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : "Failed to process testcase package";
+    /** Plan S7: an error key; the upload's answer already named the problem with its parameters. */
+    private String storedFailure(Throwable ex) {
+        String key = UserErrorFeedback.storedKey(ex);
+        return "system.internal".equals(key) ? "testcase.processFailed" : key;
     }
 
+    /** Plan S7: stored as the key; the page that reports the failure already shows its own reason. */
     private String failMessage(TestcaseUploadFailRequest request) {
-        if (request != null && StringUtils.hasText(request.message())) {
-            return request.message().trim();
-        }
-        return "Testcase upload was interrupted. Please upload the package again.";
+        return "testcase.uploadInterrupted";
     }
 
     private String truncate(String value) {

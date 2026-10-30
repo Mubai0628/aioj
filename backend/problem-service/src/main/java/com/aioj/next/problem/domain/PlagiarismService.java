@@ -4,6 +4,10 @@ import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.api.TraceIds;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.SafeErrors;
+import com.aioj.next.common.error.UserErrorFeedback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.ai.PlagiarismAnalysisRequest;
@@ -90,6 +94,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class PlagiarismService {
+    private static final Logger log = LoggerFactory.getLogger(PlagiarismService.class);
     private static final int PAGE_SIZE_LIMIT = 100;
     private static final double DEFAULT_MINIMUM_SIMILARITY = 0.55;
     private static final byte[] UTF8_BOM = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
@@ -376,7 +381,8 @@ public class PlagiarismService {
             completeJob(job, runData.bySubmissionId().size(), finalPairs.size(),
                     (int) finalPairs.stream().filter(pair -> isHighRisk(pair.getRiskLevel())).count());
         } catch (RuntimeException ex) {
-            failJob(job, ex.getMessage());
+            log.warn("Plagiarism job {} failed: {}", jobId, SafeErrors.describe(ex));
+            failJob(job, UserErrorFeedback.storedKey(ex));
         }
     }
 
@@ -620,7 +626,7 @@ public class PlagiarismService {
             pair.setAiSummary(summarize(response.analysis(), 480));
         } catch (RuntimeException ex) {
             analysis.setStatus(PlagiarismAiStatus.FAILED);
-            analysis.setErrorMessage(summarize(ex.getMessage(), 480));
+            analysis.setErrorMessage(UserErrorFeedback.storedKey(ex));
             analysis.setUpdatedAt(Instant.now());
             pair.setAiStatus(PlagiarismAiStatus.FAILED);
             pair.setAiSummary(null);
@@ -756,7 +762,7 @@ public class PlagiarismService {
         return new PlagiarismJobResponse(job.getId(), job.getContestId(), job.getContestRunId(), job.getStatus(), job.getDetector(),
                 value(job.getMinimumSimilarity(), DEFAULT_MINIMUM_SIMILARITY), Boolean.TRUE.equals(job.getIncludeAiAnalysis()),
                 value(job.getTotalSubmissions()), value(job.getTotalPairs()), value(job.getHighRiskPairs()),
-                job.getErrorMessage(), job.getCreatedBy(), job.getStartedAt(), job.getCompletedAt(),
+                UserErrorFeedback.storedKey(job.getErrorMessage(), "operation.failed"), job.getCreatedBy(), job.getStartedAt(), job.getCompletedAt(),
                 job.getCreatedAt(), job.getUpdatedAt());
     }
 

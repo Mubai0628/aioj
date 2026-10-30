@@ -18,7 +18,8 @@ import { EmptyState, ErrorPanel, Field, LoadingPanel, SidePanel, selectClass, te
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
 import { formatBytes, formatDateTime, shortId } from "../lib/format";
-import { readableCaughtError } from "../lib/readableError";
+import { getStoredLocale } from "@aioj/i18n/vanilla";
+import { readableCaughtError, readableStoredError } from "../lib/readableError";
 
 type TimelineItem =
   | { kind: "run"; id: string; createdAt: string; value: ProblemDraftAgentRunResponse }
@@ -433,7 +434,9 @@ function LegacyJobWorkspace({ job, onOpenDraft }: { job: ProblemDraftGenerationJ
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h2 className="break-words text-base font-semibold text-[var(--oj-ink)]">{job.topicSnapshot || t("draftJobs.topicEmpty")}</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--oj-ink-muted)]">{job.errorMessage || job.progressMessage || t("draftWorkspace.safeSummaryEmpty")}</p>
+            <p className="mt-2 text-sm leading-6 text-[var(--oj-ink-muted)]">{job.errorMessage
+              ? readableStoredError(job.errorMessage, getStoredLocale(), t("draftWorkspace.safeSummaryEmpty"), "ai")
+              : job.progressMessage || t("draftWorkspace.safeSummaryEmpty")}</p>
           </div>
           <Badge tone={workspaceStatusTone(job.status)}>{workspaceStatusLabel(job.status, t)}</Badge>
         </div>

@@ -241,9 +241,10 @@ public class SubmissionService {
                 contestActive,
                 submission.getLanguage(),
                 submission.getStatus() == null ? null : submission.getStatus().name(),
-                truncate(submission.getJudgeMessage(), 1200),
+                truncate(JudgeMessages.visible(submission.getStatus(), submission.getJudgeMessage()), 1200),
                 codeAllowed ? truncate(submission.getStdoutExcerpt(), 1200) : null,
-                codeAllowed ? truncate(submission.getStderrExcerpt(), 1200) : null,
+                codeAllowed ? truncate(JudgeMessages.visibleStderr(submission.getStatus(), submission.getJudgePhase(),
+                        submission.getStderrExcerpt()), 1200) : null,
                 submission.getExitStatus(),
                 longToInteger(submission.getRunTimeMillis()),
                 longToInteger(submission.getMemoryKb()),
@@ -443,10 +444,11 @@ public class SubmissionService {
                 submission.getSubmittedAtContestMillis(), !Boolean.FALSE.equals(submission.getVisibleToParticipant()),
                 submission.getLanguage(), includeCode ? submission.getCode() : null,
                 submission.getStatus(), submission.getJudgePhase(), submission.getSandboxStatus(),
-                submission.getJudgeMessage(),
+                JudgeMessages.visible(submission.getStatus(), submission.getJudgeMessage()),
                 submission.getTimeMillis(), submission.getMemoryKb(),
                 includeCode ? submission.getStdoutExcerpt() : null,
-                includeCode ? submission.getStderrExcerpt() : null,
+                includeCode ? JudgeMessages.visibleStderr(submission.getStatus(), submission.getJudgePhase(),
+                        submission.getStderrExcerpt()) : null,
                 includeCode ? submission.getExitStatus() : null,
                 includeCode ? submission.getRunTimeMillis() : null,
                 submission.getScore(), submission.getMaxScore(), submission.getCaseTotal(),
@@ -465,7 +467,8 @@ public class SubmissionService {
                         result.getTestcasePackageId(), result.getCaseId(), result.getCaseIndex(),
                         result.getCaseName(), result.getSubtaskKey(), result.getStatus(), result.getJudgePhase(),
                         result.getSandboxStatus(), result.getScore(), result.getMaxScore(), result.getTimeMillis(),
-                        result.getMemoryKb(), result.getMessage(), result.getSample(), result.getCreatedAt()))
+                        result.getMemoryKb(), JudgeMessages.visible(result.getStatus(), result.getMessage()),
+                        result.getSample(), result.getCreatedAt()))
                 .toList();
     }
 

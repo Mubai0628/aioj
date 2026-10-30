@@ -204,9 +204,13 @@ export function resolveStoredErrorMessageForLocale(locale: Locale, value?: strin
       ? translate(locale, "errors.judge.systemError") ?? ""
       : translate(locale, "errors.unknown") ?? "";
   }
-  const key = semanticKey(clean) || sourceDefaultKey(source);
+  // T2.6 (plan S7): the server stores and sends error keys; older rows may still hold free text.
+  const storedKey = STORED_KEY.test(clean) && translate(locale, `errors.${clean}`) ? clean : undefined;
+  const key = storedKey || semanticKey(clean) || sourceDefaultKey(source);
   return resolveErrorMessageForLocale(locale, key ? 50000 : 0, clean, { errorKey: key });
 }
+
+const STORED_KEY = /^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9]+)+$/;
 
 function firstFieldDetail(details?: Record<string, string> | null) {
   if (!details) return null;

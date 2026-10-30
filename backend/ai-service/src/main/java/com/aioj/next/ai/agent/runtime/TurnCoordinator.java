@@ -23,6 +23,7 @@ import com.aioj.next.ai.agent.guard.GuardVerdict;
 import com.aioj.next.ai.agent.guard.ProblemFingerprintMatcher;
 import com.aioj.next.ai.agent.telemetry.ContestAiAssistanceTelemetryService;
 import com.aioj.next.common.error.SafeErrors;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import tools.jackson.databind.node.JsonNodeFactory;
@@ -762,7 +763,7 @@ public class TurnCoordinator {
     private void failTimedOutTurn(Long userId, String turnId, Long assistantMessageId) {        try {
             if (aiTurnService.failTurn(turnId, AiTurnService.STATUS_FAILED_RETRYABLE, "TURN_TIMEOUT")) {
                 aiQuotaService.record(userId, null, null, 0, 0, false);
-                aiConversationService.failMessage(userId, assistantMessageId, "AI provider call timed out");
+                aiConversationService.failMessage(userId, assistantMessageId, "request.timeout");
                 if (contestAssistanceTelemetryService != null) {
                     contestAssistanceTelemetryService.finishFailedByTurnId(
                             turnId, AiTurnService.STATUS_FAILED_RETRYABLE);
@@ -836,11 +837,10 @@ public class TurnCoordinator {
         return false;
     }
 
+    /** Plan S7: the failed message keeps an error key, never the failure's text. */
     private String failureMessage(RuntimeException ex) {
-        if (ex instanceof DomainException domainException && domainException.getMessage() != null && !domainException.getMessage().isBlank()) {
-            return domainException.getMessage();
-        }
-        return "AI provider call failed";
+        String key = UserErrorFeedback.storedKey(ex);
+        return "system.internal".equals(key) ? "ai.providerFailed" : key;
     }
 
     /**

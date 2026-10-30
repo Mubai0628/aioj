@@ -4,7 +4,9 @@ import { RefreshCw } from "lucide-react";
 import { activeQueryRefetchInterval, api, type ProblemDraftGenerationJobResponse, type ProblemDraftGenerationJobStatus } from "@aioj/api-client";
 import { Badge, Button, cn } from "@aioj/ui-react";
 import { EmptyState, ErrorPanel, LoadingPanel, PaginationRow, TableShell, selectClass } from "../components/Common";
+import { getStoredLocale } from "@aioj/i18n/vanilla";
 import { useI18n } from "../lib/i18n";
+import { readableStoredError } from "../lib/readableError";
 import { formatDateTime, shortId } from "../lib/format";
 
 const PAGE_SIZE = 20;
@@ -298,7 +300,8 @@ function isRegenerationJob(job: ProblemDraftGenerationJobResponse) {
 
 function jobNote(job: ProblemDraftGenerationJobResponse, t: TFunction) {
   if (job.status === "FAILED") {
-    return job.errorMessage || t("draftJobs.errorFallback");
+    // T2.6: the server sends an error key; readableStoredError words it (older free text too).
+    return readableStoredError(job.errorMessage, getStoredLocale(), t("draftJobs.errorFallback"), "ai");
   }
   if (job.status === "SUCCEEDED" && job.draftId) {
     if (isRegenerationJob(job)) {

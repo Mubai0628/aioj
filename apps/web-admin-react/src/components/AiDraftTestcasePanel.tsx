@@ -14,7 +14,8 @@ import { RiskNotices } from "./AiDraftAgentWorkspace";
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
 import { formatBytes, formatDateTime, shortId } from "../lib/format";
-import { readableCaughtError } from "../lib/readableError";
+import { getStoredLocale } from "@aioj/i18n/vanilla";
+import { readableCaughtError, readableStoredError } from "../lib/readableError";
 
 type UploadPhase = "idle" | "hashing" | "uploading" | "completing" | "processing" | "done";
 
@@ -315,7 +316,7 @@ function ArtifactCard({ artifact, workspaceId }: { artifact: ProblemDraftTestcas
         <Fact label="SHA-256" value={artifact.sha256} title={artifact.sha256} />
       </dl>
       {artifact.stale ? <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{t("draftTestcase.staleArtifact")}</p> : null}
-      {artifact.failureSummary ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{artifact.failureSummary}</p> : null}
+      {artifact.failureSummary ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{readableStoredError(artifact.failureSummary, getStoredLocale(), artifact.failureSummary, "testcase")}</p> : null}
       {ready ? (
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="outline" onClick={() => setShowEntries((value) => !value)}>
@@ -386,7 +387,7 @@ function UploadProgress({ status, phase }: { status: ProblemDraftTestcaseUploadS
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
         <div className="h-full rounded-full bg-[var(--oj-primary)]" style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
       </div>
-      {status.errorMessage ? <p className="mt-2 text-sm text-red-700">{status.errorMessage}</p> : null}
+      {status.errorMessage ? <p className="mt-2 text-sm text-red-700">{readableStoredError(status.errorMessage, getStoredLocale(), status.errorMessage, "testcase")}</p> : null}
     </div>
   );
 }

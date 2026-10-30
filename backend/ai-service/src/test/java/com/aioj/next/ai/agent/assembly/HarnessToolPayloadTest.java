@@ -15,6 +15,7 @@ import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.persistence.mapper.ProblemDraftWorkspaceMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -77,14 +78,15 @@ class HarnessToolPayloadTest {
     }
 
     @Test
-    void aDomainExceptionKeepsItsCodeAndMessage() {
+    void aDomainExceptionKeepsItsCodeAndSaysItsKeysText() {
         JsonNode payload = payload(tool((context, input) -> {
             throw new DomainException(ErrorCode.NOT_FOUND, "Submission not found");
         }), Set.of("AI_CHAT"), "{\"query\":\"xor\"}");
 
         assertThat(payload.path("status").asString()).isEqualTo("EXECUTION_ERROR");
         assertThat(payload.path("errorCode").asString()).isEqualTo("DOMAIN_NOT_FOUND");
-        assertThat(payload.path("errorMessage").asString()).isEqualTo("Submission not found");
+        assertThat(payload.path("errorMessage").asString())
+                .isEqualTo(UserErrorFeedback.ofKey("submission.notFound").message());
     }
 
     @Test
