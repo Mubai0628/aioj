@@ -88,7 +88,7 @@ The Agent runs a Python generator to produce an artifact, applies format, safety
 
 ### Manually uploaded
 
-A manual ZIP uses workspace-scoped chunk upload. It validates chunk and whole-package SHA, manifest, path traversal, symlinks, duplicate or case-colliding paths, file and expanded sizes, compression ratio, case count, and referenced files. After format `READY`, the UI exposes two explicit paths:
+A manual ZIP uses workspace-scoped chunk upload. It validates chunk and whole-package SHA, manifest, path traversal, symlinks, duplicate or case-colliding paths, file and expanded sizes (counted as bytes are actually decompressed), case count, and referenced files. After format `READY`, the UI exposes two explicit paths:
 
 1. **Agent acceptance test:** execute the entire package and expose the controlled Agent tool trace; success records `AGENT_VERIFIED`.
 2. **Direct import:** skip execution acceptance only after a second confirmation and record `MANUAL_UNVERIFIED`, operator, artifact SHA, and existing failure summary.

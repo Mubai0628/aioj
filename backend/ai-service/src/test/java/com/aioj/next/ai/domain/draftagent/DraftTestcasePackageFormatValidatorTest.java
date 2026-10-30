@@ -102,41 +102,37 @@ class DraftTestcasePackageFormatValidatorTest {
     }
 
     @Test
-    void rejectsNonStandardCheckerAndCompressionBomb() throws Exception {
+    void rejectsNonStandardChecker() throws Exception {
         Path customChecker = zip(Map.of(
                 "manifest.json", manifest("tests/001.in", "tests/001.out")
                         .replace("STANDARD", "CUSTOM"),
                 "tests/001.in", "2\n",
                 "tests/001.out", "4\n"
         ));
-        Map<String, byte[]> bombEntries = new LinkedHashMap<>();
-        bombEntries.put("manifest.json", manifest("tests/001.in", "tests/001.out")
-                .getBytes(StandardCharsets.UTF_8));
-        bombEntries.put("tests/001.in", new byte[2 * 1024 * 1024]);
-        bombEntries.put("tests/001.out", "4\n".getBytes(StandardCharsets.UTF_8));
 
         assertThatThrownBy(() -> validator.validate(customChecker))
                 .isInstanceOf(DraftTestcasePackageFormatValidator.ValidationException.class)
                 .hasMessageContaining("STANDARD");
-        assertThatThrownBy(() -> validator.validate(zipBytes(bombEntries)))
-                .isInstanceOf(DraftTestcasePackageFormatValidator.ValidationException.class)
-                .hasMessageContaining("compression ratio");
     }
 
-    /** Plan 15.3: the ratio is only checked from 1 MiB up, as on the acceptance side. */
+    /**
+     * Real max tests compress far beyond any fixed ratio; within the byte limits they must pass. A
+     * decompression bomb is stopped by the per-entry limit (enforcesEntryCaseAndPerEntrySizeLimits).
+     */
     @Test
-    void checksTheCompressionRatioOnlyFromOneMebibyteUp() throws Exception {
-        Path small = zip(Map.of("manifest.json", manifest("tests/001.in", "tests/001.out"),
-                "tests/001.in", sparseInput(600 * 1000), "tests/001.out", "4\n"));
-        Path large = zip(Map.of("manifest.json", manifest("tests/001.in", "tests/001.out"),
+    void acceptsHighlyCompressibleTestDataWithinTheByteLimits() throws Exception {
+        Path sparse = zip(Map.of("manifest.json", manifest("tests/001.in", "tests/001.out"),
                 "tests/001.in", sparseInput(2 * 1024 * 1024), "tests/001.out", "4\n"));
-        assertThat(ratio(small)).as("about 400:1").isBetween(300L, 500L);
-        assertThat(ratio(large)).as("about 400:1").isBetween(300L, 500L);
+        Map<String, byte[]> zeros = new LinkedHashMap<>();
+        zeros.put("manifest.json", manifest("tests/001.in", "tests/001.out").getBytes(StandardCharsets.UTF_8));
+        zeros.put("tests/001.in", new byte[2 * 1024 * 1024]);
+        zeros.put("tests/001.out", "4\n".getBytes(StandardCharsets.UTF_8));
+        Path allZeros = zipBytes(zeros);
+        assertThat(ratio(sparse)).as("about 400:1").isBetween(300L, 500L);
+        assertThat(ratio(allZeros)).as("far above 200:1").isGreaterThan(500L);
 
-        assertThat(validator.validate(small).totalInputBytes()).isEqualTo(600_000L);
-        assertThatThrownBy(() -> validator.validate(large))
-                .isInstanceOf(DraftTestcasePackageFormatValidator.ValidationException.class)
-                .hasMessageContaining("compression ratio");
+        assertThat(validator.validate(sparse).totalInputBytes()).isEqualTo(2L * 1024 * 1024);
+        assertThat(validator.validate(allZeros).totalInputBytes()).isEqualTo(2L * 1024 * 1024);
     }
 
     @Test

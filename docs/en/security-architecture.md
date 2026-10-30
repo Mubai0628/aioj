@@ -68,7 +68,7 @@ Whether gVisor (`runsc`) can host go-judge and so remove `privileged` has not be
 - Problem-draft workspace, user, draft, execution, and artifact ownership are server-bound; model tool arguments cannot select or override these resources.
 - Raw DeepSeek `reasoning_content` exists only in memory for the current tool loop and never enters the database, logs, audit, or frontend.
 - Code, generators, packages, and self-test runs reach agent-sandbox only through agent-executor, never the judge Sandbox; hidden cases return aggregate results to the model, and general tool audit excludes raw source and process output.
-- Manual ZIPs require SHA, manifest, path, symlink, duplicate-entry, expanded-size, and compression-ratio checks; imports without full-package execution acceptance are explicitly `MANUAL_UNVERIFIED`.
+- Manual ZIPs require SHA, manifest, path, symlink, duplicate-entry, and expanded-size checks. Extraction counts the bytes actually written against per-entry and whole-package limits, which is what stops a decompression bomb; packages are no longer refused by compression ratio, because real max tests (long runs of equal values) compress far beyond any fixed threshold; imports without full-package execution acceptance are explicitly `MANUAL_UNVERIFIED`.
 
 ## Secrets and delivery
 

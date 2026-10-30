@@ -53,12 +53,6 @@ public class DraftTestcasePackageRunner {
     private static final String MANIFEST_PATH = "manifest.json";
     private static final int BUFFER_SIZE = 64 * 1024;
     private static final long MANIFEST_MAX_BYTES = 1024L * 1024L;
-    private static final long MAX_COMPRESSION_RATIO = 200L;
-    /**
-     * As in ai-service's format check (plan 15.3): the ratio is checked from 1 MiB up; smaller entries are
-     * bounded by the entry and total limits, which count the bytes actually written.
-     */
-    private static final long COMPRESSION_RATIO_MIN_BYTES = 1024L * 1024L;
 
     private final AgentExecutorProperties properties;
     private final SandboxExecutionClient sandboxExecutionClient;
@@ -217,6 +211,9 @@ public class DraftTestcasePackageRunner {
                         ? MANIFEST_MAX_BYTES
                         : positive(properties.getMaxDraftPackageEntryBytes(), 8L * 1024L * 1024L);
                 long entryBytes;
+                // A decompression bomb is stopped here: both limits count the bytes actually written. There
+                // is no compression-ratio check on top, because real max tests (long runs of equal values)
+                // compress far beyond any fixed ratio and were refused for it.
                 try (InputStream input = zipFile.getInputStream(entry);
                      OutputStream output = Files.newOutputStream(target, StandardOpenOption.CREATE_NEW,
                              StandardOpenOption.WRITE)) {
@@ -224,7 +221,6 @@ public class DraftTestcasePackageRunner {
                             positive(properties.getMaxDraftPackageUncompressedBytes(), 100L * 1024L * 1024L)
                                     - totalBytes);
                 }
-                rejectCompressionBomb(entry, entryBytes);
                 totalBytes = safeAdd(totalBytes, entryBytes);
                 if (totalBytes > positive(properties.getMaxDraftPackageUncompressedBytes(),
                         100L * 1024L * 1024L)) {
@@ -407,16 +403,6 @@ public class DraftTestcasePackageRunner {
             output.write(buffer, 0, read);
         }
         return size;
-    }
-
-    private void rejectCompressionBomb(ZipArchiveEntry entry, long uncompressedBytes) {
-        if (uncompressedBytes < COMPRESSION_RATIO_MIN_BYTES) {
-            return;
-        }
-        long compressed = entry.getCompressedSize();
-        if (compressed <= 0L || uncompressedBytes / compressed > MAX_COMPRESSION_RATIO) {
-            throw badRequest("Draft testcase package contains an unsafe compression ratio");
-        }
     }
 
     private ExtractedEntry requireFile(Map<String, ExtractedEntry> entries, String path, String role) {

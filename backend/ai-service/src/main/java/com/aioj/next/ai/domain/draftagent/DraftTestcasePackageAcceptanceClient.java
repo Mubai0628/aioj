@@ -56,7 +56,7 @@ public class DraftTestcasePackageAcceptanceClient {
                     .retrieve()
                     .body(RESPONSE_TYPE);
         } catch (HttpClientErrorException ex) {
-            // agent-executor refused the package itself, for example for an unsafe compression ratio. The
+            // agent-executor refused the package itself, for example for an entry over the size limit. The
             // reason is what the model repairs its generator from, so it must not end as an opaque tool error.
             throw new DomainException(ErrorCode.VALIDATION_FAILED, refusal(ex));
         }

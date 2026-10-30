@@ -108,35 +108,35 @@ class DraftTestcasePackageRunnerTest {
     }
 
     @Test
-    void rejectsZipBombCompressionRatio() throws Exception {
+    void stopsADecompressionBombAtTheEntryLimitBeforeAnyExecution() throws Exception {
         SandboxExecutionClient sandbox = mock(SandboxExecutionClient.class);
         Map<String, String> entries = new LinkedHashMap<>();
         entries.put("manifest.json", manifest("tests/001.in", "tests/001.out"));
-        entries.put("tests/001.in", "0".repeat(2 * 1024 * 1024));
+        entries.put("tests/001.in", "0".repeat(9 * 1024 * 1024));
         entries.put("tests/001.out", "2\n");
         byte[] zip = packageZip(entries);
+        assertThat(zip.length).as("a few KiB on the wire").isLessThan(64 * 1024);
 
         assertThatThrownBy(() -> runner(sandbox).run(file(zip), request(zip)))
                 .isInstanceOf(DomainException.class)
-                .hasMessageContaining("compression ratio");
+                .hasMessageContaining("exceeds the size limit");
         verifyNoInteractions(sandbox);
     }
 
-    /** Plan 15.3: as in ai-service's format check, the ratio is only checked from 1 MiB up. */
+    /** Real max tests compress far beyond any fixed ratio; within the byte limits they must pass. */
     @Test
-    void checksTheCompressionRatioOnlyFromOneMebibyteUp() throws Exception {
-        SandboxExecutionClient sandbox = acceptingSandbox();
-        SandboxExecutionClient unused = mock(SandboxExecutionClient.class);
-        byte[] small = sparsePackage(600 * 1000);
-        byte[] large = sparsePackage(2 * 1024 * 1024);
-        assertThat(ratio(small)).as("about 400:1").isBetween(300L, 500L);
-        assertThat(ratio(large)).as("about 400:1").isBetween(300L, 500L);
+    void acceptsHighlyCompressibleTestDataWithinTheByteLimits() throws Exception {
+        byte[] sparse = sparsePackage(2 * 1024 * 1024);
+        assertThat(ratio(sparse)).as("about 400:1").isBetween(300L, 500L);
+        Map<String, String> entries = new LinkedHashMap<>();
+        entries.put("manifest.json", manifest("tests/001.in", "tests/001.out"));
+        entries.put("tests/001.in", "7 ".repeat(1024 * 1024));
+        entries.put("tests/001.out", "2\n");
+        byte[] repeated = packageZip(entries);
+        assertThat(ratio(repeated)).as("far above 200:1").isGreaterThan(500L);
 
-        assertThat(runner(sandbox).run(file(small), request(small)).status()).isEqualTo("PASSED");
-        assertThatThrownBy(() -> runner(unused).run(file(large), request(large)))
-                .isInstanceOf(DomainException.class)
-                .hasMessageContaining("compression ratio");
-        verifyNoInteractions(unused);
+        assertThat(runner(acceptingSandbox()).run(file(sparse), request(sparse)).status()).isEqualTo("PASSED");
+        assertThat(runner(acceptingSandbox()).run(file(repeated), request(repeated)).status()).isEqualTo("PASSED");
     }
 
     @Test

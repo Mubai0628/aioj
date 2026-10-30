@@ -36,8 +36,6 @@ public class DraftTestcasePackageFormatValidator {
     static final long MAX_UNCOMPRESSED_BYTES = 100L * 1024L * 1024L;
     static final long MAX_ENTRY_BYTES = 8L * 1024L * 1024L;
     static final long MAX_MANIFEST_BYTES = 1024L * 1024L;
-    static final long MAX_COMPRESSION_RATIO = 200L;
-    private static final long COMPRESSION_RATIO_MIN_BYTES = 1024L * 1024L;
     private static final String MANIFEST_PATH = "manifest.json";
     private static final int BUFFER_SIZE = 64 * 1024;
 
@@ -83,11 +81,12 @@ public class DraftTestcasePackageFormatValidator {
                 long perEntryLimit = MANIFEST_PATH.equals(path) ? MAX_MANIFEST_BYTES : MAX_ENTRY_BYTES;
                 ByteArrayOutputStream manifest = MANIFEST_PATH.equals(path) ? new ByteArrayOutputStream() : null;
                 long entryBytes;
+                // The entry and total limits count the bytes actually read, which is what stops a
+                // decompression bomb; a compression-ratio check would also refuse real repetitive max tests.
                 try (InputStream input = zip.getInputStream(entry)) {
                     entryBytes = consumeBounded(input, manifest, perEntryLimit,
                             MAX_UNCOMPRESSED_BYTES - totalUncompressed);
                 }
-                rejectCompressionBomb(entry, entryBytes);
                 totalUncompressed = safeAdd(totalUncompressed, entryBytes);
                 if (totalUncompressed > MAX_UNCOMPRESSED_BYTES) {
                     throw invalid("Testcase package exceeds the 100 MiB decompressed size limit");
@@ -193,16 +192,6 @@ public class DraftTestcasePackageFormatValidator {
             }
         }
         return total;
-    }
-
-    private void rejectCompressionBomb(ZipArchiveEntry entry, long uncompressedBytes) {
-        if (uncompressedBytes < COMPRESSION_RATIO_MIN_BYTES) {
-            return;
-        }
-        long compressed = entry.getCompressedSize();
-        if (compressed <= 0 || uncompressedBytes / compressed > MAX_COMPRESSION_RATIO) {
-            throw invalid("Testcase package contains an unsafe compression ratio");
-        }
     }
 
     private EntryMetadata requireRegularEntry(Map<String, EntryMetadata> entries, String path, String label) {
