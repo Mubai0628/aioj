@@ -66,6 +66,11 @@ aioj:
     java-compile-min-memory-kb: ${JUDGE_JAVA_COMPILE_MIN_MEMORY_KB:524288}
     checker-compile-min-memory-kb: ${JUDGE_CHECKER_COMPILE_MIN_MEMORY_KB:262144}
 
+logging:
+  pattern:
+    # Every line carries the request's trace id (T2.5); the brackets are empty when there is none.
+    correlation: "[%X{traceId:-}] "
+
 management:
   endpoints:
     web:

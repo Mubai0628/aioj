@@ -144,6 +144,11 @@ aioj:
       max-attempts: ${AI_MEMORY_JOBS_MAX_ATTEMPTS:3}
       backoff-base-seconds: ${AI_MEMORY_JOBS_BACKOFF_BASE_SECONDS:30}
 
+logging:
+  pattern:
+    # Every line carries the request's trace id (T2.5); the brackets are empty when there is none.
+    correlation: "[%X{traceId:-}] "
+
 management:
   endpoints:
     web:

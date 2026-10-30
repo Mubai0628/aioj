@@ -35,6 +35,11 @@ aioj:
       access-ttl: ${JWT_ACCESS_TTL:PT2H}
       refresh-ttl: ${JWT_REFRESH_TTL:P14D}
 
+logging:
+  pattern:
+    # Every line carries the request's trace id (T2.5); the brackets are empty when there is none.
+    correlation: "[%X{traceId:-}] "
+
 management:
   endpoints:
     web:

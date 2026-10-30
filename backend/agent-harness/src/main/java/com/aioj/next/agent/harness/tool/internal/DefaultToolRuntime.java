@@ -29,6 +29,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.UnaryOperator;
 
 /**
  * The tool pipeline: parse → schema → scopes and authorizers → execution in
@@ -47,6 +48,7 @@ public final class DefaultToolRuntime implements ToolRuntime {
     private final Bulkheads bulkheads;
     private final ObjectMapper objectMapper;
     private final ModelPayloadRenderer renderer;
+    private final UnaryOperator<Runnable> taskDecorator;
     private final ConcurrentMap<String, Set<FutureTask<ToolResult>>> inFlight = new ConcurrentHashMap<>();
 
     public DefaultToolRuntime(ToolCatalog catalog, List<ToolAuthorizer> authorizers, ToolAuditSink auditSink,
@@ -57,6 +59,13 @@ public final class DefaultToolRuntime implements ToolRuntime {
     /** {@code objectMapper} parses arguments and serializes tool data for the model. */
     public DefaultToolRuntime(ToolCatalog catalog, List<ToolAuthorizer> authorizers, ToolAuditSink auditSink,
                               BulkheadLimits limits, ObjectMapper objectMapper) {
+        this(catalog, authorizers, auditSink, limits, objectMapper, UnaryOperator.identity());
+    }
+
+    /** {@code taskDecorator} wraps each execution before it goes to its pool (the assembler's logging context). */
+    public DefaultToolRuntime(ToolCatalog catalog, List<ToolAuthorizer> authorizers, ToolAuditSink auditSink,
+                              BulkheadLimits limits, ObjectMapper objectMapper, UnaryOperator<Runnable> taskDecorator) {
+        this.taskDecorator = taskDecorator == null ? UnaryOperator.identity() : taskDecorator;
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
         this.renderer = new ModelPayloadRenderer(this.objectMapper);
         this.catalog = catalog;
@@ -111,7 +120,8 @@ public final class DefaultToolRuntime implements ToolRuntime {
         inFlight.computeIfAbsent(runKey, key -> ConcurrentHashMap.newKeySet()).add(task);
         ToolResult result;
         try {
-            bulkheads.pool(descriptor.executionClass()).execute(task);
+            // The decorator only wraps run(); cancelling the FutureTask still interrupts the tool thread.
+            bulkheads.pool(descriptor.executionClass()).execute(taskDecorator.apply(task));
             result = task.get(effectiveTimeout(descriptor.timeout(), remaining).toNanos(), TimeUnit.NANOSECONDS);
             if (result == null) {
                 result = ToolResult.failure(ToolStatus.EXECUTION_ERROR, "TOOL_EMPTY_RESULT",

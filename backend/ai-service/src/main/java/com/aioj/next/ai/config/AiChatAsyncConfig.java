@@ -34,6 +34,7 @@ public class AiChatAsyncConfig {
         executor.setMaxPoolSize(poolSize);
         executor.setQueueCapacity(poolSize * 2);
         executor.setThreadNamePrefix("ai-problem-draft-");
+        executor.setTaskDecorator(HarnessContextConfiguration.carryLoggingContext()::apply);
         executor.initialize();
         return executor;
     }

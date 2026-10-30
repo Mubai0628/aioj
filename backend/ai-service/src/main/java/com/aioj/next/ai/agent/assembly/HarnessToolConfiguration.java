@@ -7,6 +7,7 @@ import com.aioj.next.agent.harness.tool.api.ToolDescriptor;
 import com.aioj.next.agent.harness.tool.api.ToolRejection;
 import com.aioj.next.agent.harness.tool.api.ToolRuntime;
 import com.aioj.next.agent.harness.tool.api.ToolRuntimes;
+import com.aioj.next.ai.agent.context.HarnessContextConfiguration;
 import com.aioj.next.ai.agent.tool.AgentTool;
 import com.aioj.next.ai.agent.tool.ToolAuditService;
 import com.aioj.next.ai.config.AiProperties;
@@ -58,8 +59,10 @@ public class HarnessToolConfiguration {
                 descriptors.putIfAbsent(tool.descriptor().name(), tool.descriptor());
             }
         });
+        // Tool threads log, and call agent-executor and problem-service, under the turn's trace id.
         return ToolRuntimes.create(catalog, List.of(new WorkspaceOwnershipAuthorizer(workspaceMapper)),
-                new ToolCallAuditSink(auditService, descriptors), bulkheadLimits(capacity), objectMapper);
+                new ToolCallAuditSink(auditService, descriptors), bulkheadLimits(capacity), objectMapper,
+                HarnessContextConfiguration.carryLoggingContext());
     }
 
     /** The tools as the Harness registers them; a tool that breaks the rules is in its rejections. */

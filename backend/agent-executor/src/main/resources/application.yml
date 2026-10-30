@@ -29,6 +29,9 @@ management:
 logging:
   level:
     root: ${AGENT_EXECUTOR_LOG_LEVEL:INFO}
+  pattern:
+    # Every line carries ai-service's trace id (T2.5); the brackets are empty when there is none.
+    correlation: "[%X{traceId:-}] "
 
 aioj:
   internal:

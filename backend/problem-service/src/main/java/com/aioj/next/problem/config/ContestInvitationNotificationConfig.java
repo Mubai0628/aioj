@@ -1,5 +1,6 @@
 package com.aioj.next.problem.config;
 
+import com.aioj.next.common.api.MdcContext;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +21,7 @@ public class ContestInvitationNotificationConfig {
         executor.setCorePoolSize(concurrency);
         executor.setMaxPoolSize(concurrency);
         executor.setQueueCapacity(Math.max(25, properties.getBatchSize() * 4));
+        executor.setTaskDecorator(MdcContext::wrap);
         executor.initialize();
         return executor;
     }

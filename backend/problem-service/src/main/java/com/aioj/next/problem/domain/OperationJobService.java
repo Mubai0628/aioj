@@ -1,5 +1,6 @@
 package com.aioj.next.problem.domain;
 
+import com.aioj.next.common.api.MdcContext;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
@@ -388,7 +389,7 @@ public class OperationJobService {
         if (!properties.isWorkerEnabled()) {
             return;
         }
-        executor.submit(() -> process(jobId));
+        executor.submit(MdcContext.wrap(() -> process(jobId)));
     }
 
     @Transactional

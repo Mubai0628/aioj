@@ -1,5 +1,6 @@
 package com.aioj.next.judge.consumer;
 
+import com.aioj.next.common.api.TraceIds;
 import com.aioj.next.contract.judge.JudgeTaskMessage;
 import com.aioj.next.contract.submission.SubmissionStatus;
 import com.aioj.next.judge.config.JudgeQueueConfig;
@@ -13,6 +14,7 @@ import com.aioj.next.judge.monitor.JudgeRuntimeMetrics;
 import com.rabbitmq.client.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
@@ -39,6 +41,16 @@ public class JudgeTaskListener {
 
     @RabbitListener(queues = JudgeQueueConfig.JUDGE_QUEUE)
     public void onMessage(JudgeTaskMessage task, Message message, Channel channel) throws Exception {
+        // The submitting request's trace id: the judge's log lines and its judged-event push join that request.
+        MDC.put(TraceIds.MDC_KEY, TraceIds.ensure(task == null ? null : task.traceId()));
+        try {
+            judge(task, message, channel);
+        } finally {
+            MDC.remove(TraceIds.MDC_KEY);
+        }
+    }
+
+    private void judge(JudgeTaskMessage task, Message message, Channel channel) throws Exception {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
         long startedNanos = System.nanoTime();
         Long queueWaitMs = queueWaitMillis(message);

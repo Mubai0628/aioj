@@ -15,6 +15,15 @@ public class InternalServiceConfig {
                 registry -> registry.counter("aioj.internal.http.transaction", "target", target).increment()));
     }
 
+    /** Ahead of the token check, so a rejected caller is logged under its trace id too. */
+    @Bean
+    org.springframework.boot.web.servlet.FilterRegistrationBean<com.aioj.next.common.web.TraceIdFilter> traceIdFilter() {
+        var registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(
+                new com.aioj.next.common.web.TraceIdFilter());
+        registration.setOrder(com.aioj.next.common.web.TraceIdFilter.ORDER);
+        return registration;
+    }
+
     @Bean
     org.springframework.boot.web.servlet.FilterRegistrationBean<com.aioj.next.common.security.InternalApiTokenFilter> internalApiTokenFilter(InternalApiProperties properties) {
         var registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(

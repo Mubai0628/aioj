@@ -1,6 +1,7 @@
 package com.aioj.next.executor.config;
 
 import com.aioj.next.common.security.InternalApiTokenFilter;
+import com.aioj.next.common.web.TraceIdFilter;
 import com.aioj.next.sandbox.client.DefaultOutputComparator;
 import com.aioj.next.sandbox.client.OutputComparator;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -17,7 +18,15 @@ public class AgentExecutorConfig {
         return new DefaultOutputComparator();
     }
 
-    /** Checks agent-executor's own inbound token, which only ai-service holds, before anything else. */
+    /** First of all, so every log line of a run, a rejected caller's included, carries ai-service's trace id. */
+    @Bean
+    FilterRegistrationBean<TraceIdFilter> traceIdFilter() {
+        FilterRegistrationBean<TraceIdFilter> registration = new FilterRegistrationBean<>(new TraceIdFilter());
+        registration.setOrder(TraceIdFilter.ORDER);
+        return registration;
+    }
+
+    /** Checks agent-executor's own inbound token, which only ai-service holds, before any other check. */
     @Bean
     FilterRegistrationBean<InternalApiTokenFilter> internalApiTokenFilter(InternalApiProperties properties) {
         FilterRegistrationBean<InternalApiTokenFilter> registration =

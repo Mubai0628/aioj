@@ -1,10 +1,12 @@
 package com.aioj.next.common.http;
 
+import com.aioj.next.common.api.TraceIds;
 import com.aioj.next.common.resilience.CircuitBreaker;
 import com.aioj.next.common.resilience.CircuitBreaker.Outcome;
 import com.aioj.next.common.security.InternalServiceProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatusCode;
@@ -88,10 +90,15 @@ public class InternalRestClientFactory {
                 .requestInterceptor((request, body, execution) -> {
                     guardTransaction(target, clientId);
                     request.getHeaders().remove(TOKEN_HEADER);
-                    if (origin.getScheme().equalsIgnoreCase(request.getURI().getScheme())
-                            && origin.getAuthority().equalsIgnoreCase(request.getURI().getAuthority())
-                            && request.getURI().getPath().startsWith("/api/v1/internal/")) {
+                    boolean sameOrigin = origin.getScheme().equalsIgnoreCase(request.getURI().getScheme())
+                            && origin.getAuthority().equalsIgnoreCase(request.getURI().getAuthority());
+                    if (sameOrigin && request.getURI().getPath().startsWith("/api/v1/internal/")) {
                         request.getHeaders().set(TOKEN_HEADER, properties.outboundToken(target));
+                    }
+                    // The callee logs under the caller's trace id; nothing leaves for another origin.
+                    String traceId = MDC.get(TraceIds.MDC_KEY);
+                    if (sameOrigin && TraceIds.isValid(traceId) && !request.getHeaders().containsHeader(TraceIds.HEADER)) {
+                        request.getHeaders().set(TraceIds.HEADER, traceId);
                     }
                     if (!state.permits.tryAcquire()) {
                         throw unavailable(target, "bulkhead_full");

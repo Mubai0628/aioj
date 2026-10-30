@@ -30,6 +30,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -317,6 +318,31 @@ class ToolRuntimeTest {
 
         assertThat(audit.events).containsExactly("start:7:kb.lookup", "complete:handle-7:SUCCESS");
         assertThat(stillRuns.result().ok()).isTrue();
+    }
+
+    @Test
+    void theTaskDecoratorWrapsEveryToolExecution() {
+        ThreadLocal<String> carried = new ThreadLocal<>();
+        AtomicReference<String> seen = new AtomicReference<>();
+        Tools.Fake tool = Tools.descriptor("kb.lookup").behaving((context, input) -> {
+            seen.set(carried.get());
+            return ToolResult.success("ok", List.of(), null, null);
+        });
+        ToolRuntime runtime = ToolRuntimes.create(ToolCatalog.of(List.of(tool)), List.of(), ToolAuditSink.NONE,
+                BulkheadLimits.defaults(), null, task -> () -> {
+                    carried.set("turn-trace");
+                    try {
+                        task.run();
+                    } finally {
+                        carried.remove();
+                    }
+                });
+        runtimes.add(runtime);
+
+        ToolOutcome outcome = runtime.execute(CONTEXT, 1, new ToolCallRequest("c1", "kb.lookup", "{\"query\":\"a\"}"), null);
+
+        assertThat(outcome.result().ok()).isTrue();
+        assertThat(seen.get()).isEqualTo("turn-trace");
     }
 
     private ToolRuntime runtime(List<? extends AgentTool> tools) {

@@ -6,14 +6,25 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.MDC;
+import org.springframework.core.Ordered;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
-public class TraceIdFilter extends OncePerRequestFilter {
+/**
+ * Runs ahead of Spring Security and the internal token check, so their rejections log, and
+ * answer, under the request's trace id.
+ */
+public class TraceIdFilter extends OncePerRequestFilter implements Ordered {
+    public static final int ORDER = Ordered.HIGHEST_PRECEDENCE + 1;
     private static final String JSON_CONTENT_TYPE = "application/json;charset=UTF-8";
+
+    @Override
+    public int getOrder() {
+        return ORDER;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
