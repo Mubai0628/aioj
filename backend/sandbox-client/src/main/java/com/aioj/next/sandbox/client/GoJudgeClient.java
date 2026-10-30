@@ -69,6 +69,9 @@ public final class GoJudgeClient {
             }
             outcome = ResultCode.of(results.get(0)).name();
             return results.get(0);
+        } catch (SandboxException ex) {
+            outcome = outcomeOf(ex);
+            throw ex;
         } finally {
             completed("run", outcome, started);
         }
@@ -80,6 +83,9 @@ public final class GoJudgeClient {
         try {
             send(request(filePath(fileId)).DELETE(), "DELETE /file/{id}", HttpResponse.BodyHandlers.discarding());
             outcome = RequestListener.OK;
+        } catch (SandboxException ex) {
+            outcome = outcomeOf(ex);
+            throw ex;
         } finally {
             completed("delete_file", outcome, started);
         }
@@ -98,9 +104,17 @@ public final class GoJudgeClient {
                 throw new SandboxException("Failed to stream sandbox cached file", ex);
             }
             outcome = RequestListener.OK;
+        } catch (SandboxException ex) {
+            outcome = outcomeOf(ex);
+            throw ex;
         } finally {
             completed("download_file", outcome, started);
         }
+    }
+
+    /** {@code HTTP_404} and the like when the sandbox answered, {@link RequestListener#FAILED} otherwise. */
+    private static String outcomeOf(SandboxException ex) {
+        return ex.httpStatus() == null ? RequestListener.FAILED : "HTTP_" + ex.httpStatus();
     }
 
     /** A listener that throws must never fail the sandbox call it was told about. */
@@ -122,7 +136,8 @@ public final class GoJudgeClient {
         /**
          * @param operation {@code run}, {@code delete_file} or {@code download_file}
          * @param outcome   the {@link ResultCode} name of a run that came back, {@link #OK} for a file
-         *                  request that succeeded, {@link #FAILED} when the request itself failed
+         *                  request that succeeded, {@code HTTP_<status>} when the sandbox refused it,
+         *                  {@link #FAILED} when it did not answer
          */
         void completed(String operation, String outcome, long elapsedNanos);
     }
@@ -156,7 +171,7 @@ public final class GoJudgeClient {
                     // The status is what matters; the body is not read.
                 }
             }
-            throw new SandboxException("Sandbox HTTP " + status + " on " + operation);
+            throw new SandboxException("Sandbox HTTP " + status + " on " + operation, null, status);
         }
         return response;
     }

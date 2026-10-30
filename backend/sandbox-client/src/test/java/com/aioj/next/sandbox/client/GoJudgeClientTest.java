@@ -160,8 +160,26 @@ class GoJudgeClientTest {
         client.downloadFile("f1", new ByteArrayOutputStream());
         client.deleteFile("f1");
 
-        assertThat(heard).containsExactly("run:TIME_LIMIT_EXCEEDED:true", "run:FAILED:true",
+        assertThat(heard).containsExactly("run:TIME_LIMIT_EXCEEDED:true", "run:HTTP_500:true",
                 "download_file:OK:true", "delete_file:OK:true");
+    }
+
+    @Test
+    void aRequestThatGetsNoAnswerIsFailedAndARefusedOneCarriesItsStatus() throws IOException {
+        int closedPort;
+        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            closedPort = socket.getLocalPort();
+        }
+        List<String> heard = new CopyOnWriteArrayList<>();
+        GoJudgeClient nowhere = new GoJudgeClient(new SandboxConfig("http://127.0.0.1:" + closedPort + "/run", "t",
+                Duration.ofSeconds(2), Duration.ofSeconds(2)), (operation, outcome, nanos) -> heard.add(outcome));
+        status = 404;
+
+        assertThatThrownBy(() -> nowhere.deleteFile("f1")).isInstanceOfSatisfying(SandboxException.class,
+                failed -> assertThat(failed.httpStatus()).isNull());
+        assertThatThrownBy(() -> client("t", Duration.ofSeconds(5)).deleteFile("f1"))
+                .isInstanceOfSatisfying(SandboxException.class, refused -> assertThat(refused.httpStatus()).isEqualTo(404));
+        assertThat(heard).containsExactly("FAILED");
     }
 
     @Test

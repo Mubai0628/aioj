@@ -3,6 +3,7 @@ package com.aioj.next.executor.domain;
 import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.executor.config.AgentExecutorProperties;
 import com.aioj.next.sandbox.client.LanguageProfile;
+import com.aioj.next.sandbox.client.SandboxException;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
@@ -249,7 +250,9 @@ public class CompileCache {
             try {
                 sandbox.deleteCachedFile(fileId);
             } catch (RuntimeException ex) {
-                log.warn("compile cache could not delete sandbox file: {}", SafeErrors.describe(ex));
+                log.warn("compile cache could not delete sandbox file: {}{}", SafeErrors.describe(ex),
+                        ex instanceof SandboxException refused && refused.httpStatus() != null
+                                ? " status=" + refused.httpStatus() : "");
             }
         }
     }
