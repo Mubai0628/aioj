@@ -4,6 +4,14 @@ server:
 spring:
   application:
     name: ai-oj-gateway-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      # One round trip per limited write (T2.2): a stuck Redis must not hold the request up.
+      timeout: ${GATEWAY_REDIS_TIMEOUT:200ms}
+      connect-timeout: ${GATEWAY_REDIS_CONNECT_TIMEOUT:500ms}
   jackson:
     # Jackson 3 (Spring Boot 4): keep the Jackson 2 defaults this service was built against.
     use-jackson2-defaults: true
@@ -46,6 +54,32 @@ spring:
               metadata:
                 response-timeout: ${AI_GATEWAY_RESPONSE_TIMEOUT_MS:900000}
                 connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:10000}
+
+aioj:
+  gateway:
+    client-ip:
+      # X-Forwarded-For is believed only from these peers, and only its N-th entry from the right.
+      trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      trusted-hops: ${GATEWAY_TRUSTED_PROXY_HOPS:1}
+    rate-limit:
+      enabled: ${GATEWAY_RATE_LIMIT_ENABLED:true}
+      # Client blocks the per-address limits skip, such as a lab's egress address during a contest.
+      shared-networks: ${GATEWAY_RATE_LIMIT_SHARED_NETWORKS:}
+      auth:
+        capacity: ${GATEWAY_RATE_LIMIT_AUTH_CAPACITY:30}
+        refill-per-minute: ${GATEWAY_RATE_LIMIT_AUTH_PER_MINUTE:30}
+      submit:
+        capacity: ${GATEWAY_RATE_LIMIT_SUBMIT_CAPACITY:60}
+        refill-per-minute: ${GATEWAY_RATE_LIMIT_SUBMIT_PER_MINUTE:60}
+      ai-chat:
+        capacity: ${GATEWAY_RATE_LIMIT_AI_CHAT_CAPACITY:30}
+        refill-per-minute: ${GATEWAY_RATE_LIMIT_AI_CHAT_PER_MINUTE:30}
+      code-run:
+        capacity: ${GATEWAY_RATE_LIMIT_CODE_RUN_CAPACITY:30}
+        refill-per-minute: ${GATEWAY_RATE_LIMIT_CODE_RUN_PER_MINUTE:30}
+      draft:
+        capacity: ${GATEWAY_RATE_LIMIT_DRAFT_CAPACITY:10}
+        refill-per-minute: ${GATEWAY_RATE_LIMIT_DRAFT_PER_MINUTE:6}
 
 management:
   endpoints:
