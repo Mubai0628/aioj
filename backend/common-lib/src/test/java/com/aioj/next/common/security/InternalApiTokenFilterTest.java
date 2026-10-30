@@ -117,6 +117,21 @@ class InternalApiTokenFilterTest {
         assertThat(call(filter, "/api/v1/internal", null)).isEqualTo(401);
     }
 
+    @Test
+    void dotSegmentsAndPathParametersCannotHideOrRedirectAnInternalPath() throws Exception {
+        var judge = new InternalApiTokenFilter(Map.of("problem-service", credential("current", "")),
+                InternalApiAccess.judgeWorker());
+        for (String raw : new String[]{"/api/v1/x/../internal/judge/metrics", "/api/v1/internal;p=1/judge/metrics"}) {
+            assertThat(callDispatched(judge, raw, "/api/v1/internal/judge/metrics", null)).isEqualTo(401);
+            assertThat(callDispatched(judge, raw, "/api/v1/internal/judge/metrics", "current")).isEqualTo(200);
+        }
+        var problem = problem("ai", "", "judge", "");
+        assertThat(callDispatched(problem, "/api/v1/internal/testcase-packages/../ai/problems/context",
+                "/api/v1/internal/ai/problems/context", "judge")).isEqualTo(403);
+        assertThat(callDispatched(problem, "/api/v1/internal/ai/../testcase-packages/1",
+                "/api/v1/internal/testcase-packages/1", "ai")).isEqualTo(403);
+    }
+
     private static InternalApiTokenFilter problem(String ai, String aiNext, String judge, String judgeNext) {
         return new InternalApiTokenFilter(Map.of("ai-service", credential(ai, aiNext),
                 "judge-worker", credential(judge, judgeNext)), InternalApiAccess.problemService());
@@ -136,6 +151,19 @@ class InternalApiTokenFilterTest {
         var called = new AtomicBoolean();
         FilterChain chain = (req, res) -> called.set(true);
         filter.doFilter(request, response, chain);
+        assertThat(called.get()).isEqualTo(response.getStatus() == 200);
+        return response.getStatus();
+    }
+
+    /** As a servlet container hands it over: the raw URI as sent, the servlet path normalized and decoded. */
+    private static int callDispatched(InternalApiTokenFilter filter, String rawUri, String servletPath,
+                                      String token) throws Exception {
+        var request = new MockHttpServletRequest("GET", rawUri);
+        request.setServletPath(servletPath);
+        if (token != null) { request.addHeader("X-Internal-Token", token); }
+        var response = new MockHttpServletResponse();
+        var called = new AtomicBoolean();
+        filter.doFilter(request, response, (req, res) -> called.set(true));
         assertThat(called.get()).isEqualTo(response.getStatus() == 200);
         return response.getStatus();
     }

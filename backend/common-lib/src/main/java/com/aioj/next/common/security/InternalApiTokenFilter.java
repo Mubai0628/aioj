@@ -61,7 +61,7 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String path = request.getRequestURI().substring(request.getContextPath().length());
+        String path = dispatchPath(request);
         if (!segmentPrefix(path, INTERNAL_ROOT)) {
             filterChain.doFilter(request, response);
             return;
@@ -100,6 +100,18 @@ public class InternalApiTokenFilter extends OncePerRequestFilter {
         } finally {
             SecurityContextHolder.setContext(previous);
         }
+    }
+
+    /**
+     * The path the container dispatches on: decoded, without dot segments or path parameters. The raw
+     * URI would let "/api/v1/x/../internal/..." or "/api/v1/internal;p/..." reach an internal handler
+     * without being treated as internal. The raw form is only the fallback when nothing was mapped.
+     */
+    private static String dispatchPath(HttpServletRequest request) {
+        String servletPath = request.getServletPath() == null ? "" : request.getServletPath();
+        String pathInfo = request.getPathInfo() == null ? "" : request.getPathInfo();
+        String path = servletPath + pathInfo;
+        return path.isEmpty() ? request.getRequestURI().substring(request.getContextPath().length()) : path;
     }
 
     private static boolean segmentPrefix(String path, String prefix) {

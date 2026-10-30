@@ -21,7 +21,7 @@ AIOJ 同时处理不可信用户代码、身份凭据、隐藏测试、比赛题
 
 网关是浏览器入口，但最终业务授权由目标服务执行。JWT、角色和资源归属共同决定权限；内部服务令牌不能替代用户级资源检查。前端隐藏按钮不是安全控制。
 
-内部接口使用按调用方向隔离的 `X-Internal-Token`：ai → problem、judge → problem、problem → ai、problem → judge 各有独立随机令牌；ai → agent-executor 沿用执行器专用令牌。网关和 auth-service 不持有这些令牌。被调服务使用定长摘要比较来识别调用方，再按路径段前缀白名单授权；缺少或未知令牌返回 401，已识别但无权访问的前缀返回 403，未登记前缀默认拒绝。普通 JWT 不能替代内部凭据。已废弃且无调用方的 contests ai-policy HTTP 入口已移除。
+内部接口使用按调用方向隔离的 `X-Internal-Token`：ai → problem、judge → problem、problem → ai、problem → judge 各有独立随机令牌；ai → agent-executor 沿用执行器专用令牌。网关和 auth-service 不持有这些令牌。被调服务使用定长摘要比较来识别调用方，再按路径段前缀白名单授权；缺少或未知令牌返回 401，已识别但无权访问的前缀返回 403，未登记前缀默认拒绝。前缀按服务器规范化后的路径匹配，带 `..` 或 `;` 的写法不能绕开检查；没有 Spring Security 的 judge-worker 和 agent-executor 在控制器里再校验一次令牌。普通 JWT 不能替代内部凭据。已废弃且无调用方的 contests ai-policy HTTP 入口已移除。
 
 令牌只配置在需要它的服务中，旧共享 `AIOJ_INTERNAL_API_TOKEN` 不再用于应用通信。入站支持当前值和可选 `*_NEXT`，出站只用当前值；先更新被调方的 NEXT，再更新调用方，最后提升被调方当前值并清空 NEXT，每步只重启一个服务。生产使用独立的高熵随机值，不从同一共享秘密派生；缺少必需变量时生产 Compose 拒绝启动，本地空值则 fail-closed。日志只记录调用方、路径和拒绝原因，不记录凭据。
 
