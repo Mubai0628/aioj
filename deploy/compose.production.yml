@@ -371,6 +371,9 @@ services:
       AI_EMBEDDING_API_KEY: ${AI_EMBEDDING_API_KEY:-}
       AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-text-embedding-v3}
       AI_PROBLEM_DRAFT_TESTCASE_ARTIFACT_ROOT: /aioj/ai-draft-artifacts
+      # Plan S6 (T2.6): the nightly retention pass; periods are in docs/operations.md.
+      AI_RETENTION_ENABLED: ${AI_RETENTION_ENABLED:-true}
+      AI_RETENTION_DRY_RUN: ${AI_RETENTION_DRY_RUN:-false}
       AI_LEGACY_MEMORY_MIGRATION_MODE: "off"
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health
       SPRINGDOC_ENABLED: "false"

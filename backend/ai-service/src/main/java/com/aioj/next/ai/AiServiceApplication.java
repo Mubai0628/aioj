@@ -2,6 +2,7 @@ package com.aioj.next.ai;
 
 import com.aioj.next.ai.config.AiProperties;
 import com.aioj.next.ai.config.InternalApiProperties;
+import com.aioj.next.ai.domain.retention.RetentionProperties;
 import com.aioj.next.common.security.JwtProperties;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
@@ -10,7 +11,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(scanBasePackages = "com.aioj.next")
-@EnableConfigurationProperties({JwtProperties.class, AiProperties.class, InternalApiProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, AiProperties.class, InternalApiProperties.class,
+        RetentionProperties.class})
 @MapperScan("com.aioj.next.ai.persistence.mapper")
 @EnableScheduling
 public class AiServiceApplication {

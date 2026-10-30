@@ -6,7 +6,10 @@ import com.aioj.next.ai.persistence.mapper.ProblemDraftExecutionMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import tools.jackson.databind.JsonNode;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,10 +33,19 @@ public class ProblemDraftExecutionService {
 
     private final ProblemDraftExecutionMapper mapper;
     private final DraftSandboxClient sandboxClient;
+    private final MeterRegistry meters;
 
-    public ProblemDraftExecutionService(ProblemDraftExecutionMapper mapper, DraftSandboxClient sandboxClient) {
+    @Autowired
+    public ProblemDraftExecutionService(ProblemDraftExecutionMapper mapper, DraftSandboxClient sandboxClient,
+                                        ObjectProvider<MeterRegistry> meters) {
+        this(mapper, sandboxClient, meters.getIfAvailable());
+    }
+
+    ProblemDraftExecutionService(ProblemDraftExecutionMapper mapper, DraftSandboxClient sandboxClient,
+                                 MeterRegistry meters) {
         this.mapper = mapper;
         this.sandboxClient = sandboxClient;
+        this.meters = meters;
     }
 
     /**
@@ -132,10 +144,19 @@ public class ProblemDraftExecutionService {
         return response;
     }
 
+    /** Executions keep their output for 24 hours (plan S6 counts the deletions with the retention job's). */
     @Scheduled(fixedDelayString = "${aioj.ai.problem-draft.execution-cleanup-ms:3600000}")
     @Transactional
-    public void cleanupExpired() {
-        mapper.delete(new QueryWrapper<ProblemDraftExecutionEntity>().le("expires_at", LocalDateTime.now()));
+    public int cleanupExpired() {
+        int deleted = mapper.delete(new QueryWrapper<ProblemDraftExecutionEntity>().le("expires_at", LocalDateTime.now()));
+        if (meters != null && deleted > 0) {
+            try {
+                meters.counter("aioj.retention.deleted", "category", "draft_executions").increment(deleted);
+            } catch (RuntimeException ignored) {
+                // Metrics must not change the cleanup.
+            }
+        }
+        return deleted;
     }
 
     private String normalizeLanguage(String value) {

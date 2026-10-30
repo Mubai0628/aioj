@@ -70,6 +70,18 @@ aioj:
     agent-executor-uri: ${AGENT_EXECUTOR_ENDPOINT:http://localhost:8205}
     agent-executor-token: ${AGENT_EXECUTOR_INTERNAL_TOKEN:}
     agent-executor-max-memory-limit-kb: ${AGENT_EXECUTOR_MAX_MEMORY_LIMIT_KB:262144}
+    # Plan S6 (T2.6): off unless the deployment turns it on, so a local stack keeps its data.
+    retention:
+      enabled: ${AI_RETENTION_ENABLED:false}
+      dry-run: ${AI_RETENTION_DRY_RUN:false}
+      cron: ${AI_RETENTION_CRON:0 30 3 * * *}
+      deleted-conversations: ${AI_RETENTION_DELETED_CONVERSATIONS:30d}
+      contest-conversations: ${AI_RETENTION_CONTEST_CONVERSATIONS:365d}
+      run-traces: ${AI_RETENTION_RUN_TRACES:90d}
+      deleted-drafts: ${AI_RETENTION_DELETED_DRAFTS:30d}
+      retired-artifacts: ${AI_RETENTION_RETIRED_ARTIFACTS:30d}
+      batch-size: ${AI_RETENTION_BATCH_SIZE:500}
+      max-run-time: ${AI_RETENTION_MAX_RUN_TIME:10m}
     problem-draft:
       max-repair-attempts: ${AI_PROBLEM_DRAFT_MAX_REPAIR_ATTEMPTS:5}
       max-agent-steps: ${AI_PROBLEM_DRAFT_MAX_AGENT_STEPS:20}

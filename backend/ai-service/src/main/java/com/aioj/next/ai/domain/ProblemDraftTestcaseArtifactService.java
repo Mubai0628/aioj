@@ -10,6 +10,7 @@ import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpHeaders;
@@ -33,6 +34,8 @@ public class ProblemDraftTestcaseArtifactService {
     public static final String STATUS_READY = "READY";
     public static final String STATUS_SUPERSEDED = "SUPERSEDED";
     public static final String STATUS_WRITING = "WRITING";
+    /** Retention removed the file; the row stays as metadata (plan S6). */
+    public static final String STATUS_PURGED = "PURGED";
 
     private final ProblemDraftTestcaseArtifactMapper mapper;
     private final ObjectMapper objectMapper;
@@ -209,6 +212,25 @@ public class ProblemDraftTestcaseArtifactService {
             throw new DomainException(ErrorCode.NOT_FOUND, "Problem draft testcase artifact file is missing");
         }
         return path;
+    }
+
+    /**
+     * Retention (plan S6): the package file goes first, then the row is marked; a failed delete leaves
+     * the row as it was for the next pass. A path outside the storage root is never touched.
+     */
+    public void purgeFile(long artifactId, String storagePath) throws IOException {
+        if (StringUtils.hasText(storagePath)) {
+            Path path = storageRoot.resolve(storagePath).normalize();
+            if (path.toAbsolutePath().normalize().startsWith(storageRoot)) {
+                Files.deleteIfExists(path);
+            }
+        }
+        mapper.update(new ProblemDraftTestcaseArtifactEntity(),
+                new UpdateWrapper<ProblemDraftTestcaseArtifactEntity>()
+                        .eq("id", artifactId)
+                        .set("status", STATUS_PURGED)
+                        .set("storage_path", "")
+                        .set("updated_at", LocalDateTime.now()));
     }
 
     public void markImported(Long artifactId, Long problemId, Long testcasePackageId) {

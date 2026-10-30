@@ -77,6 +77,14 @@ Whether gVisor (`runsc`) can host go-judge and so remove `privileged` has not be
 - Code, generators, packages, and self-test runs reach agent-sandbox only through agent-executor, never the judge Sandbox; hidden cases return aggregate results to the model, and general tool audit excludes raw source and process output.
 - Manual ZIPs require SHA, manifest, path, symlink, duplicate-entry, and expanded-size checks. Extraction counts the bytes actually written against per-entry and whole-package limits, which is what stops a decompression bomb; packages are no longer refused by compression ratio, because real max tests (long runs of equal values) compress far beyond any fixed threshold; imports without full-package execution acceptance are explicitly `MANUAL_UNVERIFIED`.
 
+## Data retention
+
+- The AI service cleans up once a night (on in production, off locally by default): a conversation the student deleted goes 30 days later, with its messages, turns, and run traces; one with contest records goes after 365 days, so deleting it cannot erase AI use during a contest.
+- Tool calls, context manifests, and run records of student turns are kept 90 days; a draft workspace's runs follow the draft and go 30 days after it is deleted.
+- Draft testcase package files: the current one stays; replaced, failed, and deleted drafts' files go after 30 days, and their rows stay as metadata. Draft execution output is kept 24 hours.
+- Contest AI guard records, operation audit, and judge audit are not cleaned up. A pass logs only counts per category; every period and the switch are environment variables.
+- Audit APIs return ids as strings, and integers of 16 or more digits inside their records become strings too, so a browser never drops the last digits of a snowflake id.
+
 ## Secrets and delivery
 
 The four direction variables are `AIOJ_INTERNAL_TOKEN_AI_TO_PROBLEM`, `AIOJ_INTERNAL_TOKEN_JUDGE_TO_PROBLEM`, `AIOJ_INTERNAL_TOKEN_PROBLEM_TO_AI`, and `AIOJ_INTERNAL_TOKEN_PROBLEM_TO_JUDGE`, with optional target-only `_NEXT` values. The executor uses `AGENT_EXECUTOR_INTERNAL_TOKEN` and inbound-only `_NEXT`. Generate each production value independently with an operating-system CSPRNG (at least 32 bytes) and deliver it directly to restricted secret storage. Restart one service at a time in this order: target NEXT → caller current → target promotes current and clears NEXT; never switch both ends simultaneously.
