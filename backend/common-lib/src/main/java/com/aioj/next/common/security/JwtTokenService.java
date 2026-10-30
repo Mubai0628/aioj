@@ -20,6 +20,7 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 public class JwtTokenService {
     public static final String TOKEN_TYPE_ACCESS = "access";
@@ -79,7 +80,10 @@ public class JwtTokenService {
     private String createToken(Long userId, String account, Collection<Role> roles, String tokenType, long ttlSeconds,
                                boolean passwordResetRequired) {
         Instant now = Instant.now();
+        // A random id: issuedAt has whole seconds, so two logins in one second signed byte-identical
+        // refresh tokens and the second hit refresh_tokens.token_hash's unique key (T2.2 load test).
         var builder = Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .issuer(properties.getIssuer())
                 .subject(String.valueOf(userId))
                 .claim("account", account)
