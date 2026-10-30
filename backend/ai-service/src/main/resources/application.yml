@@ -29,6 +29,10 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+      # Limits and caches let requests through when Redis is down (T2.2); without a short timeout each
+      # call first waited out Lettuce's 60 s default, holding a request thread the whole time.
+      timeout: ${REDIS_TIMEOUT:2s}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
   flyway:
     enabled: ${FLYWAY_ENABLED:false}
     clean-disabled: true
