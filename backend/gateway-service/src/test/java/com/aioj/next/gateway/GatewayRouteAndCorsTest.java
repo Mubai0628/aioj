@@ -29,6 +29,17 @@ class GatewayRouteAndCorsTest {
     @Autowired
     private Environment environment;
 
+    @Autowired
+    private org.springframework.cloud.gateway.config.GatewayProperties gatewayProperties;
+
+    /** T2.5: the gateway and the service both answer with the trace id; the browser gets it once. */
+    @Test
+    void theTraceHeaderIsSentOnce() {
+        assertTrue(gatewayProperties.getDefaultFilters().stream().anyMatch(filter ->
+                        "DedupeResponseHeader".equals(filter.getName()) && filter.getArgs().containsValue("X-Trace-Id")),
+                "DedupeResponseHeader=X-Trace-Id missing from the default filters");
+    }
+
     @Test
     void routeDefinitionsCoverAllBackendServices() {
         List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions().collectList().block();

@@ -24,6 +24,8 @@ spring:
             connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:10000}
           default-filters:
             - PreserveHostHeader
+            # The gateway and the service behind it both answer with the trace id; send it once (T2.5).
+            - DedupeResponseHeader=X-Trace-Id
           globalcors:
             cors-configurations:
               "[/**]":
