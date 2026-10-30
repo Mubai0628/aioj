@@ -224,6 +224,31 @@ class TurnCoordinatorTest {
         verify(agentRuntime, never()).run(any());
     }
 
+    /**
+     * A tampered request cannot step around a NO_AI contest: the participation check runs on the
+     * authenticated user id only, whatever contest, run or problem the request body claims.
+     */
+    @Test
+    void aNoAiParticipantIsRefusedWhateverTheRequestClaimsBeforeAnyMessageOrModelCall() {
+        AiConversationEntity conversation = conversation();
+        when(conversationService.resolveForWrite(eq(USER_ID), any(AiChatRequest.class))).thenReturn(conversation);
+        when(turnService.beginTurn(eq(CONVERSATION_ID), eq("client-1")))
+                .thenReturn(new AiTurnService.BeginTurnOutcome(turn("t-1", AiTurnService.STATUS_RECEIVED), true));
+        when(participationService.evaluate(eq(USER_ID), anyString(), anyString())).thenThrow(
+                new com.aioj.next.common.error.DomainException(com.aioj.next.common.error.ErrorCode.FORBIDDEN,
+                        com.aioj.next.ai.agent.policy.ContestParticipationService.AI_DISABLED_MESSAGE));
+        AiChatRequest practiceClaim = new AiChatRequest(CONVERSATION_ID, 2060209062558281729L, "这题怎么做", null,
+                null, null, null, "client-1", null, new AiChatRequest.ContestContext(1L, 2L, 3L), null);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> coordinator.start(USER_ID, practiceClaim))
+                .isInstanceOfSatisfying(com.aioj.next.common.error.DomainException.class, ex ->
+                        assertThat(ex.errorCode()).isEqualTo(com.aioj.next.common.error.ErrorCode.FORBIDDEN));
+
+        verify(participationService).evaluate(eq(USER_ID), eq("t-1"), eq(CONVERSATION_ID));
+        verify(conversationService, never()).appendMessage(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(agentRuntime, never()).run(any());
+    }
+
     @Test
     void participantSnapshotProjectsContestPolicyIntoAgentRunRequest() {
         AiConversationEntity conversation = conversation();
@@ -498,7 +523,8 @@ class TurnCoordinatorTest {
         coordinator.setContestAssistanceTelemetryService(telemetry);
         com.aioj.next.contract.contest.RunningContestParticipation attributed =
                 new com.aioj.next.contract.contest.RunningContestParticipation(
-                        5501L, 7701L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60));
+                        5501L, 7701L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60),
+                        com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT);
         when(participationService.evaluate(anyLong(), anyString(), anyString()))
                 .thenReturn(new com.aioj.next.ai.agent.policy.ContestParticipationService.ParticipationView(
                         com.aioj.next.ai.agent.policy.ParticipantStatus.PARTICIPANT_ACTIVE, List.of(attributed), attributed));
@@ -890,7 +916,8 @@ class TurnCoordinatorTest {
             List<com.aioj.next.contract.contest.RunningContestProblemStatement> statements) {
         List<com.aioj.next.contract.contest.RunningContestParticipation> runs = runIds.stream()
                 .map(runId -> new com.aioj.next.contract.contest.RunningContestParticipation(
-                        5501L, runId, Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600)))
+                        5501L, runId, Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600),
+                        com.aioj.next.contract.contest.ContestAiPolicyMode.DEFAULT))
                 .toList();
         return new PolicySnapshotService.PolicyRecheck(changed,
                 new com.aioj.next.ai.agent.policy.ContestParticipationService.ParticipationView(

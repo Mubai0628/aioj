@@ -223,6 +223,34 @@ class ContestProblemVisibilityServiceTest {
         assertEquals(401L, participations.get(0).contestRunId());
         assertEquals(withinGrace.getStartAt(), participations.get(0).startAt());
         assertEquals(withinGrace.getEndAt(), participations.get(0).endAt());
+        assertEquals(ContestAiPolicyMode.DEFAULT, participations.get(0).aiPolicyMode());
+    }
+
+    @Test
+    void runningParticipationsCarryTheRunsAiPolicySnapshot() {
+        Instant now = Instant.now();
+        ContestRunEntity noAi = run(401L, 301L, "No AI Run", now.minusSeconds(600), now.plusSeconds(3600),
+                ContestAiPolicyMode.NO_AI, null);
+        ContestRunEntity legacy = run(402L, 302L, "Legacy Run", now.minusSeconds(600), now.plusSeconds(3600),
+                null, null);
+        when(runMapper.selectList(any())).thenReturn(List.of(noAi, legacy));
+        ContestParticipantEntity first = new ContestParticipantEntity();
+        first.setContestRunId(401L);
+        first.setUserId(9L);
+        first.setStatus(ContestParticipantStatus.ACTIVE);
+        ContestParticipantEntity second = new ContestParticipantEntity();
+        second.setContestRunId(402L);
+        second.setUserId(9L);
+        second.setStatus(ContestParticipantStatus.ACTIVE);
+        when(participantMapper.selectList(any())).thenReturn(List.of(first, second));
+
+        List<RunningContestParticipation> participations = service.runningParticipations(9L, now);
+
+        assertEquals(ContestAiPolicyMode.NO_AI, participations.stream()
+                .filter(participation -> participation.contestRunId() == 401L).findFirst().orElseThrow().aiPolicyMode());
+        assertEquals(ContestAiPolicyMode.DEFAULT, participations.stream()
+                .filter(participation -> participation.contestRunId() == 402L).findFirst().orElseThrow().aiPolicyMode(),
+                "a run published before snapshots counts as DEFAULT");
     }
 
     @Test

@@ -153,10 +153,27 @@ class ContestServiceTest {
         when(contestProblemMapper.selectCount(any())).thenReturn(0L);
 
         var response = service.update(301L, new ContestUpdateRequest(null, null, null, null, null,
-                com.aioj.next.contract.contest.ContestAiPolicyMode.DISABLED, "practice run"));
+                com.aioj.next.contract.contest.ContestAiPolicyMode.NO_AI, "practice run"));
 
-        assertEquals(com.aioj.next.contract.contest.ContestAiPolicyMode.DISABLED, response.aiPolicyMode());
+        assertEquals(com.aioj.next.contract.contest.ContestAiPolicyMode.NO_AI, response.aiPolicyMode());
         assertEquals("practice run", response.aiPolicyNotes());
+    }
+
+    /** "No interception" is retired (2026-10-30): every contest keeps its participants from complete code. */
+    @Test
+    void blueprintsCannotChooseTheRetiredDisabledAiPolicy() {
+        authenticate(7L, Role.TEACHER);
+        when(contestMapper.selectById(301L)).thenReturn(contest(301L, 7L, ContestStatus.DRAFT));
+
+        DomainException created = assertThrows(DomainException.class, () -> service.create(new ContestCreateRequest(
+                "Spring Invitational", "Practice", ContestMode.ACM, null, null,
+                com.aioj.next.contract.contest.ContestAiPolicyMode.DISABLED, null)));
+        DomainException updated = assertThrows(DomainException.class, () -> service.update(301L, new ContestUpdateRequest(
+                null, null, null, null, null, com.aioj.next.contract.contest.ContestAiPolicyMode.DISABLED, null)));
+
+        assertTrue(created.getMessage().contains("retired"));
+        assertTrue(updated.getMessage().contains("retired"));
+        verify(contestMapper, never()).insert(any(ContestEntity.class));
     }
 
     @Test

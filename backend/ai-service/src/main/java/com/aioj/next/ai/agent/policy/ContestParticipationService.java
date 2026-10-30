@@ -3,6 +3,7 @@ package com.aioj.next.ai.agent.policy;
 import com.aioj.next.ai.domain.ProblemServiceClient;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -25,6 +26,10 @@ import java.util.List;
  * <p>Fail-closed (frozen Q5): when the participation lookup itself fails the
  * turn is refused with SERVICE_UNAVAILABLE and audited with degraded=true —
  * we never silently treat an unverifiable user as a non-participant.</p>
+ *
+ * <p>A participant of a run whose AI policy is NO_AI gets no AI assistance at
+ * all: the turn is refused here with FORBIDDEN, before any model call, and the
+ * pre-return recheck refuses the same way when such a run starts mid-turn.</p>
  */
 @Service
 public class ContestParticipationService {
@@ -34,6 +39,9 @@ public class ContestParticipationService {
     public static final String REASON_NON_PARTICIPANT = "non_participant";
     public static final String REASON_PARTICIPANT = "participant";
     public static final String REASON_LOOKUP_FAILED = "participation_lookup_failed";
+    public static final String REASON_AI_DISABLED = "contest_ai_disabled";
+    /** Mapped to the user-facing key ai.contestAiDisabled. */
+    public static final String AI_DISABLED_MESSAGE = "AI assistance is disabled for participants during this contest";
 
     private final ProblemServiceClient problemServiceClient;
     private final GuardDecisionRecorder recorder;
@@ -100,6 +108,15 @@ public class ContestParticipationService {
         RunningContestParticipation attributed = attribute(participations);
         boolean inGrace = attributed.endAt() != null && Instant.now().isAfter(attributed.endAt());
         ParticipantStatus status = inGrace ? ParticipantStatus.PARTICIPANT_GRACE : ParticipantStatus.PARTICIPANT_ACTIVE;
+        RunningContestParticipation noAi = participations.stream()
+                .filter(participation -> participation.aiPolicyMode() == ContestAiPolicyMode.NO_AI)
+                .findFirst().orElse(null);
+        if (noAi != null) {
+            recorder.record(turnId, userId, conversationId,
+                    GuardLayer.L1_PARTICIPANT, GuardDecision.BLOCK,
+                    REASON_AI_DISABLED, markRecheck(detail(status, participations, noAi), fresh), false, latencyMs);
+            throw new DomainException(ErrorCode.FORBIDDEN, AI_DISABLED_MESSAGE);
+        }
         recorder.record(turnId, userId, conversationId,
                 GuardLayer.L1_PARTICIPANT, GuardDecision.CONSTRAIN,
                 REASON_PARTICIPANT, markRecheck(detail(status, participations, attributed), fresh), false, latencyMs);

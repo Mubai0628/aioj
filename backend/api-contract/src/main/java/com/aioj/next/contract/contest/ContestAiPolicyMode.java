@@ -10,11 +10,29 @@ package com.aioj.next.contract.contest;
  *       guidance only (no complete submittable code).</li>
  *   <li>STRICT: any message materially referencing a problem of this run is
  *       refused, regardless of problem visibility.</li>
- *   <li>DISABLED: problems of this run are excluded from AI interception.</li>
+ *   <li>NO_AI: participants of this run get no AI assistance at all while the
+ *       run's guard window is open, whatever they ask.</li>
+ *   <li>DISABLED: problems of this run are excluded from AI interception.
+ *       Retired for blueprints (2026-10-30); it remains only so that runs
+ *       published earlier keep reading their snapshot.</li>
  * </ul>
  */
 public enum ContestAiPolicyMode {
     DEFAULT,
     STRICT,
-    DISABLED
+    DISABLED,
+    NO_AI;
+
+    /**
+     * Whether any question materially about one of the run's problems is refused, from anyone. NO_AI
+     * includes STRICT, so a second, non-participant account gets nothing about the run's problems either.
+     */
+    public boolean refusesProblemQuestions() {
+        return this == STRICT || this == NO_AI;
+    }
+
+    /** The string form of {@link #refusesProblemQuestions()}, for guard records that carry the mode as text. */
+    public static boolean refusesProblemQuestions(String mode) {
+        return STRICT.name().equals(mode) || NO_AI.name().equals(mode);
+    }
 }

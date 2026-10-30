@@ -153,7 +153,8 @@ public class ContestService {
         contest.setFreezeAt(null);
         contest.setPenaltyMinutes(normalizePenaltyMinutes(request.penaltyMinutes()));
         contest.setCePenalty(Boolean.TRUE.equals(request.cePenalty()));
-        contest.setAiPolicyMode(request.aiPolicyMode() == null ? ContestAiPolicyMode.DEFAULT : request.aiPolicyMode());
+        contest.setAiPolicyMode(request.aiPolicyMode() == null ? ContestAiPolicyMode.DEFAULT
+                : selectableAiPolicyMode(request.aiPolicyMode()));
         contest.setAiPolicyNotes(normalizeDescription(request.aiPolicyNotes()));
         contest.setCreatedAt(now);
         contest.setUpdatedAt(now);
@@ -197,7 +198,7 @@ public class ContestService {
             contest.setCePenalty(request.cePenalty());
         }
         if (request.aiPolicyMode() != null) {
-            contest.setAiPolicyMode(request.aiPolicyMode());
+            contest.setAiPolicyMode(selectableAiPolicyMode(request.aiPolicyMode()));
         }
         if (request.aiPolicyNotes() != null) {
             contest.setAiPolicyNotes(normalizeDescription(request.aiPolicyNotes()));
@@ -762,6 +763,14 @@ public class ContestService {
                 contest.getAiPolicyNotes() == null ? "" : contest.getAiPolicyNotes())) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Published contest only allows description updates");
         }
+    }
+
+    /** Every contest keeps its participants from getting complete code, so "no interception" is retired. */
+    private ContestAiPolicyMode selectableAiPolicyMode(ContestAiPolicyMode mode) {
+        if (mode == ContestAiPolicyMode.DISABLED) {
+            throw new DomainException(ErrorCode.BAD_REQUEST, "The DISABLED AI policy is retired; choose DEFAULT, STRICT or NO_AI");
+        }
+        return mode;
     }
 
     private ContestAiPolicyMode effectiveAiPolicyMode(ContestEntity contest) {

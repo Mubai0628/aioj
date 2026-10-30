@@ -91,7 +91,8 @@ const PLAGIARISM_JOBS_PAGE_SIZE = 20;
 const RUN_KINDS: ContestRunKind[] = ["FORMAL", "SIMULATION", "PRACTICE", "REPLAY"];
 const REGISTRATION_ACCESSES: ContestRegistrationAccess[] = ["PUBLIC", "GROUPS", "INVITE_ONLY"];
 const REGISTRATION_STATUSES: Array<ContestRegistrationStatus | ""> = ["", "PENDING", "INVITED", "APPROVED", "REJECTED", "DECLINED", "CANCELLED"];
-const AI_POLICY_MODES: ContestAiPolicyMode[] = ["DEFAULT", "STRICT", "DISABLED"];
+// "DISABLED" (no interception) is retired; runs published with it still show its label.
+const AI_POLICY_MODES: ContestAiPolicyMode[] = ["DEFAULT", "STRICT", "NO_AI"];
 
 function isEligibleAiOperationRun(run: ContestRunResponse) {
   return run.status === "ENDED" && !run.deletedAt;

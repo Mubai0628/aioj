@@ -275,9 +275,9 @@ class PolicySnapshotServiceTest {
                 List.of(problem(1001L, ProblemVisibility.PUBLIC, ContestAiPolicyMode.DEFAULT),
                         problem(1004L, ProblemVisibility.PUBLIC, ContestAiPolicyMode.DISABLED)));
         RunningContestParticipation runOne = new RunningContestParticipation(
-                5501L, 7701L, Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600));
+                5501L, 7701L, Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600), ContestAiPolicyMode.DEFAULT);
         RunningContestParticipation runTwo = new RunningContestParticipation(
-                5502L, 7702L, Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600));
+                5502L, 7702L, Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600), ContestAiPolicyMode.DEFAULT);
         when(participationService.evaluateFresh(7L, "turn-r5", "conv-1"))
                 .thenReturn(new ContestParticipationService.ParticipationView(
                         ParticipantStatus.PARTICIPANT_ACTIVE, List.of(runTwo, runOne), runTwo));
@@ -343,7 +343,7 @@ class PolicySnapshotServiceTest {
 
     private ContestParticipationService.ParticipationView participation(ParticipantStatus status) {
         RunningContestParticipation run = new RunningContestParticipation(
-                5501L, 7701L, Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600));
+                5501L, 7701L, Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600), ContestAiPolicyMode.DEFAULT);
         return new ContestParticipationService.ParticipationView(status, List.of(run), run);
     }
 

@@ -306,7 +306,7 @@ public class PolicySnapshotService {
     }
 
     private String assistanceOf(RunningContestProblemStatement problem) {
-        if (problem.aiPolicyMode() == ContestAiPolicyMode.STRICT) {
+        if (problem.aiPolicyMode() != null && problem.aiPolicyMode().refusesProblemQuestions()) {
             return ASSISTANCE_DENY;
         }
         if (problem.aiPolicyMode() == ContestAiPolicyMode.DISABLED) {
@@ -317,8 +317,8 @@ public class PolicySnapshotService {
 
     private String ruleOf(RunningContestProblemStatement problem) {
         return switch (assistanceOf(problem)) {
-            case ASSISTANCE_DENY -> problem.aiPolicyMode() == ContestAiPolicyMode.STRICT
-                    ? "refuse any question materially about this problem (STRICT run policy)"
+            case ASSISTANCE_DENY -> problem.aiPolicyMode() != null && problem.aiPolicyMode().refusesProblemQuestions()
+                    ? "refuse any question materially about this problem (" + problem.aiPolicyMode() + " run policy)"
                     : "private contest problem: refuse to discuss its content, solution, or code; decline politely";
             case ASSISTANCE_HINT_ONLY ->
                     "public contest problem: hints and idea-level guidance only; never output complete submittable code";

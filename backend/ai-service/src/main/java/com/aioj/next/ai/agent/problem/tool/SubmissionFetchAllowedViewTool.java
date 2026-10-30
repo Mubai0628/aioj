@@ -43,7 +43,7 @@ import java.util.Set;
  * <p>Contest safety: the endpoint already strips code for contest-active
  * submissions (codeAllowedToModel=false). Additionally, when the caller is a
  * participant and the submission's problem is DENY-assistance in the current
- * contest policy view (PRIVATE or STRICT), the embedded problem statement is
+ * contest policy view (PRIVATE, STRICT or NO_AI), the embedded problem statement is
  * withheld — a submission view must not become a back door to a private
  * contest statement the problem tool would refuse.</p>
  */

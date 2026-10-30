@@ -49,7 +49,7 @@ final class ProblemToolSupport {
 
     /** Assistance verdict for one running-contest problem; same precedence as PolicySnapshotService. */
     static String assistanceOf(ContestPolicyView.ContestProblemPolicy problem) {
-        if (problem.aiPolicyMode() == ContestAiPolicyMode.STRICT) {
+        if (problem.aiPolicyMode() != null && problem.aiPolicyMode().refusesProblemQuestions()) {
             return ASSISTANCE_DENY;
         }
         if (problem.aiPolicyMode() == ContestAiPolicyMode.DISABLED) {

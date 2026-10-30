@@ -1,5 +1,7 @@
 package com.aioj.next.ai.agent.guard;
 
+import com.aioj.next.contract.contest.ContestAiPolicyMode;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,8 +24,8 @@ public final class ContestGuardMatchText {
 
     /** Rule text shared by both L3 layers; mirrors the L2 snapshot rule lines. */
     public static String ruleOf(String visibility, String aiPolicyMode) {
-        if ("STRICT".equals(aiPolicyMode)) {
-            return "refuse any question materially about this problem (STRICT run policy)";
+        if (ContestAiPolicyMode.refusesProblemQuestions(aiPolicyMode)) {
+            return "refuse any question materially about this problem (" + aiPolicyMode + " run policy)";
         }
         if ("PRIVATE".equals(visibility)) {
             return "private contest problem: refuse to discuss its content, solution, or code; decline politely";

@@ -10,6 +10,8 @@ public record RunningContestParticipation(
         /** Run window start; lets consumers mark guard decisions inside the grace window. */
         java.time.Instant startAt,
         /** Run window end; the guard stays effective until endAt plus the configured grace. */
-        java.time.Instant endAt
+        java.time.Instant endAt,
+        /** The run's AI policy snapshot; NO_AI means the participant gets no AI assistance at all. */
+        ContestAiPolicyMode aiPolicyMode
 ) {
 }

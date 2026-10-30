@@ -282,7 +282,7 @@ public class ContestProblemVisibilityService {
                 .map(participation -> {
                     ContestRunEntity run = runsById.get(participation.getContestRunId());
                     return run == null ? null : new RunningContestParticipation(
-                            run.getContestId(), run.getId(), run.getStartAt(), run.getEndAt());
+                            run.getContestId(), run.getId(), run.getStartAt(), run.getEndAt(), effectiveAiPolicyMode(run));
                 })
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparingInt((RunningContestParticipation participation) -> inProgressRank(participation.endAt(), now))
@@ -402,6 +402,7 @@ public class ContestProblemVisibilityService {
 
     private int severity(ContestAiPolicyMode mode) {
         return switch (mode) {
+            case NO_AI -> 4;
             case STRICT -> 3;
             case DEFAULT -> 2;
             case DISABLED -> 1;

@@ -15,10 +15,13 @@ import { readableJudgeMessage } from "../lib/readableError";
 export function SubmissionDetailDialog({
   submissionId,
   problemTitle,
+  contestAiOff = false,
   onOpenChange
 }: {
   submissionId: EntityId | null;
   problemTitle?: string | null;
+  /** A NO_AI contest is running for this participant: no AI analysis until it ends. */
+  contestAiOff?: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const { t, locale } = useI18n();
@@ -57,7 +60,10 @@ export function SubmissionDetailDialog({
   }, [detailQuery.data?.status, queryClient]);
 
   const submission = detailQuery.data;
-  const aiAnalysisUnavailable = submission ? isLiveSubmissionStatus(submission.status) : false;
+  const aiAnalysisUnavailable = contestAiOff || (submission ? isLiveSubmissionStatus(submission.status) : false);
+  const aiAnalysisUnavailableNote = contestAiOff
+    ? t("submissions.analyzeWithAiContestOff")
+    : t("submissions.analyzeWithAiUnavailable");
   const submissionProblemTitle = problemTitle?.trim() || fallbackProblemTitleQuery.data?.title?.trim() || null;
 
   return (
@@ -83,14 +89,14 @@ export function SubmissionDetailDialog({
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-blue-950">{t("submissions.analyzeWithAiTitle")}</h3>
                     <p className="mt-1 text-xs leading-5 text-blue-900">
-                      {aiAnalysisUnavailable ? t("submissions.analyzeWithAiUnavailable") : t("submissions.analyzeWithAiCopy")}
+                      {aiAnalysisUnavailable ? aiAnalysisUnavailableNote : t("submissions.analyzeWithAiCopy")}
                     </p>
                   </div>
                   <Button
                     type="button"
                     size="sm"
                     disabled={aiAnalysisUnavailable}
-                    title={aiAnalysisUnavailable ? t("submissions.analyzeWithAiUnavailable") : undefined}
+                    title={aiAnalysisUnavailable ? aiAnalysisUnavailableNote : undefined}
                     onClick={() => {
                       if (!aiAnalysisUnavailable) setAiOpen(true);
                     }}

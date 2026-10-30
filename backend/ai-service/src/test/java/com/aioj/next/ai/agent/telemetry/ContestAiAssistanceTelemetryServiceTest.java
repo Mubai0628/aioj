@@ -57,7 +57,7 @@ class ContestAiAssistanceTelemetryServiceTest {
         AiTurnEntity turn = turn("turn-1", LocalDateTime.now());
         AiConversationEntity conversation = conversation();
         RunningContestParticipation participation = new RunningContestParticipation(
-                9L, 3L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60));
+                9L, 3L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60), ContestAiPolicyMode.DEFAULT);
         when(turnMapper.insert(any(AiContestAssistanceTurnEntity.class))).thenAnswer(invocation -> {
             invocation.getArgument(0, AiContestAssistanceTurnEntity.class).setId(77L);
             return 1;
@@ -88,7 +88,7 @@ class ContestAiAssistanceTelemetryServiceTest {
 
         ContestAiAssistanceTelemetryService.TrackingContext context = service.begin(
                 turn("turn-1", LocalDateTime.now()), conversation(),
-                new RunningContestParticipation(9L, 3L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60)));
+                new RunningContestParticipation(9L, 3L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60), ContestAiPolicyMode.DEFAULT));
 
         assertThat(context).isEqualTo(new ContestAiAssistanceTelemetryService.TrackingContext(88L, "turn-1"));
         verify(usageMapper, never()).insert(any(AiContestAssistanceModelUsageEntity.class));
@@ -231,7 +231,7 @@ class ContestAiAssistanceTelemetryServiceTest {
     @Test
     void clientProblemHintBecomesIntentCandidateOnlyAfterServerSnapshotMatchInAttributedRun() {
         RunningContestParticipation attributed = new RunningContestParticipation(
-                9L, 3L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60));
+                9L, 3L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60), ContestAiPolicyMode.DEFAULT);
         RunningContestProblemStatement publicProblem = new RunningContestProblemStatement(
                 101L, "server-only statement", 9L, 3L, 301L, ProblemVisibility.PUBLIC,
                 ContestAiPolicyMode.DEFAULT, null,
@@ -255,7 +255,7 @@ class ContestAiAssistanceTelemetryServiceTest {
     @Test
     void directMessageAndRuntimeFingerprintCandidatesKeepTheirEvidenceSourcesSeparate() {
         RunningContestParticipation attributed = new RunningContestParticipation(
-                9L, 3L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60));
+                9L, 3L, Instant.now().minusSeconds(60), Instant.now().plusSeconds(60), ContestAiPolicyMode.DEFAULT);
         GuardVerdict privateMessageMatch = GuardVerdict.constrain(List.of(
                 new GuardDecisionRecorder.MatchedProblemRef(101L, 9L, 3L, 301L, "PRIVATE", "DEFAULT")), 1.0);
         GuardVerdict publicRuntimeMatch = GuardVerdict.constrain(List.of(

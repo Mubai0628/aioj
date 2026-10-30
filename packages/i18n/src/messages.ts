@@ -98,6 +98,7 @@ export const messages = {
       '41300': '上传内容超出大小限制。',
       '42900': '请求过于频繁，请稍后再试。',
       'ai.contestProblemAssistDisabled': '比赛时不可询问未公开赛题。',
+      'ai.contestAiDisabled': '本场比赛禁用 AI 辅助，比赛结束后可以继续使用。',
       'ai.contestProblemLeakBlocked': '你的提问与正在进行比赛的题目内容相似，比赛期间不能通过 AI 讨论该题目。',
       'ai.contestPublicCodeBlocked': '比赛进行中，不能在比赛辅助之外向 AI 索要该题的完整答案代码，可以询问思路、复杂度、边界情况或调试方向。',
       '50000': '服务器内部错误，请稍后再试。',
@@ -1408,6 +1409,7 @@ export const messages = {
       analyzeWithAi: 'AI 分析此提交',
       analyzeWithAiTitle: 'AI 提交分析',
       analyzeWithAiUnavailable: '提交还在评测中，进入终态后再分析。',
+      analyzeWithAiContestOff: '本场比赛禁用 AI 辅助，比赛结束后可以用 AI 分析这次提交。',
       analyzeWithAiCopy: 'AI 会基于服务器解析的题目、评测状态、用例摘要和允许的源码范围给出调试方向。',
       aiAnalysisPrompt: '请分析这次提交的评测结果。请先说明提交状态和关键评测信息，再给出可能原因、优先排查点、反例构造方向和下一步修改建议。',
       aiAcceptedAnalysisPrompt: '这次提交已经通过。请帮我复盘它为什么能通过：先概括核心思路和复杂度，再指出这份实现中值得保留的关键点、可能还能优化的可读性或鲁棒性细节，以及后续遇到同类题时可以复用的经验。',
@@ -2079,7 +2081,8 @@ export const messages = {
       aiPolicyMode: {
         DEFAULT: '默认：私有题拒答，公开题仅给思路',
         STRICT: '严格：命中赛题即拒答',
-        DISABLED: '不拦截：本比赛不参与 AI 拦截'
+        NO_AI: '禁用 AI 辅助：参赛者比赛期间不能使用 AI 辅助（含思路）',
+        DISABLED: '不拦截（已停用）：本比赛不参与 AI 拦截'
       },
       aiPolicyNotesLabel: '自定义规则说明',
       aiPolicyNotesPlaceholder: '可选，随策略注入 AI 提示词，最多 2000 字',
@@ -2230,6 +2233,7 @@ export const messages = {
         submissions: '提交记录'
       },
       lockedTabTitle: '暂不可查看',
+      aiDisabledNote: '本场比赛禁用 AI 辅助',
       lockedTabDescription: '当前阶段或报名状态不允许查看该内容。',
       runLockedBeforeStart: '比赛尚未开始。开赛前只能查看时间、报名信息和规则说明，题目、提交和榜单会在开始后开放。',
       runAccessRestricted: '你还没有获得这次运行的参赛资格，不能查看题目、提交和榜单。',
@@ -3625,6 +3629,7 @@ export const messages = {
       '41300': 'Upload exceeds the size limit.',
       '42900': 'Too many requests. Please try again later.',
       'ai.contestProblemAssistDisabled': 'Unpublished contest problems cannot be discussed with AI during the contest.',
+      'ai.contestAiDisabled': 'AI assistance is turned off for participants during this contest. You can use it again after the contest ends.',
       'ai.contestProblemLeakBlocked': 'Your question appears to reference a problem from a running contest. Discussing it through AI is not allowed during the contest.',
       'ai.contestPublicCodeBlocked': 'During an active contest, complete solution code for this problem cannot be requested outside the contest assistance page. Ask for ideas, complexity, edge cases, or debugging direction instead.',
       '50000': 'Internal server error. Please retry later.',
@@ -4935,6 +4940,7 @@ export const messages = {
       analyzeWithAi: 'Analyze with AI',
       analyzeWithAiTitle: 'AI submission analysis',
       analyzeWithAiUnavailable: 'This submission is still being judged. Analyze it after it reaches a final state.',
+      analyzeWithAiContestOff: 'AI assistance is off during this contest. You can analyze this submission with AI after it ends.',
       analyzeWithAiCopy: 'AI will use server-resolved problem context, judge status, case summaries, and the allowed code policy.',
       aiAnalysisPrompt: 'Analyze this submission result. Start with the status and key judge clues, then give likely causes, debugging priorities, counterexample ideas, and next steps.',
       aiAcceptedAnalysisPrompt: 'This submission was accepted. Please review why it passed: summarize the core idea and complexity, point out the implementation details worth keeping, note any readability or robustness improvements, and extract reusable lessons for similar problems.',
@@ -5606,7 +5612,8 @@ export const messages = {
       aiPolicyMode: {
         DEFAULT: 'Default: refuse private problems, ideas only for public ones',
         STRICT: 'Strict: refuse any question matching contest problems',
-        DISABLED: 'Disabled: this contest is excluded from AI guarding'
+        NO_AI: 'AI off: participants get no AI assistance during the contest, ideas included',
+        DISABLED: 'Disabled (retired): this contest is excluded from AI guarding'
       },
       aiPolicyNotesLabel: 'Custom policy notes',
       aiPolicyNotesPlaceholder: 'Optional, injected into the AI prompt with the policy, up to 2000 characters',
@@ -5757,6 +5764,7 @@ export const messages = {
         submissions: 'Submissions'
       },
       lockedTabTitle: 'Not available yet',
+      aiDisabledNote: 'AI assistance is off for this contest',
       lockedTabDescription: 'This content is not available for the current contest phase or registration status.',
       runLockedBeforeStart: 'This contest run has not started yet. Before the start time, only schedule, registration, and rules are visible. Problems, submissions, and scoreboard open after the start.',
       runAccessRestricted: 'You do not have participation access for this run yet, so problems, submissions, and scoreboard are unavailable.',

@@ -51,6 +51,10 @@ export function ContestDetailView() {
   const canSubmit = !runId || Boolean(openRunQuery.data?.canSubmit);
   const canViewProblems = !runId || Boolean(openRunQuery.data?.canViewProblems);
   const canViewScoreboard = Boolean(runId && openRunQuery.data?.canViewScoreboard);
+  // A NO_AI run gives its participants no AI assistance until it ends; ai-service refuses it either way.
+  const aiOff = run?.aiPolicyModeSnapshot === "NO_AI"
+    && openRunQuery.data?.participant?.status === "ACTIVE"
+    && Date.now() < Date.parse(run.endAt);
 
   const legacyProblemsQuery = useQuery({
     queryKey: ["student-contest-problems", contestId],
@@ -407,6 +411,7 @@ export function ContestDetailView() {
           />
           <SubmissionDetailDialog
             submissionId={selectedSubmissionId}
+            contestAiOff={aiOff}
             onOpenChange={(open) => {
               if (!open) setSelectedSubmissionId(null);
             }}

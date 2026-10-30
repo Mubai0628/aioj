@@ -40,7 +40,7 @@ import java.util.Set;
  *
  * <ul>
  *   <li>Participant: only problems of the running-contest snapshot set can be
- *       fetched. DENY-assistance problems (PRIVATE, or STRICT run policy) are
+ *       fetched. DENY-assistance problems (PRIVATE, or STRICT or NO_AI run policy) are
  *       refused; PUBLIC ones return the snapshot statement marked HINT_ONLY
  *       with the run's aiPolicyMode/aiPolicyNotes constraint markers;
  *       DISABLED-mode problems are unrestricted.</li>

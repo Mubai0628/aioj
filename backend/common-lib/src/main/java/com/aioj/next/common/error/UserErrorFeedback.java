@@ -96,6 +96,7 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
             Map.entry("Failed to process testcase package", "testcase.processFailed"),
             Map.entry("AI quota exceeded", "ai.quotaExceeded"),
             Map.entry("AI assistance is not available for this contest problem", "ai.contestProblemAssistDisabled"),
+            Map.entry("AI assistance is disabled for participants during this contest", "ai.contestAiDisabled"),
             Map.entry("This question appears to reference a problem from a running contest", "ai.contestProblemLeakBlocked"),
             Map.entry("During an active contest, complete solution code for a contest problem cannot be requested outside the contest assistance page", "ai.contestPublicCodeBlocked"),
             Map.entry("AI rolling quota exceeded", "ai.rollingQuotaExceeded"),

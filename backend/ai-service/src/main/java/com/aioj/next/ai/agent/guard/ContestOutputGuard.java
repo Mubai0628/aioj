@@ -4,6 +4,7 @@ import com.aioj.next.ai.agent.policy.ContestPolicyView;
 import com.aioj.next.ai.agent.policy.GuardDecision;
 import com.aioj.next.ai.agent.policy.GuardDecisionRecorder;
 import com.aioj.next.ai.agent.policy.GuardLayer;
+import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
 import tools.jackson.databind.node.JsonNodeFactory;
@@ -30,7 +31,7 @@ import java.util.Map;
  *       exactly those problems' snapshot statements (same matcher as L3).</li>
  *   <li><b>deny_match_substantive</b> — P3-8 (E4-12 live-eval gap): when the
  *       merged L3 verdict matched a DENY-level problem (PRIVATE statement or
- *       STRICT run policy), the turn's correct outcome is a refusal, and model
+ *       STRICT or NO_AI run policy), the turn's correct outcome is a refusal, and model
  *       compliance alone proved unreliable (a STRICT-matched turn once received
  *       a full tutorial with a code skeleton). The draft may only be delivered
  *       when it is refusal-shaped; substantive tutoring is intercepted and —
@@ -176,7 +177,7 @@ public class ContestOutputGuard {
         }
 
         // P3-8: deterministic backstop for DENY-level L3 matches (PRIVATE or
-        // STRICT) — substantive tutoring is never deliverable on these turns.
+        // STRICT or NO_AI) — substantive tutoring is never deliverable on these turns.
         List<GuardDecisionRecorder.MatchedProblemRef> denyMatched = denyMatchedRefs(l3Verdict);
         if (reasonCode == null && !denyMatched.isEmpty()) {
             checksRun.add("deny_match");
@@ -254,7 +255,7 @@ public class ContestOutputGuard {
 
     /**
      * P3-8: refs of the merged L3 verdict whose assistance level is DENY —
-     * PRIVATE statement, or STRICT run policy (mirrors the {@code assistanceOf}
+     * PRIVATE statement, or STRICT or NO_AI run policy (mirrors the {@code assistanceOf}
      * rule shared by the policy view and the contest tools).
      */
     private List<GuardDecisionRecorder.MatchedProblemRef> denyMatchedRefs(GuardVerdict l3Verdict) {
@@ -263,7 +264,7 @@ public class ContestOutputGuard {
         }
         List<GuardDecisionRecorder.MatchedProblemRef> deny = new ArrayList<>();
         for (GuardDecisionRecorder.MatchedProblemRef ref : l3Verdict.matchedProblems()) {
-            if ("PRIVATE".equals(ref.visibility()) || "STRICT".equals(ref.aiPolicyMode())) {
+            if ("PRIVATE".equals(ref.visibility()) || ContestAiPolicyMode.refusesProblemQuestions(ref.aiPolicyMode())) {
                 deny.add(ref);
             }
         }

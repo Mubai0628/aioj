@@ -3,9 +3,12 @@ package com.aioj.next.problem.domain;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.contract.ai.AiJudgedSubmissionEventRequest;
+import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.submission.SubmissionStatus;
 import com.aioj.next.problem.domain.recommendation.ProblemRecommendationCache;
+import com.aioj.next.problem.persistence.entity.ContestRunEntity;
 import com.aioj.next.problem.persistence.entity.SubmissionEntity;
+import com.aioj.next.problem.persistence.mapper.ContestRunMapper;
 import com.aioj.next.problem.persistence.mapper.SubmissionMapper;
 import org.springframework.stereotype.Service;
 
@@ -14,13 +17,16 @@ public class JudgedSubmissionEventService {
     private final SubmissionMapper submissionMapper;
     private final JudgedSubmissionAiEventClient aiEventClient;
     private final ProblemRecommendationCache recommendationCache;
+    private final ContestRunMapper contestRunMapper;
 
     public JudgedSubmissionEventService(SubmissionMapper submissionMapper,
                                         JudgedSubmissionAiEventClient aiEventClient,
-                                        ProblemRecommendationCache recommendationCache) {
+                                        ProblemRecommendationCache recommendationCache,
+                                        ContestRunMapper contestRunMapper) {
         this.submissionMapper = submissionMapper;
         this.aiEventClient = aiEventClient;
         this.recommendationCache = recommendationCache;
+        this.contestRunMapper = contestRunMapper;
     }
 
     public void handle(AiJudgedSubmissionEventRequest request) {
@@ -38,6 +44,11 @@ public class JudgedSubmissionEventService {
             // A practice verdict changes what to recommend next; contest ones never count.
             recommendationCache.evict(submission.getUserId());
         }
+        if (inNoAiRun(submission)) {
+            // A run with AI turned off for its participants gets no automatic AI analysis either;
+            // the contest postmortem stays available after the contest.
+            return;
+        }
         aiEventClient.notifyJudgedSubmission(new AiJudgedSubmissionEventRequest(
                 submission.getId(),
                 submission.getProblemId(),
@@ -49,5 +60,13 @@ public class JudgedSubmissionEventService {
                 submission.getContestProblemId(),
                 submission.getJudgedAt()
         ));
+    }
+
+    private boolean inNoAiRun(SubmissionEntity submission) {
+        if (submission.getContestRunId() == null) {
+            return false;
+        }
+        ContestRunEntity run = contestRunMapper.selectById(submission.getContestRunId());
+        return run != null && run.getAiPolicyModeSnapshot() == ContestAiPolicyMode.NO_AI;
     }
 }

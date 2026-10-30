@@ -76,6 +76,10 @@ export function ContestProblemDetailView() {
   const canViewProblems = Boolean(openRunQuery.data?.canViewProblems);
   const canSubmit = Boolean(openRunQuery.data?.canSubmit);
   const isFormalRun = openRunQuery.data?.run.runKind === "FORMAL";
+  // A NO_AI run gives its participants no AI assistance until it ends; ai-service refuses it either way.
+  const aiOff = openRunQuery.data?.run.aiPolicyModeSnapshot === "NO_AI"
+    && openRunQuery.data.participant?.status === "ACTIVE"
+    && Date.now() < Date.parse(openRunQuery.data.run.endAt);
 
   const runProblemsQuery = useQuery({
     queryKey: ["student-contest-run-problems", contestId, contestRunId],
@@ -226,7 +230,9 @@ export function ContestProblemDetailView() {
         actions={(
           <>
             <BackToContestButton contestId={contestId} contestRunId={contestRunId} />
-            {aiProblem && snapshot.visibility !== "PRIVATE" ? (
+            {aiOff ? (
+              <span className="text-sm text-[var(--oj-ink-muted)]">{t("contests.aiDisabledNote")}</span>
+            ) : aiProblem && snapshot.visibility !== "PRIVATE" ? (
               <AiAssistantDialog
                 problem={aiProblem}
                 code={code}
@@ -371,6 +377,7 @@ export function ContestProblemDetailView() {
       <SubmissionDetailDialog
         submissionId={selectedSubmissionId}
         problemTitle={problemQuery.data?.title}
+        contestAiOff={aiOff}
         onOpenChange={(open) => !open && setSelectedSubmissionId(null)}
       />
       <ConfirmDialog

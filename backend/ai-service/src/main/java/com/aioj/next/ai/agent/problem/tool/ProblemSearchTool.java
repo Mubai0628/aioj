@@ -39,7 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * view simply yields an empty search space.
  *
  * <p>Anti-enumeration (§5.5): problems whose assistance verdict is DENY
- * (PRIVATE, or STRICT run policy) never appear in hits, so the search cannot
+ * (PRIVATE, or STRICT or NO_AI run policy) never appear in hits, so the search cannot
  * be used as a "does the private statement contain X" oracle. A per-user
  * in-memory sliding-window rate limit
  * ({@code aioj.ai.agent-core.contest-search.rate-limit.*}) blocks bursts of

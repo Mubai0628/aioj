@@ -50,7 +50,7 @@ Announcements and clarifications belong to one run. Announcements may be pinned 
 
 ## AI, plagiarism, and postmortems
 
-- Contest-time AI policy comes from the run snapshot and server-side participation state.
+- Contest-time AI policy comes from the run snapshot and server-side participation state, at one of three levels (Default, Strict, AI off); see the contest safety section of the [Agent Core V3 architecture](agent-core-v3-architecture.md). During an AI-off run, participants' submissions get no automatic AI analysis either; the post-contest review stays available.
 - AI plagiarism review produces similarity evidence and risk signals, not disciplinary decisions.
 - Personal and teacher postmortems use authorized run, submission, and judge summaries without hidden tests or other participants' private information.
 - A student weakness candidate enters long-term memory only after explicit student acceptance.
