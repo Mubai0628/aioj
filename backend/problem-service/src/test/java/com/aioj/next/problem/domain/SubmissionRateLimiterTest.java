@@ -49,6 +49,8 @@ class SubmissionRateLimiterTest {
         DomainException error = assertThrows(DomainException.class, () -> limiter.check(91L, NOW));
 
         assertEquals(ErrorCode.TOO_MANY_REQUESTS, error.errorCode());
+        // T2.2: 30 s into the minute, so the window opens again in 30 s.
+        assertEquals(30L, ((com.aioj.next.common.error.RateLimitedException) error).retryAfterSeconds());
         verify(redis, never()).expire(anyString(), org.mockito.ArgumentMatchers.any(Duration.class));
     }
 

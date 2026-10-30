@@ -113,16 +113,21 @@ public class UserAccountService {
     }
 
     public UserAccount login(String account, String rawPassword) {
-        loginAttemptGuard.ensureNotLocked(account);
+        return login(account, rawPassword, null);
+    }
+
+    /** @param clientIp the address the gateway resolved, so a lock binds this account from this address (T2.2) */
+    public UserAccount login(String account, String rawPassword, String clientIp) {
+        loginAttemptGuard.ensureNotLocked(account, clientIp);
         UserEntity user = findActiveUserByAccount(account);
         if (user == null || !passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
-            loginAttemptGuard.recordFailure(account);
+            loginAttemptGuard.recordFailure(account, clientIp);
             throw new DomainException(ErrorCode.UNAUTHORIZED, "Invalid account or password");
         }
         if (!Boolean.TRUE.equals(user.getEnabled())) {
             throw new DomainException(ErrorCode.FORBIDDEN, DISABLED_ACCOUNT_MESSAGE);
         }
-        loginAttemptGuard.recordSuccess(account);
+        loginAttemptGuard.recordSuccess(account, clientIp);
         return toAccount(user, rolesForUser(user.getId()));
     }
 

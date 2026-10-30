@@ -2,9 +2,12 @@ package com.aioj.next.ai.domain.coderun;
 
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.RateLimitedException;
 import com.aioj.next.contract.ai.AiCodeRunSettings;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -46,17 +49,27 @@ public class CodeRunGate {
 
     private final StringRedisTemplate redis;
     private final ZoneId zone;
+    private final MeterRegistry meters;
     private final AtomicInteger running = new AtomicInteger();
     private final Set<Long> runningUsers = ConcurrentHashMap.newKeySet();
 
-    @Autowired
     public CodeRunGate(StringRedisTemplate redis) {
-        this(redis, ZoneId.systemDefault());
+        this(redis, ZoneId.systemDefault(), null);
+    }
+
+    @Autowired
+    public CodeRunGate(StringRedisTemplate redis, ObjectProvider<MeterRegistry> meters) {
+        this(redis, ZoneId.systemDefault(), meters.getIfAvailable());
     }
 
     CodeRunGate(StringRedisTemplate redis, ZoneId zone) {
+        this(redis, zone, null);
+    }
+
+    CodeRunGate(StringRedisTemplate redis, ZoneId zone, MeterRegistry meters) {
         this.redis = redis;
         this.zone = zone;
+        this.meters = meters;
     }
 
     /** A run that may go ahead; closing it frees its place. */
@@ -82,10 +95,11 @@ public class CodeRunGate {
             throw new DomainException(ErrorCode.FORBIDDEN, DISABLED);
         }
         if (settings.minIntervalMillis() > 0 && !firstInGap(userId, settings.minIntervalMillis())) {
-            throw new DomainException(ErrorCode.TOO_MANY_REQUESTS, TOO_FREQUENT);
+            throw new RateLimitedException("code-run", "user",
+                    (settings.minIntervalMillis() + 999L) / 1000L, TOO_FREQUENT);
         }
         if (!runningUsers.add(userId)) {
-            throw new DomainException(ErrorCode.TOO_MANY_REQUESTS, IN_PROGRESS);
+            throw new RateLimitedException("code-run", "user", 2, IN_PROGRESS);
         }
         if (running.incrementAndGet() > settings.maxConcurrency()) {
             release(userId);
@@ -117,6 +131,7 @@ public class CodeRunGate {
             return !Boolean.FALSE.equals(first);
         } catch (RuntimeException ex) {
             log.warn("Code run gap skipped, Redis unavailable: {}", ex.getClass().getSimpleName());
+            bypassed();
             return true;
         }
     }
@@ -126,17 +141,27 @@ public class CodeRunGate {
         try {
             Long minute = increment("aioj:code-run:minute:" + userId + ":" + now.getEpochSecond() / 60, MINUTE_TTL);
             if (minute != null && minute > settings.perMinuteLimit()) {
-                throw new DomainException(ErrorCode.TOO_MANY_REQUESTS, MINUTE_LIMIT);
+                throw new RateLimitedException("code-run", "user", 60 - now.getEpochSecond() % 60, MINUTE_LIMIT);
             }
             day = increment("aioj:code-run:day:" + userId + ":" + LocalDate.ofInstant(now, zone), DAY_TTL);
         } catch (DomainException ex) {
             throw ex;
         } catch (RuntimeException ex) {
             log.warn("Code run counts skipped, Redis unavailable: {}", ex.getClass().getSimpleName());
+            bypassed();
             return;
         }
         if (day != null && day > settings.perDayLimit()) {
-            throw new DomainException(ErrorCode.TOO_MANY_REQUESTS, DAY_LIMIT);
+            long untilTomorrow = Duration.between(now,
+                    LocalDate.ofInstant(now, zone).plusDays(1).atStartOfDay(zone).toInstant()).toSeconds();
+            throw new RateLimitedException("code-run", "user", untilTomorrow, DAY_LIMIT);
+        }
+    }
+
+    private void bypassed() {
+        if (meters != null) {
+            meters.counter("aioj.ratelimit.bypassed", "limiter", "code-run", "reason", "redis_unavailable")
+                    .increment();
         }
     }
 

@@ -82,6 +82,21 @@ class ProblemDraftGenerationJobServiceTest {
         SecurityContextHolder.clearContext();
     }
 
+    /** T2.2: an admin's queued and running jobs together stay under the limit; nothing is prepared past it. */
+    @Test
+    void aFourthActiveJobForTheSameAdminIsRefusedBeforeAnythingIsPrepared() {
+        when(jobMapper.selectCount(any())).thenReturn(3L);
+
+        assertThatThrownBy(() -> service.create(7L, request("Segment tree sorting")))
+                .isInstanceOfSatisfying(com.aioj.next.common.error.RateLimitedException.class, refused -> {
+                    assertThat(refused.getMessage())
+                            .isEqualTo("Too many problem draft jobs are queued or running for this account");
+                    assertThat(refused.retryAfterSeconds()).isEqualTo(60);
+                });
+        verify(coordinator, never()).prepareInitial(org.mockito.ArgumentMatchers.anyLong(), any());
+        verify(jobMapper, never()).insert(any(ProblemDraftGenerationJobEntity.class));
+    }
+
     @Test
     void createPersistsWorkspaceAndTurnBoundQueuedJob() {
         ProblemDraftRequest request = request("Segment tree sorting");

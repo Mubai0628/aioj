@@ -39,7 +39,8 @@ public class SecurityConfig {
     @Bean
     LoginAttemptGuard loginAttemptGuard(AuthProperties properties) {
         AuthProperties.LoginAttempt attempt = properties.getLoginAttempt();
-        return new InMemoryLoginAttemptGuard(attempt.getMaxFailures(), attempt.getWindow(), attempt.getLockDuration());
+        return new InMemoryLoginAttemptGuard(attempt.getMaxFailures(), attempt.getAccountMaxFailures(),
+                attempt.getWindow(), attempt.getLockDuration(), java.time.Clock.systemUTC());
     }
 
     @Bean

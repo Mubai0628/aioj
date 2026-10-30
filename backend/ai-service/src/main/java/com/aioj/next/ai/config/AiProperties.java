@@ -886,12 +886,32 @@ public class AiProperties {
         private int problemDraftConcurrency = 2;
         private int intentMemoryConcurrency = 4;
         private int batchReportConcurrency = 1;
+        /** Answers one user may have running at once (T2.2); the chat pool is shared by everyone. */
+        private int perUserTurnConcurrency = 2;
+        /** Problem-draft jobs one admin may have queued or running (T2.2). */
+        private int perUserDraftJobs = 3;
         private int modelCorePoolSize = 2;
         private int modelMaxPoolSize = 8;
         private int modelQueueCapacity = 32;
         private int toolCorePoolSize = 4;
         private int toolMaxPoolSize = 16;
         private int toolQueueCapacity = 64;
+
+        public int getPerUserTurnConcurrency() {
+            return perUserTurnConcurrency;
+        }
+
+        public void setPerUserTurnConcurrency(int perUserTurnConcurrency) {
+            this.perUserTurnConcurrency = perUserTurnConcurrency;
+        }
+
+        public int getPerUserDraftJobs() {
+            return perUserDraftJobs;
+        }
+
+        public void setPerUserDraftJobs(int perUserDraftJobs) {
+            this.perUserDraftJobs = perUserDraftJobs;
+        }
 
         public int getChatCorePoolSize() {
             return chatCorePoolSize;

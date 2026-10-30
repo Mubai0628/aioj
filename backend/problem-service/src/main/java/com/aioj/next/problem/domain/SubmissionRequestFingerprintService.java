@@ -45,11 +45,8 @@ public class SubmissionRequestFingerprintService {
         if (metadata == null) {
             return null;
         }
-        if (StringUtils.hasText(metadata.forwardedFor())) {
-            String first = metadata.forwardedFor().split(",")[0].trim();
-            if (StringUtils.hasText(first)) {
-                return stripPort(first);
-            }
+        if (StringUtils.hasText(metadata.clientIp())) {
+            return stripPort(metadata.clientIp().trim());
         }
         return stripPort(normalize(metadata.remoteAddress()));
     }

@@ -31,7 +31,7 @@ class SubmissionRequestFingerprintServiceTest {
         submission.setContestParticipantId(13L);
         submission.setUserId(14L);
 
-        service.record(submission, new SubmissionRequestMetadata("10.0.0.5:51234", "192.168.1.25, 10.0.0.5",
+        service.record(submission, new SubmissionRequestMetadata("10.0.0.5:51234", "192.168.1.25",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36"),
                 Instant.parse("2026-06-08T01:00:00Z"));
 

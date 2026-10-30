@@ -28,6 +28,7 @@ aioj:
     registration-enabled: ${AUTH_REGISTRATION_ENABLED:false}
     login-attempt:
       max-failures: ${AUTH_LOGIN_MAX_FAILURES:5}
+      account-max-failures: ${AUTH_LOGIN_ACCOUNT_MAX_FAILURES:50}
       window: ${AUTH_LOGIN_WINDOW:PT15M}
       lock-duration: ${AUTH_LOGIN_LOCK_DURATION:PT15M}
   security:

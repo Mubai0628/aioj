@@ -27,6 +27,8 @@ public class AuthProperties {
 
     public static class LoginAttempt {
         private int maxFailures = 5;
+        /** Failures for one account from all addresses together before it locks everywhere (T2.2). */
+        private int accountMaxFailures = 50;
         private Duration window = Duration.ofMinutes(15);
         private Duration lockDuration = Duration.ofMinutes(15);
 
@@ -36,6 +38,14 @@ public class AuthProperties {
 
         public void setMaxFailures(int maxFailures) {
             this.maxFailures = maxFailures;
+        }
+
+        public int getAccountMaxFailures() {
+            return accountMaxFailures;
+        }
+
+        public void setAccountMaxFailures(int accountMaxFailures) {
+            this.accountMaxFailures = accountMaxFailures;
         }
 
         public Duration getWindow() {

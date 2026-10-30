@@ -1,8 +1,7 @@
 package com.aioj.next.ai.domain;
 
 import com.aioj.next.ai.config.AiProperties;
-import com.aioj.next.common.error.DomainException;
-import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.RateLimitedException;
 import org.springframework.stereotype.Service;
 
 import java.util.EnumMap;
@@ -26,7 +25,7 @@ public class AiCapacityService {
     public Lease acquire(AiWorkload workload) {
         Semaphore semaphore = semaphores.get(workload);
         if (semaphore == null || !semaphore.tryAcquire()) {
-            throw new DomainException(ErrorCode.TOO_MANY_REQUESTS, "AI service is busy; please try again later");
+            throw new RateLimitedException("ai.capacity", "site", 5, "AI service is busy; please try again later");
         }
         return new Lease(semaphore);
     }

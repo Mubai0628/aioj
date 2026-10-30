@@ -32,7 +32,8 @@ public class SubmissionController {
                                                   HttpServletRequest servletRequest) {
         SubmissionRequestMetadata metadata = new SubmissionRequestMetadata(
                 servletRequest.getRemoteAddr(),
-                servletRequest.getHeader("X-Forwarded-For"),
+                // The gateway's resolved client address; a client-sent X-Forwarded-For can be forged (T2.2).
+                servletRequest.getHeader("X-Aioj-Client-Ip"),
                 servletRequest.getHeader("User-Agent"),
                 servletRequest.getHeader("Idempotency-Key")
         );

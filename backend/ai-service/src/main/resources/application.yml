@@ -118,6 +118,8 @@ aioj:
       problem-draft-concurrency: ${AI_PROBLEM_DRAFT_CONCURRENCY:2}
       intent-memory-concurrency: ${AI_INTENT_MEMORY_CONCURRENCY:4}
       batch-report-concurrency: ${AI_BATCH_REPORT_CONCURRENCY:1}
+      per-user-turn-concurrency: ${AI_PER_USER_TURN_CONCURRENCY:2}
+      per-user-draft-jobs: ${AI_PER_USER_DRAFT_JOBS:3}
     deepseek:
       thinking-enabled: ${DEEPSEEK_THINKING_ENABLED:false}
       reasoning-effort: ${DEEPSEEK_REASONING_EFFORT:high}

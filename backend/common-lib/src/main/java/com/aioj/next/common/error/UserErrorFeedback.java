@@ -135,6 +135,12 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
             Map.entry("Code runs are busy; please try again shortly", "codeRun.busy"),
             Map.entry("Code run limit per minute reached", "codeRun.minuteLimit"),
             Map.entry("Code run limit per day reached", "codeRun.dayLimit"),
+            // T2.2: the limits that answer 429 with Retry-After.
+            Map.entry("Too many failed login attempts. The account is temporarily locked.", "auth.loginLocked"),
+            Map.entry("Too many submissions; please wait a minute before submitting again", "submission.rateLimited"),
+            Map.entry("AI service is busy; please try again later", "ai.busy"),
+            Map.entry("Too many AI answers are in progress for this account", "ai.turnConcurrencyLimit"),
+            Map.entry("Too many problem draft jobs are queued or running for this account", "draft.jobLimit"),
             Map.entry("Custom input is larger than 1 MB", "codeRun.inputTooLarge"),
             Map.entry("Expected output is larger than 1 MB", "codeRun.expectedTooLarge"),
             Map.entry("Source code is required", "codeRun.sourceRequired"),
@@ -389,6 +395,11 @@ public record UserErrorFeedback(String key, String message, Map<String, String> 
             case "codeRun.busy" -> "运行繁忙，请稍后再试。";
             case "codeRun.minuteLimit" -> "这一分钟的运行次数已用完，请稍后再试。";
             case "codeRun.dayLimit" -> "今天的运行次数已用完，请明天再试。";
+            case "auth.loginLocked" -> "登录失败次数过多，请稍后再试。";
+            case "submission.rateLimited" -> "提交过于频繁，请稍后再提交。";
+            case "ai.busy" -> "AI 服务繁忙，请稍后再试。";
+            case "ai.turnConcurrencyLimit" -> "你还有 AI 回答在进行中，请等它完成后再提问。";
+            case "draft.jobLimit" -> "排队和进行中的出题作业已达上限，请等已有作业完成后再提交。";
             case "codeRun.inputTooLarge" -> "自定义输入不能超过 1 MB。";
             case "codeRun.expectedTooLarge" -> "期望输出不能超过 1 MB。";
             case "codeRun.sourceRequired" -> "请先写好代码再运行。";

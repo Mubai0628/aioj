@@ -10,6 +10,7 @@ import com.aioj.next.ai.persistence.mapper.ProblemDraftGenerationJobMapper;
 import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.RateLimitedException;
 import com.aioj.next.common.error.SafeErrors;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecuritySupport;
@@ -112,6 +113,7 @@ public class ProblemDraftGenerationJobService {
         if (userId == null || request == null) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Problem draft request is required");
         }
+        ensureBelowActiveJobLimit(userId);
         ProblemDraftAgentCoordinator.PreparedTurn prepared = coordinator.prepareInitial(userId, request);
         ProblemDraftGenerationJobEntity job = newJob(userId, JOB_TYPE_GENERATE, null, prepared,
                 request, request.topic(), "Queued for AI problem draft Agent generation");
@@ -165,6 +167,7 @@ public class ProblemDraftGenerationJobService {
         if (request == null) {
             throw new DomainException(ErrorCode.BAD_REQUEST, "Problem draft rewrite request is required");
         }
+        ensureBelowActiveJobLimit(userId);
         ProblemDraftResponse source = problemDraftStore.regenerationSource(sourceDraftId);
         ProblemDraftAgentCoordinator.PreparedTurn prepared = coordinator.prepareRegeneration(userId, source, request);
         ProblemDraftGenerationJobEntity job = newJob(userId, JOB_TYPE_REGENERATE, sourceDraftId, prepared,
@@ -187,6 +190,8 @@ public class ProblemDraftGenerationJobService {
             ProblemDraftWorkspaceEntity current = workspaceService.requireOwned(workspaceId, userId);
             return turnResponse(current, existing, true);
         }
+        // After the replay check, so a resent turn still answers; the rollback undoes the prepared turn.
+        ensureBelowActiveJobLimit(userId);
         ProblemDraftWorkspaceEntity workspace = prepared.workspace();
         Long sourceDraftId = workspace.getSourceDraftId() == null
                 ? workspace.getCurrentDraftId() : workspace.getSourceDraftId();
@@ -311,6 +316,17 @@ public class ProblemDraftGenerationJobService {
         job.setCreatedAt(now);
         job.setUpdatedAt(now);
         return job;
+    }
+
+    /** Each admin's queued and running jobs together stay under the limit (T2.2); the Agent pool is shared. */
+    private void ensureBelowActiveJobLimit(Long userId) {
+        int limit = Math.max(1, aiProperties.getCapacity().getPerUserDraftJobs());
+        Long active = jobMapper.selectCount(new QueryWrapper<ProblemDraftGenerationJobEntity>()
+                .eq("creator_user_id", userId).in("status", STATUS_QUEUED, STATUS_RUNNING));
+        if (active != null && active >= limit) {
+            throw new RateLimitedException("draft.jobs", "user", 60,
+                    "Too many problem draft jobs are queued or running for this account");
+        }
     }
 
     private void persistQueued(ProblemDraftGenerationJobEntity job, Long actorUserId) {

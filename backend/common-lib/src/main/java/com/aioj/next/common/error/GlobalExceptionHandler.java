@@ -2,8 +2,11 @@ package com.aioj.next.common.error;
 
 import com.aioj.next.common.api.ApiResponse;
 import com.aioj.next.common.api.TraceIds;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -33,6 +36,9 @@ public class GlobalExceptionHandler {
     @Value("${spring.application.name:application-service}")
     private String serviceName;
 
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry;
+
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex) {
         UserErrorFeedback feedback = UserErrorFeedback.forCode(ErrorCode.NOT_FOUND, serviceName);
@@ -45,14 +51,25 @@ public class GlobalExceptionHandler {
         UserErrorFeedback feedback = UserErrorFeedback.forDomain(ex.errorCode(), ex.getMessage(), serviceName);
         // The key names the case; the message itself can quote what the user sent (T2.5).
         log.warn("DomainException code={} key={}", ex.errorCode().code(), feedback.key());
-        return ResponseEntity.status(toStatus(ex.errorCode()))
-                .body(ApiResponse.failWithError(
-                        ex.errorCode().code(),
-                        feedback.message(),
-                        null,
-                        feedback.key(),
-                        feedback.params()
-                ));
+        Map<String, String> params = feedback.params();
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(toStatus(ex.errorCode()));
+        if (ex instanceof RateLimitedException limited) {
+            // T2.2: when to come back, for the page and for any client that honours Retry-After.
+            params = new LinkedHashMap<>(params == null ? Map.of() : params);
+            params.put("retryAfterSeconds", String.valueOf(limited.retryAfterSeconds()));
+            response.header(HttpHeaders.RETRY_AFTER, String.valueOf(limited.retryAfterSeconds()));
+            if (meterRegistry != null) {
+                meterRegistry.counter("aioj.ratelimit.rejected", "limiter", limited.limiter(),
+                        "dimension", limited.dimension()).increment();
+            }
+        }
+        return response.body(ApiResponse.failWithError(
+                ex.errorCode().code(),
+                feedback.message(),
+                null,
+                feedback.key(),
+                params
+        ));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

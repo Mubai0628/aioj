@@ -46,9 +46,12 @@ public class AuthController {
                 request.displayName(), request.email(), request.role())));
     }
 
+    /** The gateway resolves the client address and is the only writer of X-Aioj-Client-Ip (T2.2). */
     @PostMapping("/login")
-    public ApiResponse<TokenResponse> login(@RequestBody @Valid LoginRequest request) {
-        return ApiResponse.ok(authTokenIssuer.issue(userAccountService.login(request.account(), request.password())));
+    public ApiResponse<TokenResponse> login(@RequestBody @Valid LoginRequest request,
+                                            @RequestHeader(value = "X-Aioj-Client-Ip", required = false) String clientIp) {
+        return ApiResponse.ok(authTokenIssuer.issue(userAccountService.login(request.account(), request.password(),
+                clientIp)));
     }
 
     @PostMapping("/refresh")

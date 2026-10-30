@@ -36,6 +36,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -197,6 +198,17 @@ class GlobalExceptionHandlerTest {
                 .contains("TestController.boomWithCause");
     }
 
+    /** T2.2: every limit answers 429 with Retry-After, its error key and the seconds in errorParams. */
+    @Test
+    void a_rate_limit_answers_429_with_retry_after_and_its_key() throws Exception {
+        mockMvc.perform(get("/test/rate-limited"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "30"))
+                .andExpect(jsonPath("$.code").value(ErrorCode.TOO_MANY_REQUESTS.code()))
+                .andExpect(jsonPath("$.errorKey").value("submission.rateLimited"))
+                .andExpect(jsonPath("$.errorParams.retryAfterSeconds").value("30"));
+    }
+
     @Test
     void unknown_exception_does_not_leak_message() throws Exception {
         mockMvc.perform(get("/test/boom"))
@@ -270,6 +282,12 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/boom")
         public String boom() {
             throw new RuntimeException("secret leak attempt");
+        }
+
+        @GetMapping("/test/rate-limited")
+        public String rateLimited() {
+            throw new RateLimitedException("submission", "user", 30,
+                    "Too many submissions; please wait a minute before submitting again");
         }
 
         @GetMapping("/test/domain-with-input")

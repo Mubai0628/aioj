@@ -109,6 +109,8 @@ public class TurnCoordinator {
      * consistency source; a registry miss falls back to polling the turn row.
      */
     private final Map<String, CompletableFuture<TurnResult>> inFlightTurns = new ConcurrentHashMap<>();
+    /** Answers each user has running here, so one account cannot take every chat thread (T2.2). */
+    private final UserTurnSlots turnSlots;
 
     @Autowired
     public TurnCoordinator(
@@ -166,6 +168,7 @@ public class TurnCoordinator {
         this.turnDigestService = turnDigestService;
         this.turnUnderstandingService = turnUnderstandingService;
         this.properties = properties;
+        this.turnSlots = new UserTurnSlots(() -> properties.getCapacity().getPerUserTurnConcurrency());
         this.executor = executor;
         this.turnTimeoutMs = Math.max(1L, turnTimeoutMs);
     }
@@ -237,6 +240,8 @@ public class TurnCoordinator {
         long startedNanos = System.nanoTime();
         AiTurnEntity turn = null;
         boolean ownsTurn = false;
+        boolean holdsSlot = false;
+        boolean slotHandedOff = false;
         try {
             aiQuotaService.assertAvailable(userId);
             AiConversationEntity conversation = aiConversationService.resolveForWrite(userId, request);
@@ -248,6 +253,9 @@ public class TurnCoordinator {
                 return resumeTurn(userId, conversation, turn);
             }
             ownsTurn = true;
+            // After the duplicate check: a reconnect attaches to its running answer without a new slot.
+            turnSlots.reserve(userId);
+            holdsSlot = true;
             aiTurnService.markBuildingContext(turn.getId());
             // L1 (fail-closed, audited) then L2 snapshot + injection (design doc §5.1/§5.2).
             ContestParticipationService.ParticipationView participation =
@@ -336,10 +344,15 @@ public class TurnCoordinator {
             result.whenComplete((value, ex) -> {
                 events.close();
                 inFlightTurns.remove(scheduledTurn.getId());
+                turnSlots.release(userId);
             });
+            slotHandedOff = true;
             return new TurnHandle(conversation, new AiChatContext("", "", "", "", ""), user, assistant, result,
                     scheduledTurn.getId(), events);
         } catch (RuntimeException ex) {
+            if (holdsSlot && !slotHandedOff) {
+                turnSlots.release(userId);
+            }
             // Only a turn created by this request may be failed here; a duplicate request
             // attaching to someone else's in-flight turn must never mutate its state.
             if (ownsTurn && turn != null) {
