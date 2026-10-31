@@ -153,6 +153,29 @@ class SubmissionServiceAccessTest {
         assertNull(result.exitStatus());
     }
 
+    /** Plan S9: on the REST path too, another student's submission is refused, its result with it. */
+    @Test
+    void studentCannotReadAnotherStudentsSubmission() {
+        authenticate(92L, Role.STUDENT);
+        when(submissionMapper.selectById(801L)).thenReturn(submission());
+
+        DomainException exception = assertThrows(DomainException.class, () -> service.get(801L));
+
+        assertEquals(ErrorCode.FORBIDDEN, exception.errorCode());
+        verify(caseResultMapper, never()).selectList(any());
+    }
+
+    @Test
+    void studentCannotListAnotherStudentsSubmissions() {
+        authenticate(92L, Role.STUDENT);
+
+        DomainException exception = assertThrows(DomainException.class, () -> service.list(1, 20, null, 91L,
+                null, null, null, null, null, null, null));
+
+        assertEquals(ErrorCode.FORBIDDEN, exception.errorCode());
+        verify(submissionMapper, never()).selectPage(any(), any());
+    }
+
     @Test
     void aiSubmissionContextRejectsAnotherUsersSubmission() {
         when(submissionMapper.selectById(801L)).thenReturn(submission());

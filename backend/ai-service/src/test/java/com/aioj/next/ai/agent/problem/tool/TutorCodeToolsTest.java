@@ -156,6 +156,26 @@ class TutorCodeToolsTest {
         verifyNoInteractions(executor);
     }
 
+    /** Plan S9: an id that is someone else's and one that does not exist look the same to the model. */
+    @Test
+    void aForeignAndAMissingSubmissionLookTheSameToTheModel() {
+        when(problems.aiSubmissionContext(any(AiSubmissionContextRequest.class)))
+                .thenThrow(new DomainException(ErrorCode.FORBIDDEN, "not yours"))
+                .thenThrow(new DomainException(ErrorCode.NOT_FOUND, "no such submission"));
+
+        ToolResult<Object> foreign = runCustom.execute(context(Map.of()),
+                input("submission").put("submissionId", 99).put("stdin", "1 2\n"));
+        ToolResult<Object> missing = runCustom.execute(context(Map.of()),
+                input("submission").put("submissionId", 98).put("stdin", "1 2\n"));
+
+        assertThat(foreign.status()).isEqualTo(ToolStatus.POLICY_DENIED);
+        assertThat(missing.status()).isEqualTo(foreign.status());
+        assertThat(missing.errorCode()).isEqualTo(foreign.errorCode());
+        assertThat(missing.errorMessage()).isEqualTo(foreign.errorMessage());
+        assertThat(missing.data()).isEqualTo(foreign.data());
+        verifyNoInteractions(executor);
+    }
+
     @Test
     void aSubmissionWhoseCodeIsWithheldFromTheModelIsNotRun() {
         AiSubmissionContextResponse submission = submission(false);
