@@ -184,6 +184,29 @@ class ProblemCatalogVisibilityTest {
         assertEquals(true, captor.getValue().getSqlSegment().contains("visibility"));
     }
 
+    /**
+     * Plan S9: what a problem read carries (the page, and the AI's problem tool behind the same
+     * response) comes from a query for sample cases only; hidden cases are never asked for.
+     */
+    @Test
+    void aProblemReadAsksOnlyForSampleCases() {
+        ProblemEntity problem = privateProblem();
+        problem.setVisibility(ProblemVisibility.PUBLIC);
+        when(problemMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(problem);
+        when(visibilityService.isPrivate(any(ProblemEntity.class))).thenReturn(false);
+
+        catalog.get(7L, null, null, false);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<LambdaQueryWrapper<com.aioj.next.problem.persistence.entity.ProblemTestCaseEntity>> query =
+                ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        org.mockito.Mockito.verify(testCaseMapper).selectList(query.capture());
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""),
+                com.aioj.next.problem.persistence.entity.ProblemTestCaseEntity.class);
+        assertEquals(true, query.getValue().getSqlSegment().contains("sample"));
+        assertEquals(true, query.getValue().getParamNameValuePairs().containsValue(true));
+    }
+
     /** Plan 15.5: a self-test run gets the public samples and the judge's limit for its language. */
     @Test
     void runContextOfAPublicProblemHasItsSamplesAndTheLimitForTheLanguage() {
