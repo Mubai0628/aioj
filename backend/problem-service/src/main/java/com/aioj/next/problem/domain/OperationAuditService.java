@@ -5,6 +5,7 @@ import com.aioj.next.common.api.PageResponse;
 import com.aioj.next.common.api.TraceIds;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecuritySupport;
 import com.aioj.next.contract.operation.OperationAuditEventResponse;
@@ -13,7 +14,9 @@ import com.aioj.next.problem.persistence.mapper.OperationAuditEventMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -142,7 +145,30 @@ public class OperationAuditService {
                 event.getAction(), displayName(event.getAction()), event.getResourceType(),
                 JsonLongIds.text(event.getResourceId()), JsonLongIds.text(event.getContestId()),
                 JsonLongIds.text(event.getContestRunId()), JsonLongIds.text(event.getTargetUserId()), event.getStatus(),
-                event.getTraceId(), JsonLongIds.stringifyText(event.getSummaryJson(), objectMapper), event.getCreatedAt());
+                event.getTraceId(), keyedError(JsonLongIds.stringifyText(event.getSummaryJson(), objectMapper)),
+                event.getCreatedAt());
+    }
+
+    /**
+     * Plan S7: a summary's {@code error} reaches the page as an error key. Rows written before the rule hold the
+     * failure's own text (a request line with an internal address, a SQL fragment); they are shown as the key
+     * that text classifies to, and the stored row is left as it is.
+     */
+    private String keyedError(String summaryJson) {
+        if (summaryJson == null || !summaryJson.contains("\"error\"")) {
+            return summaryJson;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(summaryJson);
+            JsonNode error = root.get("error");
+            if (root instanceof ObjectNode object && error != null && error.isString() && !UserErrorFeedback.isKey(error.asString())) {
+                object.put("error", UserErrorFeedback.storedKey(error.asString(), null));
+                return objectMapper.writeValueAsString(object);
+            }
+        } catch (JacksonException ex) {
+            // a summary that is not JSON is shown as stored, like before
+        }
+        return summaryJson;
     }
 
     private String displayName(String action) {

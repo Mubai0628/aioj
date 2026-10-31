@@ -6,6 +6,7 @@ import com.aioj.next.ai.persistence.mapper.AiPolicySnapshotMapper;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
 import com.aioj.next.common.error.SafeErrors;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
 import com.aioj.next.contract.contest.RunningContestParticipation;
@@ -379,9 +380,10 @@ public class PolicySnapshotService {
         return detail;
     }
 
+    /** Plan S7: the audit detail holds an error key; the failure itself (an address, a SQL text) is in the log. */
     private ObjectNode errorDetail(RuntimeException ex) {
         ObjectNode detail = objectMapper.createObjectNode();
-        detail.put("error", ex.toString());
+        detail.put("error", UserErrorFeedback.storedKey(ex));
         return detail;
     }
 
@@ -410,7 +412,7 @@ public class PolicySnapshotService {
             log.warn("AI policy snapshot persist failed turn={} error={}", turnId, SafeErrors.describe(ex));
             ObjectNode detail = objectMapper.createObjectNode();
             detail.put("snapshotId", id);
-            detail.put("error", ex.toString());
+            detail.put("error", UserErrorFeedback.storedKey(ex));
             recorder.record(turnId, userId, conversationId,
                     GuardLayer.L2_POLICY_INJECT, decision,
                     REASON_SNAPSHOT_PERSIST_DEGRADED, detail, true, null);

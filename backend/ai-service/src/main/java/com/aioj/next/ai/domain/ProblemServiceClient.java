@@ -7,6 +7,7 @@ import com.aioj.next.ai.config.InternalApiProperties;
 import com.aioj.next.ai.persistence.entity.ProblemDraftTestcaseArtifactEntity;
 import com.aioj.next.common.error.DomainException;
 import com.aioj.next.common.error.ErrorCode;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.contract.ai.AiProblemContextRequest;
 import com.aioj.next.contract.ai.AiProblemContextResponse;
 import com.aioj.next.contract.ai.AiProblemRunContextRequest;
@@ -670,8 +671,9 @@ public class ProblemServiceClient {
         try {
             Map<String, Object> summary = new LinkedHashMap<>();
             summary.put("endpoint", endpoint);
-            String error = ex.getClass().getSimpleName() + ": " + (ex.getMessage() == null ? "" : ex.getMessage());
-            summary.put("error", error.length() <= 300 ? error : error.substring(0, 300));
+            // Plan S7: an audit row holds an error key. The failure's own message names the internal address
+            // and the request line; that belongs in the log (SafeErrors), which the trace id leads to.
+            summary.put("error", UserErrorFeedback.storedKey(ex));
             auditWriter.record(
                     "AI_CONTEST_GUARD_DEGRADED",
                     "CONTEST_AI_POLICY",

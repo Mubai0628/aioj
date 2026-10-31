@@ -1,5 +1,6 @@
 package com.aioj.next.problem.domain;
 
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.common.security.Role;
 import com.aioj.next.common.security.SecurityPrincipal;
 import com.aioj.next.problem.persistence.entity.OperationAuditEventEntity;
@@ -24,6 +25,7 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -99,6 +101,29 @@ class OperationAuditServiceTest {
                 result.records().get(0).summaryJson());
         assertFalse(Pattern.compile("[:\\[,]\\s*-?\\d{16,}").matcher(json).find(), json);
         assertEquals("2070348621785022502", result.records().get(0).actorUserId());
+    }
+
+    /**
+     * Plan S7: the page gets an error key. A row written before the rule holds the failure's own text (here a
+     * request line with the internal address); it is shown as a key, a row that already has one is left alone.
+     */
+    @Test
+    void aStoredFailureTextReachesThePageAsAnErrorKey() {
+        OperationAuditEventEntity leaking = event("AI_CONTEST_GUARD_DEGRADED");
+        leaking.setSummaryJson("{\"error\":\"ResourceAccessException: I/O error on GET request for \\\"http://localhost:8202/"
+                + "api/v1/internal/ai/users/7/running-participations\\\": null\",\"endpoint\":\"/api/v1/internal/ai/users/{userId}/running-participations\"}");
+        OperationAuditEventEntity keyed = event("PROBLEM_DRAFT_GENERATION_JOB_COMPLETED");
+        keyed.setSummaryJson("{\"errorKey\":\"agent.workerInterrupted\",\"error\":\"request.timeout\"}");
+        when(auditEventMapper.selectPage(any(), any())).thenReturn(page(List.of(leaking, keyed, event("SUBMISSION_CODE_ACCESS"))));
+
+        var result = service.list(1, 20, null, null, null, null, null);
+
+        String shown = result.records().get(0).summaryJson();
+        assertFalse(shown.contains("localhost") || shown.contains("8202") || shown.contains("Exception"), shown);
+        assertTrue(UserErrorFeedback.isKey(new ObjectMapper().readTree(shown).get("error").asString()), shown);
+        assertTrue(shown.contains("\"endpoint\":\"/api/v1/internal/ai/users/{userId}/running-participations\""), shown);
+        assertEquals("{\"errorKey\":\"agent.workerInterrupted\",\"error\":\"request.timeout\"}", result.records().get(1).summaryJson());
+        assertEquals("{\"auditLogId\":\"2070348621785022500\"}", result.records().get(2).summaryJson());
     }
 
     private Page<OperationAuditEventEntity> page(List<OperationAuditEventEntity> records) {

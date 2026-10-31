@@ -2,6 +2,7 @@ package com.aioj.next.ai.domain;
 
 import com.aioj.next.ai.config.InternalApiProperties;
 import com.aioj.next.common.error.DomainException;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
 import tools.jackson.databind.ObjectMapper;
@@ -101,6 +102,10 @@ class ProblemServiceClientTest {
         verify(auditWriter).record(eq("AI_CONTEST_GUARD_DEGRADED"), eq("CONTEST_AI_POLICY"), isNull(),
                 eq("DEGRADED"), summaryCaptor.capture(), eq(USER_ID), isNull(), isNull(), eq(USER_ID));
         assertThat(summaryCaptor.getValue()).containsKeys("endpoint", "error");
+        // Plan S7: the audit row holds an error key; the request line (host, port, user id) is not in it.
+        String error = String.valueOf(summaryCaptor.getValue().get("error"));
+        assertThat(UserErrorFeedback.isKey(error)).as(error).isTrue();
+        assertThat(summaryCaptor.getValue().toString()).doesNotContain("localhost", "8202", "Exception", "I/O error");
         server.verify();
     }
 

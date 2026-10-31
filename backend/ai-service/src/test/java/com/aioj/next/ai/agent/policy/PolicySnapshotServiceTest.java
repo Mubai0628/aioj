@@ -4,11 +4,13 @@ import com.aioj.next.ai.domain.ProblemServiceClient;
 import com.aioj.next.ai.persistence.entity.AiPolicySnapshotEntity;
 import com.aioj.next.ai.persistence.mapper.AiPolicySnapshotMapper;
 import com.aioj.next.common.error.DomainException;
+import com.aioj.next.common.error.UserErrorFeedback;
 import com.aioj.next.contract.contest.ContestAiPolicyMode;
 import com.aioj.next.contract.contest.RunningContestParticipation;
 import com.aioj.next.contract.contest.RunningContestProblemOccurrence;
 import com.aioj.next.contract.contest.RunningContestProblemStatement;
 import com.aioj.next.contract.problem.ProblemVisibility;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -117,9 +119,13 @@ class PolicySnapshotServiceTest {
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("比赛策略确认暂时不可用");
 
+        ArgumentCaptor<JsonNode> detail = ArgumentCaptor.forClass(JsonNode.class);
         verify(recorder).record(eq("turn-4"), eq(7L), eq("conv-1"),
                 eq(GuardLayer.L2_POLICY_INJECT), eq(GuardDecision.BLOCK),
-                eq(PolicySnapshotService.REASON_STATEMENTS_FAILED), any(), eq(true), any());
+                eq(PolicySnapshotService.REASON_STATEMENTS_FAILED), detail.capture(), eq(true), any());
+        // Plan S7: the audit detail holds an error key; the failure's own text stays in the log.
+        assertThat(UserErrorFeedback.isKey(detail.getValue().get("error").asString())).isTrue();
+        assertThat(detail.getValue().toString()).doesNotContain("problem-service down", "RuntimeException");
     }
 
     @Test
@@ -132,9 +138,13 @@ class PolicySnapshotServiceTest {
         // is explicit — degraded L2 row with the turn's original L2 decision (PASS here).
         assertThat(snapshot.id()).startsWith("ps-");
         assertThat(snapshot.policyJson()).contains("FULL_TUTORING");
+        ArgumentCaptor<JsonNode> detail = ArgumentCaptor.forClass(JsonNode.class);
         verify(recorder).record(eq("turn-5"), eq(7L), eq("conv-1"),
                 eq(GuardLayer.L2_POLICY_INJECT), eq(GuardDecision.PASS),
-                eq(PolicySnapshotService.REASON_SNAPSHOT_PERSIST_DEGRADED), any(), eq(true), isNull());
+                eq(PolicySnapshotService.REASON_SNAPSHOT_PERSIST_DEGRADED), detail.capture(), eq(true), isNull());
+        // Plan S7: an error key in the audit detail, not "RuntimeException: db down".
+        assertThat(UserErrorFeedback.isKey(detail.getValue().get("error").asString())).isTrue();
+        assertThat(detail.getValue().toString()).doesNotContain("db down", "RuntimeException");
         // The normal baseline row still lands after the degraded one.
         verify(recorder).record(eq("turn-5"), eq(7L), eq("conv-1"),
                 eq(GuardLayer.L2_POLICY_INJECT), eq(GuardDecision.PASS),
