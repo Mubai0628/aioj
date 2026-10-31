@@ -53,7 +53,7 @@ Production data always originates on the production server; workstation database
 
 ## Startup dependencies
 
-The production stack forms a dependency graph: infrastructure becomes healthy first, auth completes schema checks, the judge path starts only after problem is available, and AI, gateway, and web follow. Health checks pass only when dependencies are actually serviceable, avoiding a process-running-but-application-unavailable state.
+The production stack forms a dependency graph: MySQL, Redis, and RabbitMQ become healthy first; auth and problem start next, independently; the judge path waits for problem and the judge Sandbox; AI waits for problem and judge-worker; the gateway waits for auth, problem, and AI; web comes last. Health checks pass only when dependencies are actually serviceable, avoiding a process-running-but-application-unavailable state. Flyway runs only in auth and no other service waits for its migrations explicitly: on an empty database (the first cutover) or in a release with new migrations, a service that comes up first can crash once on a missing table and is restarted by `restart: unless-stopped` (seen once on 2026-10-31 with ai-service on an empty database in the local Compose).
 
 ## Stopping
 

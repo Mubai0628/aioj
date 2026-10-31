@@ -53,7 +53,7 @@ CI 对后端、React、Compose、Markdown 链接、仓库卫生和秘密泄露�
 
 ## 启动依赖
 
-生产栈按依赖关系形成有向图：基础设施先健康，auth 完成结构检查，problem 可用后才启动判题链，随后启动 AI、网关和 Web。健康检查只在依赖真正可服务后通过，避免容器“进程已启动但应用不可用”。
+生产栈按依赖关系形成有向图：MySQL、Redis、RabbitMQ 先健康；auth 和 problem 随后各自启动；判题链等 problem 和判题 Sandbox 健康；AI 等 problem 和 judge-worker；网关等 auth、problem 和 AI；Web 最后。健康检查只在依赖真正可服务后通过，避免容器“进程已启动但应用不可用”。Flyway 只在 auth 里跑，其他服务不显式等它的迁移：空库的首次切换或带新迁移的发布里，先起来的服务可能因为表还没建好而崩一次，由 `restart: unless-stopped` 拉起（2026-10-31 在本地 Compose 的空库上见过一次 ai-service 这样重启）。
 
 ## 停止
 
