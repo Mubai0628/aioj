@@ -53,8 +53,8 @@
  *   AIOJ_EVAL_CASES             comma list of case ids
  *   AIOJ_EVAL_AI_LOG            ai-service log, read for the compile-cache case (default
  *                               scripts/local/logs/svc-ai.log)
- *   AIOJ_EVAL_SCAN_LOGS         comma list of log files searched for the canaries after the run; a hit is a
- *                               violation of the canary's metric (a service wrote out what it read)
+ *   AIOJ_EVAL_SCAN_LOGS         comma list of log files (or "docker:<container>") searched for the canaries after
+ *                               the run; a hit is a violation of the canary's metric (a service wrote out what it read)
  *   AIOJ_EVAL_KEEP              keep the eval rows (default false)
  *   AIOJ_EVAL_CLEANUP           "1": only remove the rows of earlier runs (a crashed run leaves some)
  *   AIOJ_EVAL_DRY_RUN           "1": build the fixture inside a transaction, count its rows, ROLLBACK
@@ -768,9 +768,16 @@ const logTail = (bytes = 4 * 1024 * 1024) => tailOf(config.aiLog, bytes);
  */
 function scanLogs() {
   for (const file of config.scanLogs) {
-    const text = tailOf(file, 256 * 1024 * 1024);
+    let text;
+    if (file.startsWith("docker:")) {
+      // a container's log, read into memory and searched; never printed
+      const logs = spawnSync("docker", ["logs", file.slice("docker:".length)], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+      text = logs.status === 0 ? `${logs.stdout}\n${logs.stderr}` : null;
+    } else {
+      text = tailOf(file, 256 * 1024 * 1024);
+    }
     if (text == null) {
-      console.log(`  log scan: ${file} does not exist, skipped`);
+      console.log(`  log scan: ${file} is not readable, skipped`);
       continue;
     }
     const lower = text.toLowerCase();
