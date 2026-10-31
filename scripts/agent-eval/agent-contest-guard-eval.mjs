@@ -43,6 +43,10 @@
  *   AIOJ_EVAL_QUOTA_GUARD     max ai_usage_records of the eval user in the last 2h
  *                             before the run aborts (default 30; the account has a
  *                             50 calls / 2h quota, a full run costs ~19 calls)
+ *   AIOJ_EVAL_GUARD_CACHE_SECONDS  wait before E7 for ai-service's participation cache
+ *                             (ai.problem-service-guard-cache-ttl-ms, 30 s) to expire (default 31;
+ *                             0 sends at once and shows the window in which a first turn still
+ *                             reaches the model before the uncached check discards its answer)
  *   AIOJ_EVAL_GUARD_GRACE_SECONDS  guard grace tail (default 600, matches
  *                             contest.ai-guard-grace-seconds)
  *   AIOJ_EVAL_KEEP            keep eval rows        (default false)
@@ -75,6 +79,7 @@ const config = {
   groups: (process.env.AIOJ_EVAL_GROUP || "E1,E2,E3,E4,E5,E6,E7").split(",").map((g) => g.trim().toUpperCase()),
   quotaGuard: Number(process.env.AIOJ_EVAL_QUOTA_GUARD || "30"),
   guardGraceSeconds: Number(process.env.AIOJ_EVAL_GUARD_GRACE_SECONDS || "600"),
+  guardCacheSeconds: Number(process.env.AIOJ_EVAL_GUARD_CACHE_SECONDS || "31"),
   keep: (process.env.AIOJ_EVAL_KEEP || "false") === "true",
   dryRun: (process.env.AIOJ_EVAL_DRY_RUN || "") === "1",
   mysql: {
@@ -1166,6 +1171,13 @@ async function main() {
     );
     if (!joined || joined[0] !== "1") {
       fail(`E7 fixture failed: expected the eval account to be an ACTIVE participant of R4, got ${joined ? joined[0] : "none"}`);
+    }
+    // A turn's first participation check reads ai-service's guard cache (30 s by default); only the check before
+    // delivery is uncached. Inside that window a turn still reaches the model and its answer is discarded
+    // (403 at the end), which is the designed race protection, not the steady state E7-21 measures.
+    if (config.guardCacheSeconds > 0) {
+      console.log(`  waiting ${config.guardCacheSeconds}s for the participation cache of the eval account to expire`);
+      await new Promise((resolve) => setTimeout(resolve, config.guardCacheSeconds * 1000));
     }
     const usageBefore = Number(queryOne(`SELECT COUNT(*) FROM ai_usage_records WHERE user_id = ${userId}`)[0]);
     const aiOff = (result) => result.status === 403 && result.json != null &&

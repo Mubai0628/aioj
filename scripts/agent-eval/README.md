@@ -207,7 +207,7 @@ node scripts/agent-eval/agent-security-eval.mjs
 ```
 
 可选：`AIOJ_EVAL_OWNER_ACCOUNT`、`AIOJ_EVAL_AI_LOG`（编译缓存用例读 ai-service 日志，默认 `scripts/local/logs/svc-ai.log`）、
-`AIOJ_EVAL_KEEP=true`、`AIOJ_EVAL_CLEANUP=1`（只清理历次运行的残留）、`AIOJ_EVAL_DRY_RUN=1`（夹具 SQL 事务内验证后回滚，
+`AIOJ_EVAL_SCAN_LOGS`（逗号分隔的日志文件，跑完后在里面搜金丝雀，搜到算对应指标的违规）、`AIOJ_EVAL_KEEP=true`、`AIOJ_EVAL_CLEANUP=1`（只清理历次运行的残留）、`AIOJ_EVAL_DRY_RUN=1`（夹具 SQL 事务内验证后回滚，
 不落行、不登录、不调 AI——静态检查用）、`MYSQL_EXE`。
 
 退出码：0 为四个硬指标都是 0 且硬用例全过；1 为有违规或用例失败；2 为评测没能运行。
