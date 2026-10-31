@@ -55,6 +55,10 @@ Production data always originates on the production server; workstation database
 
 The production stack forms a dependency graph: infrastructure becomes healthy first, auth completes schema checks, the judge path starts only after problem is available, and AI, gateway, and web follow. Health checks pass only when dependencies are actually serviceable, avoiding a process-running-but-application-unavailable state.
 
+## Stopping
+
+The backend images start with `sh -c "exec java $JAVA_OPTS -jar /app/app.jar"`: the shell expands `JAVA_OPTS`, then `exec` hands PID 1 to Java, so `docker stop`'s SIGTERM reaches the JVM. Only then do Spring Boot's graceful shutdown (up to 30 seconds per phase) and `@PreDestroy` hooks run (for example agent-executor deleting its cached compiled artifacts from the sandbox), and a normal stop exits with 143. The entrypoint used to have no `exec`: PID 1 was `sh`, SIGTERM was ignored, and every stop waited the full 10 seconds and ended in a kill (137). Measured locally on the official images, an idle backend service stops in 0.6–2.5 seconds with exit code 143 and graceful-shutdown start and completion lines in its log; with a 2-second run in flight, agent-executor finishes the request and stops in about 3.4 seconds; the cached artifacts in the sandbox are gone after the stop. A shutdown that needs longer than Docker's default 10 seconds is still killed, and the production Compose sets no `stop_grace_period`; whether to add one, and how long, is decided when deployment resumes, from the real duration of in-flight requests.
+
 ## Rollback model
 
 Routine rollback restores the previous image-digest set while retaining current data volumes. A failed deployment may roll back images automatically; database structure and newly written data are not reversed automatically. During an initial cutover, the complete old stack remains recoverable only before writes reopen. After the new version writes data, old volumes are stale recovery points and must not be put back online directly.
