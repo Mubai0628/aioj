@@ -14,4 +14,5 @@ RUN apt-get update -o Acquire::Retries=3 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /workspace/${SERVICE_MODULE}/target/*.jar /app/app.jar
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
+# The shell expands JAVA_OPTS, then exec hands PID 1 to Java so `docker stop`'s SIGTERM reaches it.
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
